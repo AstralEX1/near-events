@@ -1,0 +1,17 @@
+[package]
+name = "near-events"
+description = "Kickback-style event escrow: equal USDC deposits, attendees split the pool"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/AstralEX1/near-events"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { workspace = true }
+near-contract-standards = { workspace = true }
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }
