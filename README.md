@@ -136,6 +136,12 @@ React 19, Tailwind CSS 4; `near-api-js` 7 (and 5 for NEAR Auth);
 **AI disclosure:** the contract, web app, scripts and this README were written with
 Claude (Anthropic) in Claude Code, directed and reviewed by the author.
 
+## Hackathon work
+
+All code here was written during NEAR HACKATHON, starting 2026-11-02. The empty
+baseline is tagged `pre-hackathon` and the submitted state `hackathon-submission`;
+the full diff is `pre-hackathon...hackathon-submission` (compare view on GitHub).
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
