@@ -1,3 +1,4 @@
+import { rateLimited } from "@/lib/ratelimit";
 import { NETWORK } from "@/lib/config";
 import { accountExists, relayer } from "@/lib/relayer";
 
@@ -6,6 +7,7 @@ import { accountExists, relayer } from "@/lib/relayer";
 const STARTER_NEAR = 50_000_000_000_000_000_000_000n; // 0.05 NEAR
 
 export async function POST(req: Request) {
+  if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
   if (NETWORK !== "testnet") return Response.json({ error: "Testnet only" }, { status: 403 });
   const { accountId } = await req.json();
   if (typeof accountId !== "string" || !/^[0-9a-f]{64}$/.test(accountId)) {

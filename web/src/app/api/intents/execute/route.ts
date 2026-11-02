@@ -1,3 +1,4 @@
+import { rateLimited } from "@/lib/ratelimit";
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "@/lib/config";
 import { relayer } from "@/lib/relayer";
 
@@ -5,6 +6,7 @@ import { relayer } from "@/lib/relayer";
 // Only Near Events registrations are relayed: one `ft_withdraw` of USDC to the
 // escrow with a register message. The signature itself is checked on-chain.
 export async function POST(req: Request) {
+  if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
   if (!INTENTS_CONTRACT) return Response.json({ error: "NEAR Intents is mainnet only" }, { status: 403 });
   const signed = await req.json();
   let payload: { intents?: { intent: string; token: string; receiver_id: string; msg?: string }[] };

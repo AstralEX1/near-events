@@ -37,6 +37,8 @@ const MAX_TITLE_LEN: usize = 120;
 const MAX_TEXT_LEN: usize = 2000;
 const MAX_SHORT_LEN: usize = 300;
 const MAX_COHOSTS: usize = 10;
+/// Events must end within a year, so the abandoned-event refund is always reachable.
+const MAX_EVENT_HORIZON_MS: u64 = 365 * 24 * 60 * 60 * 1000;
 
 const GAS_FT_TRANSFER: Gas = Gas::from_tgas(10);
 const GAS_FT_TRANSFER_CALL: Gas = Gas::from_tgas(100);
@@ -465,6 +467,11 @@ impl FungibleTokenReceiver for Contract {
             TransferMsg::Register { event_id, guest } => {
                 let deposit = self.event(event_id).deposit;
                 require!(amount.0 >= deposit, "Amount is less than the deposit");
+                // A relayed payment (intents.near, 1Click) must name the guest,
+                // otherwise the relay itself would take the seat.
+                if Some(&sender_id) == self.intents.as_ref() {
+                    require!(guest.is_some(), "Payments via NEAR Intents must name the guest");
+                }
                 let guest = guest.unwrap_or_else(|| sender_id.clone());
                 if guest == sender_id {
                     self.register(event_id, guest, sender_id);
@@ -654,6 +661,10 @@ fn validate_metadata(m: &EventMetadata) {
     require!(m.location.len() <= MAX_SHORT_LEN, "Location too long");
     require!(m.cover_url.as_ref().map_or(true, |u| u.len() <= MAX_SHORT_LEN), "Cover URL too long");
     require!(m.ends_at >= m.starts_at, "Event ends before it starts");
+    require!(
+        m.ends_at <= env::block_timestamp_ms() + MAX_EVENT_HORIZON_MS,
+        "Event must end within a year"
+    );
 }
 
 fn view_event(id: u64, e: &Event) -> EventView {

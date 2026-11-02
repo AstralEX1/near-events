@@ -1,3 +1,4 @@
+import { rateLimited } from "@/lib/ratelimit";
 import { EVENTS_CONTRACT, INTENTS_CONTRACT } from "@/lib/config";
 import { relayer } from "@/lib/relayer";
 import { view } from "@/lib/near";
@@ -5,6 +6,7 @@ import { view } from "@/lib/near";
 // "Send to Intents" button: the relayer calls `payout_to_intents`, which can
 // only move an account's balance into that same account's Intents balance.
 export async function POST(req: Request) {
+  if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
   if (!INTENTS_CONTRACT) return Response.json({ error: "NEAR Intents is mainnet only" }, { status: 403 });
   const { accountId } = await req.json();
   if (typeof accountId !== "string") return Response.json({ error: "Bad request" }, { status: 400 });

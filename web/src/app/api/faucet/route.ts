@@ -1,3 +1,4 @@
+import { rateLimited } from "@/lib/ratelimit";
 import { NETWORK, USDC_CONTRACT } from "@/lib/config";
 import { relayer } from "@/lib/relayer";
 
@@ -6,6 +7,7 @@ import { relayer } from "@/lib/relayer";
 const MAX_UNITS = 100_000_000n; // 100 USDC
 
 export async function POST(req: Request) {
+  if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
   if (NETWORK !== "testnet") return Response.json({ error: "Testnet only" }, { status: 403 });
   const { accountId, amount } = await req.json();
   let units: bigint;

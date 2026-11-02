@@ -278,3 +278,21 @@ fn anyone_can_push_payout_to_owners_intents_account() {
     let _ = c.payout_to_intents(evm.clone(), None);
     assert_eq!(c.balance_of(evm).0, 0);
 }
+
+#[test]
+#[should_panic(expected = "Event must end within a year")]
+fn rejects_far_future_events() {
+    ctx(&accounts(0), NearToken::from_near(5));
+    let mut c = Contract::new(usdc(), None);
+    let mut m = meta();
+    m.ends_at = u64::MAX;
+    c.create_event(m, U128(10 * USDC), 10, None);
+}
+
+#[test]
+#[should_panic(expected = "must name the guest")]
+fn intents_payment_must_name_guest() {
+    let (mut c, id) = setup(10);
+    let intents: AccountId = "intents.near".parse().unwrap();
+    pay(&mut c, &intents, 10 * USDC, &format!(r#"{{"action":"register","event_id":{}}}"#, id));
+}
