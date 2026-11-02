@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useWallet } from "@/lib/wallet";
 import { NETWORK } from "@/lib/config";
-import { Avatar } from "./ui";
+import { Avatar, shortAccount } from "./ui";
+import { SignInMenu } from "./SignIn";
 
 export function Header() {
-  const { accountId, ready, signIn, signOut } = useWallet();
+  const { accountId, signOut } = useWallet();
   return (
     <header className="sticky top-0 z-10 backdrop-blur bg-bg/80 border-b border-border">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-4">
@@ -23,14 +24,12 @@ export function Header() {
             <>
               <Link href="/me" className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-surface">
                 <Avatar account={accountId} size={24} />
-                <span className="hidden sm:inline max-w-40 truncate">{accountId}</span>
+                <span className="hidden sm:inline max-w-40 truncate">{shortAccount(accountId)}</span>
               </Link>
               <button className="text-muted hover:text-text" onClick={signOut}>Sign out</button>
             </>
           ) : (
-            <button className="btn btn-primary !py-1.5" disabled={!ready} onClick={signIn}>
-              Sign in
-            </button>
+            <SignInMenu />
           )}
         </nav>
       </div>

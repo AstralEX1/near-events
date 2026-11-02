@@ -1,5 +1,10 @@
 import type { EventStatus, EventView } from "@/lib/near";
 
+/** Implicit accounts (64 hex chars, e.g. Google/email users) are shortened for display. */
+export function shortAccount(account: string): string {
+  return /^[0-9a-f]{64}$/.test(account) ? `${account.slice(0, 6)}…${account.slice(-4)}` : account;
+}
+
 function hash(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;

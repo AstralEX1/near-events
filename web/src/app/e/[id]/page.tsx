@@ -6,7 +6,8 @@ import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, usdc, type EventView, type GuestStatus, type GuestView } from "@/lib/near";
 import { EVENTS_CONTRACT, HAS_FAUCET, USDC_CONTRACT } from "@/lib/config";
 import { useWallet, type Call } from "@/lib/wallet";
-import { Avatar, AvatarStack, Cover, DateBadge, StatusPill, formatWhen } from "@/components/ui";
+import { Avatar, AvatarStack, Cover, DateBadge, StatusPill, formatWhen, shortAccount } from "@/components/ui";
+import { SignInOptions } from "@/components/SignIn";
 
 export default function EventPage() {
   const id = Number(useParams<{ id: string }>().id);
@@ -41,7 +42,7 @@ export default function EventPage() {
             {[event.host, ...event.cohosts].map((a, i) => (
               <div key={a} className="flex items-center gap-2 text-sm">
                 <Avatar account={a} size={26} />
-                <span className="truncate">{a}</span>
+                <span className="truncate">{shortAccount(a)}</span>
                 {i === 0 && a.includes("sputnik") && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-soft text-accent">DAO</span>
                 )}
@@ -98,7 +99,7 @@ export default function EventPage() {
             <div className="flex flex-wrap gap-2">
               {attendees.map((g) => (
                 <span key={g.account_id} className="flex items-center gap-1.5 text-sm card px-2 py-1">
-                  <Avatar account={g.account_id} size={20} /> {g.account_id}
+                  <Avatar account={g.account_id} size={20} /> {shortAccount(g.account_id)}
                 </span>
               ))}
             </div>
@@ -139,7 +140,7 @@ function RegistrationCard({
   myStatus: GuestStatus | null;
   onChange: () => Promise<void>;
 }) {
-  const { accountId, signIn, send } = useWallet();
+  const { accountId, send } = useWallet();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [balance, setBalance] = useState<bigint>(0n);
@@ -168,7 +169,12 @@ function RegistrationCard({
       const have = BigInt(await usdc.balance(accountId!));
       if (have < deposit) {
         if (!HAS_FAUCET) throw new Error(`You need ${formatUsdc(deposit)} USDC on NEAR. Use “Pay from any chain”.`);
-        calls.push({ receiverId: USDC_CONTRACT, methodName: "mint", args: { amount: (deposit - have).toString() } });
+        // Testnet: our faucet mints the missing test USDC, no extra signature needed.
+        const r = await fetch("/api/faucet", {
+          method: "POST",
+          body: JSON.stringify({ accountId, amount: (deposit - have).toString() }),
+        });
+        if (!r.ok) throw new Error((await r.json()).error ?? "Faucet failed");
       }
       calls.push({
         receiverId: USDC_CONTRACT,
@@ -209,7 +215,7 @@ function RegistrationCard({
         <Avatar account={accountId!} size={40} />
         <div>
           <div className="font-semibold">You’re going</div>
-          <div className="text-sm text-muted">Show your account name <b>{accountId}</b> to the host at the door.</div>
+          <div className="text-sm text-muted">Show your account <b>{shortAccount(accountId!)}</b> to the host at the door.</div>
         </div>
       </div>
     );
@@ -218,8 +224,8 @@ function RegistrationCard({
   } else if (!accountId) {
     body = (
       <div className="space-y-3">
-        <p className="text-sm text-muted">Welcome! Sign in to register.</p>
-        <button className="btn btn-primary w-full" onClick={signIn}>Sign in to register</button>
+        <p className="text-sm text-muted">Welcome! Sign in to register. No wallet needed.</p>
+        <SignInOptions />
       </div>
     );
   } else {

@@ -8,11 +8,15 @@
     "start": "next start"
   },
   "dependencies": {
+    "@fast-auth-near/browser-sdk": "^1.4.2",
+    "@fast-auth-near/javascript-provider": "^1.4.1",
     "@hot-labs/near-connect": "^0.12.0",
     "near-api-js": "^7.4.0",
+    "near-api-js-v5": "npm:near-api-js@^5.1.1",
     "next": "16.4.4",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
