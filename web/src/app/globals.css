@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --text: #16161a;
+  --muted: #6b6b76;
+  --border: #e7e5e0;
+  --accent: #5b4bff;
+  --accent-soft: #edeaff;
+  --good: #0f9d6b;
+  --warn: #c2410c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111114;
+    --surface: #1a1a1f;
+    --text: #f2f2f4;
+    --muted: #9a9aa6;
+    --border: #2a2a31;
+    --accent: #8b7fff;
+    --accent-soft: #24213d;
+    --good: #34d399;
+    --warn: #fb923c;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  padding: 0.65rem 1.1rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: opacity 0.15s, transform 0.05s;
+}
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--text); color: var(--bg); }
+.btn-accent { background: var(--accent); color: white; }
+.btn-ghost { border: 1px solid var(--border); background: var(--surface); }
+
+.input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  outline: none;
+}
+.input:focus { border-color: var(--accent); }
+.label { font-size: 0.85rem; color: var(--muted); font-weight: 500; }
