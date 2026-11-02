@@ -9,3 +9,7 @@ export const EXPLORER_URL = NETWORK === "mainnet" ? "https://nearblocks.io" : "h
 /** The testnet token has an open faucet (`mint`). */
 export const HAS_FAUCET = NETWORK === "testnet";
 export const USDC_DECIMALS = 6;
+/** NEAR Intents verifier. It exists on mainnet only. */
+export const INTENTS_CONTRACT = NETWORK === "mainnet" ? "intents.near" : null;
+/** Intents-native features (EVM wallet sign-in, Intents payouts) need mainnet. */
+export const HAS_INTENTS = INTENTS_CONTRACT !== null;

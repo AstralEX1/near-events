@@ -2,18 +2,19 @@
 
 import { useState } from "react";
 import { useWallet } from "@/lib/wallet";
+import { HAS_INTENTS } from "@/lib/config";
 
-/** The two ways in: Google/email (no crypto needed) or any NEAR wallet. */
+/** The ways in: Google/email (no crypto needed), a NEAR wallet, or an EVM wallet via NEAR Intents. */
 export function SignInOptions({ onDone }: { onDone?: () => void }) {
-  const { ready, signIn, signInWithEmail } = useWallet();
+  const { ready, signIn, signInWithEmail, signInWithEvm } = useWallet();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const email = async () => {
+  const run = (fn: () => Promise<void>) => async () => {
     setBusy(true);
     setError(null);
     try {
-      await signInWithEmail();
+      await fn();
       onDone?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -24,7 +25,7 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
 
   return (
     <div className="space-y-2">
-      <button className="btn btn-primary w-full" disabled={!ready || busy} onClick={email}>
+      <button className="btn btn-primary w-full" disabled={!ready || busy} onClick={run(signInWithEmail)}>
         {busy ? "Opening sign-in…" : "Continue with Google or email"}
       </button>
       <button
@@ -36,6 +37,14 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
         }}
       >
         Connect a NEAR wallet
+      </button>
+      <button
+        className="btn btn-ghost w-full"
+        disabled={!ready || busy || !HAS_INTENTS}
+        title={HAS_INTENTS ? undefined : "Uses NEAR Intents, which runs on mainnet"}
+        onClick={run(signInWithEvm)}
+      >
+        MetaMask / EVM wallet{!HAS_INTENTS && " · mainnet"}
       </button>
       {error && <p className="text-xs text-warn break-words">{error}</p>}
     </div>

@@ -4,9 +4,10 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import type { NearConnector } from "@hot-labs/near-connect";
 import { NETWORK } from "./config";
 import { useRouter } from "next/navigation";
+import { connectEvm, evmAccount } from "./intents";
 import { RETURN_KEY, fastAuthLogin, fastAuthLogout, fastAuthPrepare, fastAuthRestore, fastAuthSend } from "./fastauth";
 
-type Kind = "wallet" | "email";
+type Kind = "wallet" | "email" | "evm";
 const KIND_KEY = "near-events:login";
 
 const TGAS = 1_000_000_000_000n;
@@ -28,6 +29,8 @@ interface WalletState {
   signIn: () => Promise<void>;
   /** Google / email / passkey via NEAR Auth. */
   signInWithEmail: () => Promise<void>;
+  /** EVM wallet; the account is the wallet's NEAR Intents account (mainnet). */
+  signInWithEvm: () => Promise<void>;
   signOut: () => Promise<void>;
   /** Signs and sends calls, one transaction each, in order. */
   send: (calls: Call[]) => Promise<void>;
@@ -67,7 +70,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       } catch {}
       fastAuthPrepare().catch(() => {});
       const returningFromAuth0 = new URLSearchParams(window.location.search).has("code");
-      if (saved === "email" || returningFromAuth0) {
+      if (saved === "evm") {
+        const id = await evmAccount();
+        if (!cancelled && id) remember("evm", id);
+      } else if (saved === "email" || returningFromAuth0) {
         const id = await fastAuthRestore();
         if (!cancelled && id) remember("email", id);
         const back = sessionStorage.getItem(RETURN_KEY);
@@ -101,6 +107,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     remember("email", id);
   }, []);
 
+  const signInWithEvm = useCallback(async () => {
+    remember("evm", await connectEvm());
+  }, []);
+
   const signOut = useCallback(async () => {
     if (kind === "email") await fastAuthLogout();
     else await connector.current?.disconnect().catch(() => {});
@@ -112,6 +122,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       for (const call of calls) await fastAuthSend(call);
       return;
     }
+    if (kind === "evm") throw new Error("EVM wallets act through NEAR Intents; this action needs a NEAR account.");
     const c = connector.current;
     if (!c) throw new Error("Wallet is still loading");
     const wallet = await c.wallet();
@@ -134,7 +145,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [kind]);
 
   return (
-    <WalletContext.Provider value={{ accountId, kind, ready, signIn, signInWithEmail, signOut, send }}>{children}</WalletContext.Provider>
+    <WalletContext.Provider value={{ accountId, kind, ready, signIn, signInWithEmail, signInWithEvm, signOut, send }}>{children}</WalletContext.Provider>
   );
 }
 

@@ -261,3 +261,20 @@ fn intents_payment_registers_guest() {
     assert_eq!(c.get_guest_status(id, accounts(3)), Some(GuestStatus::Registered));
     assert_eq!(c.get_guests(id, None, None)[0].paid_by, intents);
 }
+
+#[test]
+fn anyone_can_push_payout_to_owners_intents_account() {
+    let (mut c, id) = setup(10);
+    let evm: AccountId = "0x1234567890abcdef1234567890abcdef12345678".parse().unwrap();
+    let intents: AccountId = "intents.near".parse().unwrap();
+    let msg = format!(r#"{{"action":"register","event_id":{},"guest":"{}"}}"#, id, evm);
+    pay(&mut c, &intents, 10 * USDC, &msg);
+    ctx(&accounts(0), NearToken::from_yoctonear(0));
+    c.check_in(id, vec![evm.clone()]);
+    c.finalize(id);
+    assert_eq!(c.balance_of(evm.clone()).0, 10 * USDC);
+    // A stranger triggers it; the money can only go to the owner's own Intents balance.
+    ctx(&accounts(5), NearToken::from_yoctonear(0));
+    let _ = c.payout_to_intents(evm.clone(), None);
+    assert_eq!(c.balance_of(evm).0, 0);
+}

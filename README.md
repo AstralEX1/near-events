@@ -6,10 +6,15 @@ deposits**. No platform fee.
 
 - **Pay from any chain or token**: NEAR Intents (1Click) swaps to exactly the
   deposit and delivers it to the escrow, which registers the guest in the same step.
-- **No wallet needed**: sign in with Google, email or passkey (NEAR Auth), or any
-  NEAR wallet.
+- **No wallet needed**: sign in with Google, email or passkey (NEAR Auth), any
+  NEAR wallet, or **MetaMask / any EVM wallet**: then your account *is* your NEAR
+  Intents account (`0x…`), you register by signing one intent, and our relayer
+  pays the gas.
+- **Payouts to any chain**: one button moves winnings into the guest's NEAR Intents
+  balance, from where they swap or withdraw to any chain.
 - **Communities host**: a Sputnik DAO creates the event, sponsors the pool from its
-  treasury and votes to pay out; a human co-host checks guests in at the door.
+  treasury (including its NEAR Intents balance, via a Trezu proposal) and votes to
+  pay out; a human co-host checks guests in at the door.
 - **Trustless escrow**: deposits sit in a Rust contract. The host cannot take the
   pool, only decide who showed up. If the host disappears, anyone can refund
   everyone after a grace period.
@@ -90,7 +95,12 @@ DAO (Sputnik) ── proposals: create_event / sponsor / finalize ──► │
                                                      (NEAR wallet or NEAR Intents)
 ```
 
-Contract: `contracts/events/src/lib.rs` (20 unit tests in `tests.rs`).
+Contract: `contracts/events/src/lib.rs` (21 unit tests in `tests.rs`).
+
+**EVM wallet flow (mainnet):** the guest signs an ERC-191 intent
+`ft_withdraw {token: USDC, receiver_id: escrow, msg: register}`; `/api/intents/execute`
+checks it is only a Near Events registration and submits it to `intents.near`
+(`execute_intents`), which calls `ft_transfer_call` on the escrow.
 
 | Method | Who | What |
 |---|---|---|
@@ -101,6 +111,7 @@ Contract: `contracts/events/src/lib.rs` (20 unit tests in `tests.rs`).
 | `cancel`, `refund_if_abandoned` | host / anyone after 30 days | refund every deposit |
 | `register_with_balance` | guest | reuse a payout for the next event |
 | `withdraw(amount, receiver_id, to_intents)` | guest | to any NEAR account, or into NEAR Intents |
+| `payout_to_intents(account_id)` | anyone (relayer button) | moves an account's balance into *that same account's* Intents balance; how EVM-wallet guests get paid |
 
 Safety notes: only the configured USDC is accepted; a payment made for someone
 else (friend, 1Click, intents.near) never bounces, because a refund might not
@@ -111,7 +122,7 @@ reach the guest; it lands on the guest's balance instead. Capacity is capped at
 
 ```bash
 cd contracts
-cargo test -p near-events                       # 20 unit tests
+cargo test -p near-events                       # 21 unit tests
 cd events && cargo near build non-reproducible-wasm
 ```
 

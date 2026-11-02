@@ -5,12 +5,14 @@ import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, toUnits, usdc, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT, NETWORK } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
-import { Avatar, Cover, StatusPill } from "@/components/ui";
+import { intentsUsdcBalance, pushPayoutToIntents } from "@/lib/intents";
+import { Avatar, Cover, StatusPill, shortAccount } from "@/components/ui";
 
 export default function Me() {
-  const { accountId, signIn, send } = useWallet();
+  const { accountId, kind, signIn, send } = useWallet();
   const [balance, setBalance] = useState<bigint>(0n);
   const [wallet, setWallet] = useState<bigint>(0n);
+  const [inIntents, setInIntents] = useState<bigint | null>(null);
   const [mine, setMine] = useState<EventView[]>([]);
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
@@ -25,6 +27,7 @@ export default function Me() {
       events.list(),
     ]);
     setBalance(BigInt(b));
+    if (NETWORK === "mainnet") intentsUsdcBalance(accountId).then(setInIntents).catch(() => {});
     setWallet(BigInt(w));
     setMine(all.filter((e) => ids.includes(e.id) || e.host === accountId));
   }, [accountId]);
@@ -36,12 +39,26 @@ export default function Me() {
   if (!accountId) {
     return (
       <div className="text-center py-20">
-        <button className="btn btn-primary" onClick={signIn}>Sign in to see your balance</button>
+        <button className="btn btn-primary" onClick={signIn}>Connect a wallet to see your balance</button>
       </div>
     );
   }
 
+  const sendToIntents = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await pushPayoutToIntents(accountId);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const withdraw = async (toIntents: boolean) => {
+    if (toIntents && kind !== "wallet") return sendToIntents();
     setBusy(true);
     setError(null);
     try {
@@ -68,8 +85,11 @@ export default function Me() {
       <div className="flex items-center gap-4">
         <Avatar account={accountId} size={56} />
         <div>
-          <h1 className="text-2xl font-semibold">{accountId}</h1>
-          <p className="text-sm text-muted">USDC in your wallet: {formatUsdc(wallet)}</p>
+          <h1 className="text-2xl font-semibold break-all">{shortAccount(accountId)}</h1>
+          <p className="text-sm text-muted">
+            {kind !== "evm" && <>USDC in your NEAR wallet: {formatUsdc(wallet)}</>}
+            {inIntents !== null && <> · in NEAR Intents: {formatUsdc(inIntents)}</>}
+          </p>
         </div>
       </div>
 
@@ -83,7 +103,9 @@ export default function Me() {
           <div className="space-y-3">
             <input className="input" type="number" min="0" step="0.01" placeholder={`Amount (all: ${formatUsdc(balance)})`} value={amount} onChange={(e) => setAmount(e.target.value)} />
             <div className="grid sm:grid-cols-2 gap-2">
-              <button className="btn btn-primary" disabled={busy} onClick={() => withdraw(false)}>Withdraw to my NEAR wallet</button>
+              {kind !== "evm" && (
+                <button className="btn btn-primary" disabled={busy} onClick={() => withdraw(false)}>Withdraw to my NEAR wallet</button>
+              )}
               <button
                 className="btn btn-ghost"
                 disabled={busy || NETWORK !== "mainnet"}
@@ -93,6 +115,12 @@ export default function Me() {
                 Send to NEAR Intents → any chain
               </button>
             </div>
+            {NETWORK === "mainnet" && (
+              <p className="text-xs text-muted">
+                From NEAR Intents you can swap or withdraw to any chain at{" "}
+                <a className="text-accent" href="https://near-intents.org" target="_blank" rel="noreferrer">near-intents.org</a>.
+              </p>
+            )}
             {NETWORK !== "mainnet" && (
               <p className="text-xs text-muted">NEAR Intents has no testnet, so cash-out to other chains is enabled on mainnet.</p>
             )}

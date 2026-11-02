@@ -1,8 +1,8 @@
 import type { EventStatus, EventView } from "@/lib/near";
 
-/** Implicit accounts (64 hex chars, e.g. Google/email users) are shortened for display. */
+/** Implicit accounts (Google/email users) and EVM addresses (Intents accounts) are shortened for display. */
 export function shortAccount(account: string): string {
-  return /^[0-9a-f]{64}$/.test(account) ? `${account.slice(0, 6)}…${account.slice(-4)}` : account;
+  return /^([0-9a-f]{64}|0x[0-9a-f]{40})$/.test(account) ? `${account.slice(0, 6)}…${account.slice(-4)}` : account;
 }
 
 function hash(s: string): number {

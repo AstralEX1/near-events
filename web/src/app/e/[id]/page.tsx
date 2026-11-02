@@ -8,6 +8,7 @@ import { EVENTS_CONTRACT, HAS_FAUCET, USDC_CONTRACT } from "@/lib/config";
 import { useWallet, type Call } from "@/lib/wallet";
 import { Avatar, AvatarStack, Cover, DateBadge, StatusPill, formatWhen, shortAccount } from "@/components/ui";
 import { SignInOptions } from "@/components/SignIn";
+import { intentsUsdcBalance, registerFromIntents } from "@/lib/intents";
 
 export default function EventPage() {
   const id = Number(useParams<{ id: string }>().id);
@@ -140,7 +141,8 @@ function RegistrationCard({
   myStatus: GuestStatus | null;
   onChange: () => Promise<void>;
 }) {
-  const { accountId, send } = useWallet();
+  const { accountId, kind, send } = useWallet();
+  const [intentsBalance, setIntentsBalance] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [balance, setBalance] = useState<bigint>(0n);
@@ -189,6 +191,12 @@ function RegistrationCard({
       await send(calls);
     });
 
+  useEffect(() => {
+    if (kind === "evm" && accountId) intentsUsdcBalance(accountId).then(setIntentsBalance).catch(() => setIntentsBalance(0n));
+  }, [kind, accountId]);
+
+  const registerViaIntents = () => run(() => registerFromIntents(accountId!, event.id, event.deposit));
+
   const registerWithBalance = () =>
     run(() => send([{ receiverId: EVENTS_CONTRACT, methodName: "register_with_balance", args: { event_id: event.id } }]));
 
@@ -226,6 +234,23 @@ function RegistrationCard({
       <div className="space-y-3">
         <p className="text-sm text-muted">Welcome! Sign in to register. No wallet needed.</p>
         <SignInOptions />
+      </div>
+    );
+  } else if (kind === "evm") {
+    const enough = intentsBalance !== null && intentsBalance >= BigInt(event.deposit);
+    body = (
+      <div className="space-y-3">
+        <p className="text-sm text-muted">
+          Your NEAR Intents balance: <b className="text-text">{intentsBalance === null ? "…" : formatUsdc(intentsBalance)} USDC</b>.
+          One signature in your wallet moves {formatUsdc(event.deposit)} USDC into the escrow. No gas.
+        </p>
+        {enough ? (
+          <button className="btn btn-primary w-full" disabled={busy} onClick={registerViaIntents}>
+            {busy ? "Sign in your wallet…" : `Register from Intents · ${formatUsdc(event.deposit)} USDC`}
+          </button>
+        ) : (
+          <Link href={`/e/${event.id}/pay`} className="btn btn-primary w-full">Pay from any chain or token</Link>
+        )}
       </div>
     );
   } else {

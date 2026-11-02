@@ -360,34 +360,17 @@ impl Contract {
         near_sdk::assert_one_yocto();
         let owner = env::predecessor_account_id();
         let receiver = receiver_id.unwrap_or_else(|| owner.clone());
-        let balance = self.balance(&owner);
-        let amount = amount.map(|a| a.0).unwrap_or(balance);
-        require!(amount > 0, "Nothing to withdraw");
-        require!(amount <= balance, "Not enough balance");
-        self.set_balance(&owner, balance - amount);
-        let to_intents = to_intents.unwrap_or(false);
-        emit(
-            "withdraw",
-            json!({ "account_id": owner, "receiver_id": receiver, "amount": U128(amount), "to_intents": to_intents }),
-        );
+        self.send_out(owner, receiver, amount, to_intents.unwrap_or(false))
+    }
 
-        let token = ext_ft::ext(self.usdc.clone()).with_attached_deposit(NearToken::from_yoctonear(1));
-        let transfer = if to_intents {
-            let intents = self.intents.clone().unwrap_or_else(|| env::panic_str("Intents not configured"));
-            // intents.near credits the account named in `msg`.
-            token
-                .with_static_gas(GAS_FT_TRANSFER_CALL)
-                .ft_transfer_call(intents, U128(amount), Some("Near Events payout".into()), receiver.to_string())
-        } else {
-            token
-                .with_static_gas(GAS_FT_TRANSFER)
-                .ft_transfer(receiver, U128(amount), Some("Near Events payout".into()))
-        };
-        transfer.then(
-            Self::ext(env::current_account_id())
-                .with_static_gas(GAS_WITHDRAW_CALLBACK)
-                .on_withdraw(owner, U128(amount), to_intents),
-        )
+    /// Moves an account's balance into that same account's NEAR Intents
+    /// balance. Anyone can call it (e.g. our relayer, or a "send to Intents"
+    /// button), because the funds can only go to their owner. This is how
+    /// guests who signed in with an EVM or Solana wallet get paid: their NEAR
+    /// Events account is their Intents account (e.g. `0xabc…`), which cannot
+    /// call this contract itself.
+    pub fn payout_to_intents(&mut self, account_id: AccountId, amount: Option<U128>) -> Promise {
+        self.send_out(account_id.clone(), account_id, amount, true)
     }
 
     /// Restores whatever did not leave the contract.
@@ -539,6 +522,36 @@ impl Contract {
         let caller = env::predecessor_account_id();
         require!(event.host == caller || event.cohosts.contains(&caller), "Only the host or a co-host");
         require!(event.status == EventStatus::Open, "Event is closed");
+    }
+
+    fn send_out(&mut self, owner: AccountId, receiver: AccountId, amount: Option<U128>, to_intents: bool) -> Promise {
+        let balance = self.balance(&owner);
+        let amount = amount.map(|a| a.0).unwrap_or(balance);
+        require!(amount > 0, "Nothing to withdraw");
+        require!(amount <= balance, "Not enough balance");
+        self.set_balance(&owner, balance - amount);
+        emit(
+            "withdraw",
+            json!({ "account_id": owner, "receiver_id": receiver, "amount": U128(amount), "to_intents": to_intents }),
+        );
+
+        let token = ext_ft::ext(self.usdc.clone()).with_attached_deposit(NearToken::from_yoctonear(1));
+        let transfer = if to_intents {
+            let intents = self.intents.clone().unwrap_or_else(|| env::panic_str("Intents not configured"));
+            // intents.near credits the account named in `msg`.
+            token
+                .with_static_gas(GAS_FT_TRANSFER_CALL)
+                .ft_transfer_call(intents, U128(amount), Some("Near Events payout".into()), receiver.to_string())
+        } else {
+            token
+                .with_static_gas(GAS_FT_TRANSFER)
+                .ft_transfer(receiver, U128(amount), Some("Near Events payout".into()))
+        };
+        transfer.then(
+            Self::ext(env::current_account_id())
+                .with_static_gas(GAS_WITHDRAW_CALLBACK)
+                .on_withdraw(owner, U128(amount), to_intents),
+        )
     }
 
     fn can_register(&self, event_id: u64, guest: &AccountId) -> bool {
