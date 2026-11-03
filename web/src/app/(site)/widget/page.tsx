@@ -5,6 +5,7 @@ import Script from "next/script";
 import { useEffect, useRef, useState } from "react";
 import { events, type EventView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
+import { agentPrompt } from "@/lib/agentPrompt";
 
 interface Look {
   mode: "card" | "button";
@@ -63,6 +64,7 @@ export default function WidgetBuilder() {
     script: `<script src="${origin}/embed.js" async></script>\n${element}`,
     iframe: `<iframe src="${origin}/embed/e/${eventId}${query ? `?${query}` : ""}"\n  title="Event registration" loading="lazy"\n  style="width:100%;max-width:560px;height:260px;border:0"></iframe>`,
     link: `${origin}/e/${eventId}`,
+    agent: agentPrompt(origin, eventId, element),
   };
 
   // The preview is the exact snippet, run through the same embed.js.
@@ -168,6 +170,14 @@ export default function WidgetBuilder() {
             <div className="text-xs mb-3" style={{ color: page === "#0e0e10" ? "#9a9aa6" : "#6b6b76" }}>Preview on your page</div>
             <div ref={preview} />
           </div>
+          <Snippet
+            title="Have an AI agent do it"
+            note="Send this prompt to Claude Code, Cursor or Codex in your website's project. It knows where to put the code for your stack."
+            code={snippets.agent}
+            copied={copied === "agent"}
+            onCopy={() => copy("agent")}
+            collapsed
+          />
           <Snippet title="Embed code (recommended)" note="Card resizes itself; sign-up opens in a small window where wallets and Google sign-in just work." code={snippets.script} copied={copied === "script"} onCopy={() => copy("script")} />
           <Snippet title="No scripts allowed? Use an iframe" note="Same card. Set the height yourself." code={snippets.iframe} copied={copied === "iframe"} onCopy={() => copy("iframe")} />
           <Snippet title="Or just share the link" code={snippets.link} copied={copied === "link"} onCopy={() => copy("link")} />
@@ -208,7 +218,21 @@ function Segmented<T extends string>({ value, options, onChange }: { value: T; o
   );
 }
 
-function Snippet({ title, note, code, copied, onCopy }: { title: string; note?: string; code: string; copied: boolean; onCopy: () => void }) {
+function Snippet({
+  title,
+  note,
+  code,
+  copied,
+  onCopy,
+  collapsed,
+}: {
+  title: string;
+  note?: string;
+  code: string;
+  copied: boolean;
+  onCopy: () => void;
+  collapsed?: boolean;
+}) {
   return (
     <div className="card overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-2 border-b border-border">
@@ -218,7 +242,9 @@ function Snippet({ title, note, code, copied, onCopy }: { title: string; note?: 
         </div>
         <button className="btn btn-ghost !py-1 !px-3 text-sm ml-auto" onClick={onCopy}>{copied ? "Copied" : "Copy"}</button>
       </div>
-      <pre className="p-4 text-xs font-mono overflow-x-auto whitespace-pre">{code}</pre>
+      <pre className={`p-4 text-xs font-mono overflow-x-auto ${collapsed ? "whitespace-pre-wrap max-h-40 overflow-y-auto" : "whitespace-pre"}`}>
+        {code}
+      </pre>
     </div>
   );
 }
