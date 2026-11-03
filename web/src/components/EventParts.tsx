@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatUsdc, type EventView, type GuestView } from "@/lib/near";
 import { Avatar, shortAccount } from "./ui";
+import { AccountQr } from "./Qr";
 
 /** "12 going · 8 spots left", or "Full". */
 export function spotsLine(event: EventView): string {
@@ -58,13 +60,36 @@ const TONE = {
 };
 
 /** Everyone who registered, with where they stand. Public, like the chain. */
+type Filter = "all" | "going" | "in" | "out";
+type Sort = "new" | "old" | "name";
+
+/** Everyone who registered, with where they stand. Public, like the chain. */
 export function GuestGrid({ event, guests, me }: { event: EventView; guests: GuestView[]; me?: string | null }) {
   const [query, setQuery] = useState("");
-  const shown = useMemo(
-    () => guests.filter((g) => g.account_id.toLowerCase().includes(query.trim().toLowerCase())),
-    [guests, query],
-  );
+  const [filter, setFilter] = useState<Filter>("all");
+  const [sort, setSort] = useState<Sort>("new");
   const closed = event.status !== "Open";
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = guests.filter(
+      (g) =>
+        g.account_id.toLowerCase().includes(q) &&
+        (filter === "all" ||
+          (filter === "in" && g.status === "Attended") ||
+          (filter === "going" && g.status === "Registered" && !closed) ||
+          (filter === "out" && g.status === "Registered" && closed)),
+    );
+    list.sort((a, b) =>
+      sort === "name" ? a.account_id.localeCompare(b.account_id) : sort === "old" ? a.registered_at - b.registered_at : b.registered_at - a.registered_at,
+    );
+    // You first, so you can always find yourself.
+    return [...list.filter((g) => g.account_id === me), ...list.filter((g) => g.account_id !== me)];
+  }, [guests, query, filter, sort, closed, me]);
+
+  const filters: [Filter, string][] = closed
+    ? [["all", "All"], ["in", event.status === "Finalized" ? "Got paid" : "Checked in"], ["out", "No-show"]]
+    : [["all", "All"], ["going", "Going"], ["in", "Checked in"]];
 
   return (
     <div>
@@ -79,32 +104,54 @@ export function GuestGrid({ event, guests, me }: { event: EventView; guests: Gue
         <p className="text-sm text-muted">Nobody yet. Be the first.</p>
       ) : (
         <>
-          {guests.length > 8 && (
-            <input
-              className="input mb-3 text-sm"
-              placeholder="Search by account"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          )}
+          <input
+            className="input mb-2 text-sm"
+            placeholder="Search by account or address"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <div className="flex items-center gap-2 mb-3 text-sm">
+            <div className="flex rounded-xl border border-border p-0.5">
+              {filters.map(([v, l]) => (
+                <button
+                  key={v}
+                  onClick={() => setFilter(v)}
+                  className={`px-2.5 py-1 rounded-lg ${filter === v ? "bg-accent-soft text-accent font-medium" : "text-muted"}`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+            <select
+              className="ml-auto bg-transparent text-muted outline-none cursor-pointer"
+              value={sort}
+              onChange={(e) => setSort(e.target.value as Sort)}
+              aria-label="Sort guests"
+            >
+              <option value="new">Newest</option>
+              <option value="old">Oldest</option>
+              <option value="name">A–Z</option>
+            </select>
+          </div>
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
             {shown.map((g) => {
               const b = badge(event, g);
               return (
-                <div
+                <Link
+                  href={`/u/${encodeURIComponent(g.account_id)}`}
                   key={g.account_id}
-                  className={`flex flex-col items-center text-center gap-1.5 p-2 rounded-xl ${g.account_id === me ? "bg-accent-soft/60" : ""}`}
+                  className={`flex flex-col items-center text-center gap-1.5 p-2 rounded-xl hover:bg-border/40 ${g.account_id === me ? "bg-accent-soft/60" : ""}`}
                 >
                   <Avatar account={g.account_id} size={44} />
                   <div className="text-xs font-medium truncate max-w-full" title={g.account_id}>
                     {g.account_id === me ? "You" : shortAccount(g.account_id)}
                   </div>
                   <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${TONE[b.tone]}`}>{b.label}</span>
-                </div>
+                </Link>
               );
             })}
           </div>
-          {shown.length === 0 && <p className="text-sm text-muted">No guest matches “{query}”.</p>}
+          {shown.length === 0 && <p className="text-sm text-muted">No guests match.</p>}
         </>
       )}
     </div>
@@ -158,11 +205,13 @@ export function NextSteps({ event, accountId }: { event: EventView; accountId: s
       </div>
       <ol className="space-y-2 text-sm">
         {[
-          "Add it to your calendar so you don’t miss it.",
+          "Add it to your calendar and come on time. Only people the host checks in get paid.",
           <>
-            At the door, show your account <b className="break-all">{shortAccount(accountId)}</b> to the host.
+            At the door, tell the host your account: <b className="break-all">{shortAccount(accountId)}</b>.
           </>,
-          "After the event, come back here: your deposit plus your share of the no-shows is ready to withdraw.",
+          "Snap a photo at the event. If the host forgets to check you in, it’s your proof.",
+          "Back on this page, your badge should turn “Checked in ✓”. Not there? Ask the host before the event closes.",
+          "When the host closes the event, press “Withdraw payout” here: your deposit plus your share.",
         ].map((t, i) => (
           <li key={i} className="flex gap-3">
             <span className="w-6 h-6 shrink-0 rounded-full bg-accent-soft text-accent text-xs font-semibold flex items-center justify-center">
@@ -172,6 +221,13 @@ export function NextSteps({ event, accountId }: { event: EventView; accountId: s
           </li>
         ))}
       </ol>
+      <div className="flex items-center gap-4 rounded-2xl border border-border p-3">
+        <AccountQr account={accountId} size={120} />
+        <div className="text-sm">
+          <div className="font-medium">Your door pass</div>
+          <p className="text-muted mt-1">The host scans this to check you in. Screenshot it or just open this page at the door.</p>
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <a className="btn btn-ghost text-sm" href={googleCalendarUrl(event, url)} target="_blank" rel="noopener">
           Google Calendar

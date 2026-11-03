@@ -118,18 +118,25 @@ export function RegistrationCard({
               {busy ? "Confirm in your wallet…" : `Withdraw payout · ${formatUsdc(balance)} USDC`}
             </button>
           ) : (
-            <p className="text-sm text-muted">
-              Already withdrawn. <Link href="/me" className="text-accent font-medium">See your balance →</Link>
+            <p className="text-sm text-good font-medium">
+              ✓ You have withdrawn your payout. <Link href="/me" className="text-accent font-medium">See your balance →</Link>
             </p>
           )}
         </div>
       ) : myStatus === "Registered" ? (
-        <p>You weren’t checked in, so your deposit went to the people who came.</p>
+        <p>You didn’t show up (or weren’t checked in), so your deposit went to the people who came.</p>
       ) : (
         <p>This event has ended and the pool was paid out.</p>
       );
   } else if (myStatus === "Attended") {
-    body = <p className="font-medium text-good">✓ You’re checked in. Your share arrives when the host closes the event.</p>;
+    body = (
+      <div>
+        <p className="font-semibold text-good">✓ You have showed up!</p>
+        <p className="text-sm text-muted mt-1">
+          Your deposit plus your share of the no-shows can be withdrawn right here once the host closes the event.
+        </p>
+      </div>
+    );
   } else if (myStatus === "Registered") {
     body = <NextSteps event={event} accountId={accountId!} />;
   } else if (event.guest_count >= event.capacity) {

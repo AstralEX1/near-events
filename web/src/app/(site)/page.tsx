@@ -4,52 +4,120 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { events, formatUsdc, type EventView } from "@/lib/near";
 import { Cover, DateBadge, StatusPill } from "@/components/ui";
+import { useWallet } from "@/lib/wallet";
+import { spotsLine } from "@/components/EventParts";
+
+type Tab = "upcoming" | "past" | "hosting" | "going";
 
 export default function Home() {
+  const { accountId } = useWallet();
   const [list, setList] = useState<EventView[] | null>(null);
+  const [myIds, setMyIds] = useState<number[]>([]);
+  const [tab, setTab] = useState<Tab>("upcoming");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     events.list().then(setList).catch((e) => setError(String(e)));
   }, []);
+  useEffect(() => {
+    if (accountId) events.guestEvents(accountId).then(setMyIds).catch(() => {});
+    else setMyIds([]);
+  }, [accountId]);
 
-  const upcoming = list?.filter((e) => e.status === "Open") ?? [];
-  const past = list?.filter((e) => e.status !== "Open") ?? [];
+  const all = list ?? [];
+  const tabs: [Tab, string, EventView[], string][] = [
+    ["upcoming", "Upcoming", all.filter((e) => e.status === "Open"), "No open events yet. Host the first one."],
+    ["past", "Past", all.filter((e) => e.status !== "Open"), "No past events yet."],
+    ...(accountId
+      ? ([
+          ["going", "Going", all.filter((e) => myIds.includes(e.id)), "You haven’t registered for anything yet."],
+          ["hosting", "Hosting", all.filter((e) => e.host === accountId || e.cohosts.includes(accountId)), "You aren’t hosting any events."],
+        ] as [Tab, string, EventView[], string][])
+      : []),
+  ];
+  const current = tabs.find((t) => t[0] === tab) ?? tabs[0];
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-12">
       <section className="pt-6 pb-2">
         <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight max-w-2xl">
           Show up. <span className="text-accent">Split the pool.</span>
         </h1>
         <p className="mt-4 text-lg text-muted max-w-xl">
-          Every guest puts down the same small USDC deposit. People who come get their deposit back plus a share of
-          the no-shows. Pay from any chain. No platform fee.
+          Free events lose half their guests. Here every guest puts down the same small USDC deposit. People who come get
+          it back plus a share of the no-shows. Pay from any chain. No platform fee.
         </p>
-        <div className="mt-6 flex gap-3">
+        <div className="mt-6 flex flex-wrap gap-3">
           <Link href="/create" className="btn btn-primary">Host an event</Link>
-          <a href="#upcoming" className="btn btn-ghost">Browse events</a>
+          <a href="#events" className="btn btn-ghost">Browse events</a>
           <Link href="/widget" className="btn btn-ghost">Embed on your website</Link>
         </div>
       </section>
 
-      {error && <p className="text-warn text-sm">Could not load events: {error}</p>}
-      {!list && !error && <p className="text-muted">Loading events…</p>}
+      <HowItWorks />
 
-      {list && (
-        <>
-          <EventGrid id="upcoming" title="Upcoming" items={upcoming} empty="No open events yet. Host the first one." />
-          {past.length > 0 && <EventGrid title="Past" items={past} />}
-        </>
-      )}
+      <section id="events" className="space-y-4 scroll-mt-20">
+        <div className="flex flex-wrap items-center gap-2">
+          {tabs.map(([k, label, items]) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={`px-3.5 py-1.5 rounded-full text-sm border ${tab === k ? "bg-text text-bg border-text" : "border-border text-muted hover:text-text"}`}
+            >
+              {label}
+              {list && <span className="ml-1.5 opacity-60">{items.length}</span>}
+            </button>
+          ))}
+        </div>
+        {error && <p className="text-warn text-sm">Could not load events: {error}</p>}
+        {!list && !error && <p className="text-muted">Loading events…</p>}
+        {list && <EventGrid items={current[2]} empty={current[3]} />}
+      </section>
+
+      <section className="card p-6 sm:p-8 grid gap-6 sm:grid-cols-[1fr_auto] items-center">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Run a community, coworking or club?</h2>
+          <p className="text-muted mt-2 max-w-xl">
+            Put registration with deposits on your own website in two lines of code, or send one prompt to your AI agent
+            and let it do it.
+          </p>
+        </div>
+        <Link href="/widget" className="btn btn-accent">Get the widget</Link>
+      </section>
     </div>
   );
 }
 
-function EventGrid({ id, title, items, empty }: { id?: string; title: string; items: EventView[]; empty?: string }) {
+/** Kickback's landing told the story in three pictures; ours in three cards. */
+function HowItWorks() {
+  const steps = [
+    ["🎟️", "Register with a deposit", "Sign in with Google, email or any wallet and put down the event’s deposit, from any chain or token."],
+    ["🚪", "Show up and get checked in", "The host scans your QR code at the door. That’s what makes you eligible for the payout."],
+    ["💸", "Split the pool", "After the event, everyone who came gets their deposit back plus an equal share of the no-shows’ deposits."],
+  ];
   return (
-    <section id={id}>
-      <h2 className="text-xl font-semibold mb-4">{title}</h2>
+    <section className="grid gap-3 sm:grid-cols-3">
+      {steps.map(([icon, title, text], i) => (
+        <div key={title} className="card p-5">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{icon}</span>
+            <span className="text-xs font-semibold text-accent">STEP {i + 1}</span>
+          </div>
+          <div className="font-semibold mt-3">{title}</div>
+          <p className="text-sm text-muted mt-1">{text}</p>
+        </div>
+      ))}
+      <p className="sm:col-span-3 text-sm text-muted">
+        The money sits in a NEAR smart contract the whole time, not with the organizer or with us.{" "}
+        <Link href="/guide" className="text-accent">Guide & FAQ →</Link>
+      </p>
+    </section>
+  );
+}
+
+function EventGrid({ items, empty }: { items: EventView[]; empty?: string }) {
+  return (
+    <section>
       {items.length === 0 && empty && <p className="text-muted">{empty}</p>}
       <div className="grid gap-4 sm:grid-cols-2">
         {items.map((e) => (
@@ -70,7 +138,7 @@ function EventGrid({ id, title, items, empty }: { id?: string; title: string; it
               <div className="text-sm text-muted truncate">{e.metadata.location}</div>
               <div className="text-sm mt-2">
                 <span className="font-medium">{formatUsdc(e.deposit)} USDC</span>
-                <span className="text-muted"> · {e.guest_count}/{e.capacity} going</span>
+                <span className="text-muted"> · {spotsLine(e)}</span>
               </div>
             </div>
             <div className="hidden sm:block py-1">

@@ -7,6 +7,7 @@ import { events, formatUsdc, type EventView, type GuestView } from "@/lib/near";
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { Avatar, StatusPill } from "@/components/ui";
+import { QrScanner } from "@/components/Qr";
 
 export default function ManageEvent() {
   const id = Number(useParams<{ id: string }>().id);
@@ -17,6 +18,8 @@ export default function ManageEvent() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<{ text: string; ok: boolean } | null>(null);
 
   const load = useCallback(async () => {
     const [e, g] = await Promise.all([events.get(id), events.guests(id)]);
@@ -66,6 +69,28 @@ export default function ManageEvent() {
     setSelected(next);
   };
 
+  // A guest's QR holds their account id. Scans queue guests for one batched check-in.
+  const onScan = (text: string) => {
+    const account = text.replace(/^near:/, "").trim().toLowerCase();
+    const g = guests.find((x) => x.account_id === account);
+    if (!g) setScanNote({ text: `${account.slice(0, 40)} is not on the guest list`, ok: false });
+    else if (g.status === "Attended") setScanNote({ text: `${account} is already checked in`, ok: true });
+    else {
+      setSelected((prev) => new Set(prev).add(account));
+      setScanNote({ text: `✓ ${account} added. Press “Check in” when the queue is done.`, ok: true });
+    }
+  };
+
+  const exportCsv = () => {
+    const rows = [["account", "status", "registered_at", "paid_by"], ...guests.map((g) => [g.account_id, g.status, new Date(g.registered_at).toISOString(), g.paid_by])];
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = `event-${id}-guests.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   const open = event.status === "Open";
   const pool = BigInt(event.total_pool);
   const share = event.attended_count > 0 ? pool / BigInt(event.attended_count) : 0n;
@@ -83,6 +108,24 @@ export default function ManageEvent() {
         <Stat label="Each attendee would get" value={event.attended_count ? `${formatUsdc(share)} USDC` : "—"} />
       </div>
 
+      {open && (
+        <div className="card p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0">
+              <div className="font-semibold">Check in at the door</div>
+              <p className="text-sm text-muted">Guests show the QR code from their event page. Scan a few, then check them in together.</p>
+            </div>
+            {!scanning && (
+              <button className="btn btn-accent ml-auto whitespace-nowrap" onClick={() => setScanning(true)}>
+                Scan QR codes
+              </button>
+            )}
+          </div>
+          {scanning && <QrScanner onScan={onScan} onClose={() => setScanning(false)} />}
+          {scanNote && <p className={`text-sm ${scanNote.ok ? "text-good" : "text-warn"}`}>{scanNote.text}</p>}
+        </div>
+      )}
+
       <div className="card">
         <div className="p-3 flex gap-2 border-b border-border">
           <input className="input" placeholder="Search guest account…" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -95,6 +138,9 @@ export default function ManageEvent() {
               Check in {selected.size > 0 && `(${selected.size})`}
             </button>
           )}
+          <button className="btn btn-ghost whitespace-nowrap" disabled={guests.length === 0} onClick={exportCsv} title="Download the guest list">
+            CSV
+          </button>
         </div>
         {filtered.length === 0 && <p className="p-4 text-muted text-sm">No guests yet.</p>}
         <ul>
@@ -144,6 +190,13 @@ export default function ManageEvent() {
           <div className="font-semibold">Close the event</div>
           {isHost ? (
             <>
+              {event.attended_count > 0 && (
+                <p className="text-sm">
+                  <b>{event.attended_count}</b> came, <b>{event.guest_count - event.attended_count}</b> no-shows. Each attendee
+                  gets <b>{formatUsdc(share)} USDC</b>
+                  {share > BigInt(event.deposit) && <> (deposit + {formatUsdc(share - BigInt(event.deposit))})</>}.
+                </p>
+              )}
               <p className="text-sm text-muted">
                 Finalize splits the pool between checked-in guests. If nobody was checked in, everyone gets their deposit
                 back. A DAO host finalizes through a DAO proposal instead.
@@ -152,7 +205,15 @@ export default function ManageEvent() {
                 <button
                   className="btn btn-primary"
                   disabled={busy}
-                  onClick={() => run("finalize", { event_id: id }, `Pay out ${formatUsdc(pool)} USDC to ${event.attended_count} attendees? This cannot be undone.`)}
+                  onClick={() =>
+                    run(
+                      "finalize",
+                      { event_id: id },
+                      event.attended_count === 0
+                        ? "Nobody was checked in, so every deposit goes back to its guest. Close the event?"
+                        : `Finalize and enable payouts?\n\n${event.attended_count} of ${event.guest_count} guests came (${event.guest_count - event.attended_count} no-shows).\nPool: ${formatUsdc(pool)} USDC.\nEach attendee gets ${formatUsdc(share)} USDC.\n\nThis cannot be undone.`,
+                    )
+                  }
                 >
                   Finalize & pay out
                 </button>

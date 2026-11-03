@@ -15,6 +15,7 @@ export default function Me() {
   const [inIntents, setInIntents] = useState<bigint | null>(null);
   const [mine, setMine] = useState<EventView[]>([]);
   const [amount, setAmount] = useState("");
+  const [receiver, setReceiver] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,12 +67,13 @@ export default function Me() {
         {
           receiverId: EVENTS_CONTRACT,
           methodName: "withdraw",
-          args: { amount: amount ? toUnits(amount) : null, receiver_id: null, to_intents: toIntents },
+          args: { amount: amount ? toUnits(amount) : null, receiver_id: receiver.trim() || null, to_intents: toIntents },
           deposit: 1n,
           gas: 200_000_000_000_000n,
         },
       ]);
       setAmount("");
+      setReceiver("");
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -102,9 +104,19 @@ export default function Me() {
         {balance > 0n && (
           <div className="space-y-3">
             <input className="input" type="number" min="0" step="0.01" placeholder={`Amount (all: ${formatUsdc(balance)})`} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            {kind !== "evm" && (
+              <input
+                className="input"
+                placeholder="Send to another NEAR account (optional, e.g. a friend or an exchange)"
+                value={receiver}
+                onChange={(e) => setReceiver(e.target.value)}
+              />
+            )}
             <div className="grid sm:grid-cols-2 gap-2">
               {kind !== "evm" && (
-                <button className="btn btn-primary" disabled={busy} onClick={() => withdraw(false)}>Withdraw to my NEAR wallet</button>
+                <button className="btn btn-primary" disabled={busy} onClick={() => withdraw(false)}>
+                  {receiver.trim() ? `Send to ${shortAccount(receiver.trim())}` : "Withdraw to my NEAR wallet"}
+                </button>
               )}
               <button
                 className="btn btn-ghost"

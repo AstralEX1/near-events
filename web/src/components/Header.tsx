@@ -19,6 +19,8 @@ export function Header() {
           <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-accent-soft text-accent">testnet</span>
         )}
         <nav className="ml-auto flex items-center gap-2 text-sm">
+          <Link href="/#events" className="hidden md:inline text-muted hover:text-text px-2">Events</Link>
+          <Link href="/guide" className="hidden md:inline text-muted hover:text-text px-2">Guide</Link>
           <Link href="/widget" className="hidden sm:inline text-muted hover:text-text px-2">For your website</Link>
           <Link href="/create" className="btn btn-ghost !py-1.5">Create event</Link>
           {accountId ? (
