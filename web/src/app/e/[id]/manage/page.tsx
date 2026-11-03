@@ -50,7 +50,7 @@ export default function ManageEvent() {
     setBusy(true);
     setError(null);
     try {
-      await send([{ receiverId: EVENTS_CONTRACT, methodName, args, gas: 300_000_000_000_000n }]);
+      await send([{ receiverId: EVENTS_CONTRACT, methodName, args, gas: 300_000_000_000_000n, deposit: 1n }]);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -156,7 +156,17 @@ export default function ManageEvent() {
                 >
                   Finalize & pay out
                 </button>
-                <button className="btn btn-ghost text-warn" disabled={busy} onClick={() => run("cancel", { event_id: id }, "Cancel the event and refund every deposit?")}>
+                <button
+                  className="btn btn-ghost text-warn"
+                  disabled={busy}
+                  onClick={() =>
+                    run(
+                      "cancel",
+                      { event_id: id },
+                      "Cancel the event and refund every guest deposit and sponsor bonus?",
+                    )
+                  }
+                >
                   Cancel event
                 </button>
               </div>

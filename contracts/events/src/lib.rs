@@ -37,6 +37,8 @@ const MAX_TITLE_LEN: usize = 120;
 const MAX_TEXT_LEN: usize = 2000;
 const MAX_SHORT_LEN: usize = 300;
 const MAX_COHOSTS: usize = 10;
+const MAX_SPONSORS: usize = 50;
+const MAX_CHECK_IN_BATCH: usize = MAX_CAPACITY as usize;
 /// Events must end within a year, so the abandoned-event refund is always reachable.
 const MAX_EVENT_HORIZON_MS: u64 = 365 * 24 * 60 * 60 * 1000;
 
@@ -96,6 +98,8 @@ pub struct Event {
     /// NEAR (yocto) left from the host's storage pre-payment.
     pub storage_budget: u128,
     pub created_at: u64,
+    /// Per-sponsor USDC amounts; refunded to sponsors on cancel/abandon.
+    pub sponsors: Vec<(AccountId, u128)>,
 }
 
 #[near(serializers = [json])]
@@ -162,12 +166,14 @@ pub struct Contract {
     guest_index: LookupMap<(u64, u32), AccountId>,
     guest_events: LookupMap<AccountId, Vec<u64>>,
     balances: LookupMap<AccountId, u128>,
+    /// Optional account allowed to call `payout_to_intents` for other users (web relayer).
+    relayer: Option<AccountId>,
 }
 
 #[near]
 impl Contract {
     #[init]
-    pub fn new(usdc: AccountId, intents: Option<AccountId>) -> Self {
+    pub fn new(usdc: AccountId, intents: Option<AccountId>, relayer: Option<AccountId>) -> Self {
         Self {
             usdc,
             intents,
@@ -176,6 +182,7 @@ impl Contract {
             guest_index: LookupMap::new(StorageKey::GuestIndex),
             guest_events: LookupMap::new(StorageKey::GuestEvents),
             balances: LookupMap::new(StorageKey::Balances),
+            relayer,
         }
     }
 
@@ -214,6 +221,7 @@ impl Contract {
             payout_per_attendee: 0,
             storage_budget: 0,
             created_at: env::block_timestamp_ms(),
+            sponsors: Vec::new(),
         });
         self.events.flush();
         let event_cost = bytes_cost(env::storage_usage().saturating_sub(initial_storage));
@@ -229,7 +237,9 @@ impl Contract {
         id
     }
 
+    #[payable]
     pub fn add_cohost(&mut self, event_id: u64, account_id: AccountId) {
+        near_sdk::assert_one_yocto();
         let event = self.event_mut(event_id);
         require!(env::predecessor_account_id() == event.host, "Only the host");
         require!(event.status == EventStatus::Open, "Event is closed");
@@ -240,15 +250,21 @@ impl Contract {
         emit("cohost_added", json!({ "event_id": event_id, "account_id": account_id }));
     }
 
+    #[payable]
     pub fn remove_cohost(&mut self, event_id: u64, account_id: AccountId) {
+        near_sdk::assert_one_yocto();
         let event = self.event_mut(event_id);
         require!(env::predecessor_account_id() == event.host, "Only the host");
+        require!(event.status == EventStatus::Open, "Event is closed");
         event.cohosts.retain(|a| a != &account_id);
         emit("cohost_removed", json!({ "event_id": event_id, "account_id": account_id }));
     }
 
     /// Marks registered guests as attended. Host or co-host.
+    #[payable]
     pub fn check_in(&mut self, event_id: u64, accounts: Vec<AccountId>) {
+        near_sdk::assert_one_yocto();
+        require!(accounts.len() <= MAX_CHECK_IN_BATCH, "Too many accounts");
         self.assert_open_and_staff(event_id);
         let mut added = 0u32;
         for account in &accounts {
@@ -266,7 +282,9 @@ impl Contract {
     }
 
     /// Reverts a mistaken check-in. Host or co-host.
+    #[payable]
     pub fn undo_check_in(&mut self, event_id: u64, account_id: AccountId) {
+        near_sdk::assert_one_yocto();
         self.assert_open_and_staff(event_id);
         let record = self
             .guests
@@ -281,7 +299,9 @@ impl Contract {
 
     /// Splits the pool between attendees. Host only, so a DAO host finalizes
     /// by proposal. If nobody attended, everyone gets their deposit back.
+    #[payable]
     pub fn finalize(&mut self, event_id: u64) {
+        near_sdk::assert_one_yocto();
         let event = self.event(event_id);
         require!(env::predecessor_account_id() == event.host, "Only the host");
         require!(event.status == EventStatus::Open, "Event is closed");
@@ -317,7 +337,9 @@ impl Contract {
     }
 
     /// Cancels the event and refunds every deposit. Host only.
+    #[payable]
     pub fn cancel(&mut self, event_id: u64) {
+        near_sdk::assert_one_yocto();
         let event = self.event(event_id);
         require!(env::predecessor_account_id() == event.host, "Only the host");
         require!(event.status == EventStatus::Open, "Event is closed");
@@ -339,7 +361,10 @@ impl Contract {
     // --------------------------------------------------------------- guest
 
     /// Registers the caller using their internal balance (e.g. a previous payout).
+    /// Requires 1 yoctoNEAR so only a full-access key can spend the balance.
+    #[payable]
     pub fn register_with_balance(&mut self, event_id: u64) {
+        near_sdk::assert_one_yocto();
         let guest = env::predecessor_account_id();
         let deposit = self.event(event_id).deposit;
         let balance = self.balance(&guest);
@@ -366,12 +391,17 @@ impl Contract {
     }
 
     /// Moves an account's balance into that same account's NEAR Intents
-    /// balance. Anyone can call it (e.g. our relayer, or a "send to Intents"
-    /// button), because the funds can only go to their owner. This is how
-    /// guests who signed in with an EVM or Solana wallet get paid: their NEAR
-    /// Events account is their Intents account (e.g. `0xabc…`), which cannot
-    /// call this contract itself.
+    /// balance. Only the owner or the configured relayer may call it — funds
+    /// still can only go to that owner. The relayer path is how guests who
+    /// signed in with an EVM or Solana wallet get paid: their NEAR Events
+    /// account is their Intents account (e.g. `0xabc…`), which cannot call
+    /// this contract itself.
     pub fn payout_to_intents(&mut self, account_id: AccountId, amount: Option<U128>) -> Promise {
+        let predecessor = env::predecessor_account_id();
+        require!(
+            predecessor == account_id || Some(&predecessor) == self.relayer.as_ref(),
+            "Only the owner or the relayer"
+        );
         self.send_out(account_id.clone(), account_id, amount, true)
     }
 
@@ -401,6 +431,10 @@ impl Contract {
 
     pub fn intents(&self) -> Option<AccountId> {
         self.intents.clone()
+    }
+
+    pub fn relayer(&self) -> Option<AccountId> {
+        self.relayer.clone()
     }
 
     /// NEAR (yocto) to attach to `create_event` for a given capacity.
@@ -495,6 +529,12 @@ impl FungibleTokenReceiver for Contract {
                 let event = self.event_mut(event_id);
                 require!(event.status == EventStatus::Open, "Event is closed");
                 event.bonus_pool += amount.0;
+                if let Some((_, funded)) = event.sponsors.iter_mut().find(|(a, _)| a == &sender_id) {
+                    *funded += amount.0;
+                } else {
+                    require!(event.sponsors.len() < MAX_SPONSORS, "Too many sponsors");
+                    event.sponsors.push((sender_id.clone(), amount.0));
+                }
                 emit("sponsored", json!({ "event_id": event_id, "sponsor": sender_id, "amount": amount }));
                 PromiseOrValue::Value(U128(0))
             }
@@ -604,17 +644,22 @@ impl Contract {
     fn close_with_refunds(&mut self, event_id: u64, status: EventStatus) {
         let initial_storage = env::storage_usage();
         let event = self.event(event_id);
-        let (host, deposit, guest_count, bonus) =
-            (event.host.clone(), event.deposit, event.guest_count, event.bonus_pool);
+        let (deposit, guest_count, sponsors) =
+            (event.deposit, event.guest_count, event.sponsors.clone());
         for i in 0..guest_count {
             let account = self.guest_index[&(event_id, i)].clone();
             self.credit(&account, deposit);
         }
-        // Sponsor bonus goes back to the host (the DAO treasury in the demo).
-        if bonus > 0 {
-            self.credit(&host, bonus);
+        // Sponsor bonuses go back to the sponsors who funded them.
+        for (sponsor, amount) in sponsors {
+            if amount > 0 {
+                self.credit(&sponsor, amount);
+            }
         }
-        self.event_mut(event_id).status = status;
+        let event = self.event_mut(event_id);
+        event.status = status;
+        event.bonus_pool = 0;
+        event.sponsors.clear();
         self.settle_storage(event_id, initial_storage);
         emit("closed", json!({ "event_id": event_id, "status": status }));
     }
