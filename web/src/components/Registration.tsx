@@ -111,22 +111,21 @@ export function RegistrationCard({
   } else if (event.status === "Finalized") {
     body =
       myStatus === "Attended" ? (
-        <div className="space-y-3">
-          <div>
-            <div className="text-sm text-muted">You showed up and got</div>
-            <div className="text-3xl font-semibold mt-0.5">{formatUsdc(event.payout_per_attendee)} USDC</div>
+        balance > 0n ? (
+          <div className="space-y-2">
+            <button className="btn btn-good w-full !py-3.5" disabled={busy} onClick={withdrawAll}>
+              {busy ? "Confirm in your wallet…" : `Withdraw ${formatUsdc(balance)} USDC`}
+            </button>
+            <p className="text-sm text-muted">
+              You showed up. {event.attended_count} of {event.guest_count} came.{" "}
+              <Link href="/me" className="text-accent">Other ways to withdraw</Link>
+            </p>
           </div>
-          {balance > 0n ? (
-            <>
-              <button className="btn btn-accent w-full" disabled={busy} onClick={withdrawAll}>
-                {busy ? "Confirm in your wallet…" : "Withdraw"}
-              </button>
-              <Link href="/me" className="block text-center text-xs text-muted hover:text-text">Other ways to withdraw</Link>
-            </>
-          ) : (
-            <p className="text-sm text-good font-medium">✓ Withdrawn</p>
-          )}
-        </div>
+        ) : (
+          <p className="text-sm">
+            You showed up and got <b>{formatUsdc(event.payout_per_attendee)} USDC</b>. ✓ Withdrawn.
+          </p>
+        )
       ) : myStatus === "Registered" ? (
         <p className="text-sm">You weren’t checked in, so your deposit went to the people who came.</p>
       ) : (
@@ -151,7 +150,7 @@ export function RegistrationCard({
         <button className="w-full text-xs text-muted pt-1" onClick={() => setChoosing(false)}>Back</button>
       </div>
     ) : (
-      <button className="btn btn-accent w-full" onClick={() => setChoosing(true)}>Register · {price}</button>
+      <button className="btn btn-accent w-full !py-3.5" onClick={() => setChoosing(true)}>Register · {price}</button>
     );
   } else if (kind === "evm") {
     const enough = intentsBalance !== null && intentsBalance >= BigInt(event.deposit);
@@ -165,7 +164,7 @@ export function RegistrationCard({
   } else {
     body = (
       <div className="space-y-2">
-        <button className="btn btn-accent w-full" disabled={busy} onClick={register}>
+        <button className="btn btn-accent w-full !py-3.5" disabled={busy} onClick={register}>
           {busy ? "Confirm in your wallet…" : `Register · ${price}`}
         </button>
         {more ? (
@@ -186,12 +185,12 @@ export function RegistrationCard({
 
   const open = event.status === "Open" && !myStatus && event.guest_count < event.capacity;
   return (
-    <div className="card p-4 space-y-3">
+    <div className="space-y-3">
       {body}
       {error && <p className="text-sm text-warn break-words">{error}</p>}
       {open && (
-        <p className="text-xs text-muted leading-relaxed">
-          Come and get your deposit back plus a share of the no-shows. No cancelling.{" "}
+        <p className="text-sm text-muted leading-relaxed">
+          Come and get it back plus a share of the no-shows. No cancelling.{" "}
           <button className="text-accent" onClick={() => setRules(!rules)}>{rules ? "Hide" : "How it works"}</button>
         </p>
       )}

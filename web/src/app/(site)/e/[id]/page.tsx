@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, type EventView, type GuestView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
-import { Avatar, Cover, StatusPill, formatWhen, shortAccount } from "@/components/ui";
+import { Cover, StatusPill, formatWhen, shortAccount } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
 import { GuestGrid } from "@/components/EventParts";
 import { SponsorButton } from "@/components/Sponsor";
@@ -42,45 +42,34 @@ export default function EventPage() {
     <div className="grid gap-8 lg:gap-12 md:grid-cols-[1.15fr_1fr] items-start">
       <section className="space-y-5 min-w-0">
         <div>
-          <div className="flex items-center gap-2 text-sm text-muted">
+          <div className="flex items-center gap-2 text-muted">
             {formatWhen(event.metadata.starts_at, event.metadata.ends_at)}
-            {event.status !== "Open" && <StatusPill status={event.status} />}
+            {event.status === "Cancelled" && <StatusPill status={event.status} />}
+            <MoreMenu id={id} isStaff={isStaff} canSponsor={event.status === "Open"} onSponsor={() => setSponsoring(true)} />
           </div>
           <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight mt-2">{event.metadata.title}</h1>
         </div>
 
-        <Cover event={event} className="aspect-[16/10] w-full rounded-2xl" />
+        <Cover event={event} className="aspect-[16/10] w-full rounded-2xl [&>span]:hidden" />
 
-        <div className="space-y-2 text-sm">
+        <div className="space-y-2 text-[15px] text-text/80">
           <div className="flex items-center gap-2">
-            <Avatar account={event.host} size={22} />
-            <span className="text-muted">Hosted by</span>
+            <span>Hosted by</span>
             <Link href={`/u/${encodeURIComponent(event.host)}`} className="font-medium hover:text-accent truncate">
               {shortAccount(event.host)}
             </Link>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="w-[22px] text-center">📍</span>
-            <span>{event.metadata.location || "Location TBA"}</span>
+          <div>{event.metadata.location || "Location TBA"}</div>
+          <div>
+            Pot {formatUsdc(event.total_pool)} USDC
+            <span className="text-muted"> · {formatUsdc(event.deposit)} USDC per guest</span>
           </div>
         </div>
 
         {event.metadata.description && <p className="whitespace-pre-wrap leading-relaxed">{event.metadata.description}</p>}
       </section>
 
-      <section className="space-y-5 md:sticky md:top-20">
-        <div className="flex items-center gap-2 text-sm">
-          <span>
-            <b>{formatUsdc(event.deposit)} USDC</b> deposit
-            <span className="text-muted"> · pool {formatUsdc(event.total_pool)} USDC</span>
-          </span>
-          <MoreMenu
-            id={id}
-            isStaff={isStaff}
-            canSponsor={event.status === "Open"}
-            onSponsor={() => setSponsoring(true)}
-          />
-        </div>
+      <section className="space-y-5 md:sticky md:top-20 md:pt-[4.5rem]">
         {sponsoring && <SponsorButton event={event} onDone={load} startOpen onClose={() => setSponsoring(false)} />}
         <RegistrationCard event={event} myStatus={me?.status ?? null} onChange={load} />
         <GuestGrid event={event} guests={guests} me={accountId} />

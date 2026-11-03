@@ -67,6 +67,7 @@ body {
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary { background: var(--text); color: var(--bg); }
 .btn-accent { background: var(--accent); color: white; }
+.btn-good { background: var(--good); color: white; }
 .btn-ghost { border: 1px solid var(--border); background: var(--surface); }
 
 .input {

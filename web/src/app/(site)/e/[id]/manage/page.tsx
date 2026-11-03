@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { events, formatUsdc, type EventView, type GuestView } from "@/lib/near";
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
-import { Avatar, StatusPill } from "@/components/ui";
+import { Avatar } from "@/components/ui";
 import { QrScanner } from "@/components/Qr";
 
 export default function ManageEvent() {
@@ -95,134 +95,97 @@ export default function ManageEvent() {
   const pool = BigInt(event.total_pool);
   const share = event.attended_count > 0 ? pool / BigInt(event.attended_count) : 0n;
 
+  // Phone-first door screen: one line of numbers, the camera, the list, one closing button.
   return (
-    <div className="space-y-4 max-w-xl mx-auto">
-      <div className="flex flex-wrap items-center gap-3">
-        <Link href={`/e/${id}`} className="text-muted hover:text-text">← {event.metadata.title}</Link>
-        <StatusPill status={event.status} />
+    <div className="max-w-md mx-auto space-y-4">
+      <div>
+        <Link href={`/e/${id}`} className="text-sm text-muted hover:text-text">← {event.metadata.title}</Link>
+        <h1 className="text-xl font-semibold mt-1">Check-in</h1>
+        <p className="text-sm text-muted">
+          {event.attended_count} of {event.guest_count} in
+          {event.attended_count > 0 && ` · ${formatUsdc(share)} USDC each`}
+          {!open && ` · ${event.status === "Finalized" ? "paid out" : "cancelled"}`}
+        </p>
       </div>
-
-      <p className="text-sm">
-        <b>{event.attended_count}</b>/{event.guest_count} checked in
-        {event.attended_count > 0 && <span className="text-muted"> · each gets {formatUsdc(share)} USDC</span>}
-        <span className="text-muted"> · pool {formatUsdc(pool)} USDC</span>
-      </p>
 
       {open &&
         (scanning ? (
-          <div className="space-y-2">
-            <QrScanner onScan={onScan} onClose={() => setScanning(false)} />
-          </div>
+          <QrScanner onScan={onScan} onClose={() => setScanning(false)} />
         ) : (
-          <button className="btn btn-accent w-full !py-3.5 text-base" onClick={() => setScanning(true)}>
-            Scan guest QR codes
+          <button className="btn btn-primary w-full !py-3.5" onClick={() => setScanning(true)}>
+            Scan guest codes
           </button>
         ))}
       {scanNote && <p className={`text-sm ${scanNote.ok ? "text-good" : "text-warn"}`}>{scanNote.text}</p>}
+      {open && selected.size > 0 && (
+        <button className="btn btn-accent w-full" disabled={busy} onClick={() => run("check_in", { event_id: id, accounts: [...selected] })}>
+          Check in {selected.size} scanned {selected.size === 1 ? "guest" : "guests"}
+        </button>
+      )}
 
-      <div className="card">
-        <div className="p-3 flex gap-2 border-b border-border">
-          <input className="input" placeholder="Search guest…" value={query} onChange={(e) => setQuery(e.target.value)} />
-          {open && (
-            <button
-              className="btn btn-accent whitespace-nowrap"
-              disabled={busy || selected.size === 0}
-              onClick={() => run("check_in", { event_id: id, accounts: [...selected] })}
-            >
-              Check in {selected.size > 0 && `(${selected.size})`}
-            </button>
-          )}
+      <input className="input" placeholder="Or find by name" aria-label="Find guest" value={query} onChange={(e) => setQuery(e.target.value)} />
 
-        </div>
-        {filtered.length === 0 && <p className="p-4 text-muted text-sm">No guests yet.</p>}
-        <ul>
-          {filtered.map((g) => {
-            const attended = g.status === "Attended";
-            return (
-              <li key={g.account_id} className="flex items-center gap-3 px-3 py-2.5 border-b border-border last:border-0">
-                {open && !attended ? (
-                  <input type="checkbox" className="w-4 h-4 accent-[var(--accent)]" checked={selected.has(g.account_id)} onChange={() => toggle(g.account_id)} />
-                ) : (
-                  <span className="w-4 text-good text-center">{attended ? "✓" : ""}</span>
-                )}
-                <Avatar account={g.account_id} size={30} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{g.account_id}</div>
-                  {g.paid_by !== g.account_id && <div className="text-xs text-muted truncate">paid by {g.paid_by}</div>}
-                </div>
-                {attended ? (
-                  <>
-                    <span className="text-xs font-medium text-good">Checked in</span>
-                    {open && (
-                      <button className="text-xs text-muted hover:text-warn" disabled={busy} onClick={() => run("undo_check_in", { event_id: id, account_id: g.account_id })}>
-                        undo
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  open && (
-                    <button className="btn btn-ghost !py-1 !px-3 text-sm" disabled={busy} onClick={() => run("check_in", { event_id: id, accounts: [g.account_id] })}>
-                      Check in
-                    </button>
-                  )
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+      <ul>
+        {filtered.length === 0 && <li className="py-3 text-sm text-muted">No guests yet.</li>}
+        {filtered.map((g) => {
+          const attended = g.status === "Attended";
+          return (
+            <li key={g.account_id} className="flex items-center gap-3 h-14 border-b border-border">
+              <Avatar account={g.account_id} size={32} />
+              <span className="flex-1 min-w-0 truncate font-medium" title={g.account_id}>{g.account_id}</span>
+              {attended ? (
+                <button
+                  className="h-11 px-3 font-semibold text-good disabled:opacity-100"
+                  disabled={busy || !open}
+                  aria-label="Undo check-in"
+                  onClick={() => run("undo_check_in", { event_id: id, account_id: g.account_id })}
+                >
+                  ✓ In
+                </button>
+              ) : (
+                open && (
+                  <button
+                    className={`btn !py-2 ${selected.has(g.account_id) ? "btn-accent" : "btn-ghost"}`}
+                    disabled={busy}
+                    onClick={() => run("check_in", { event_id: id, accounts: [g.account_id] })}
+                  >
+                    Check in
+                  </button>
+                )
+              )}
+            </li>
+          );
+        })}
+      </ul>
 
       {error && <p className="text-sm text-warn break-words">{error}</p>}
-      {guests.length > 0 && (
-        <button className="text-xs text-muted hover:text-text" onClick={exportCsv}>Download guest list (CSV)</button>
-      )}
 
       {/* Sputnik DAOs live under sputnik-dao.near (mainnet) or sputnik-v2.testnet. */}
       {open && event.host.includes("sputnik") && <DaoSponsor eventId={id} dao={event.host} />}
 
-      {open && (
-        <div className="card p-4 space-y-3">
-          <div className="font-semibold">Close the event</div>
-          {isHost ? (
-            <>
-              {event.attended_count > 0 && (
-                <p className="text-sm">
-                  <b>{event.attended_count}</b> came, <b>{event.guest_count - event.attended_count}</b> no-shows. Each attendee
-                  gets <b>{formatUsdc(share)} USDC</b>
-                  {share > BigInt(event.deposit) && <> (deposit + {formatUsdc(share - BigInt(event.deposit))})</>}.
-                </p>
-              )}
-              <p className="text-sm text-muted">
-                Finalize splits the pool between checked-in guests. If nobody was checked in, everyone gets their deposit
-                back. A DAO host finalizes through a DAO proposal instead.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  className="btn btn-primary"
-                  disabled={busy}
-                  onClick={() =>
-                    run(
-                      "finalize",
-                      { event_id: id },
-                      event.attended_count === 0
-                        ? "Nobody was checked in, so every deposit goes back to its guest. Close the event?"
-                        : `Finalize and enable payouts?\n\n${event.attended_count} of ${event.guest_count} guests came (${event.guest_count - event.attended_count} no-shows).\nPool: ${formatUsdc(pool)} USDC.\nEach attendee gets ${formatUsdc(share)} USDC.\n\nThis cannot be undone.`,
-                    )
-                  }
-                >
-                  Finalize & pay out
-                </button>
-                <button className="btn btn-ghost text-warn" disabled={busy} onClick={() => run("cancel", { event_id: id }, "Cancel the event and refund every deposit?")}>
-                  Cancel event
-                </button>
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-muted">
-              Only the host ({event.host}) can finalize. If the host is a DAO, its members vote on the payout in Trezu.
-            </p>
-          )}
+      {open && isHost && (
+        <div className="pt-2 space-y-2">
+          <button
+            className="btn btn-primary w-full !py-3.5"
+            disabled={busy}
+            onClick={() => run("finalize", { event_id: id }, event.attended_count === 0
+                ? "Nobody was checked in, so every deposit goes back to its guest. Close the event?"
+                : `Close the event and pay out?\n\n${event.attended_count} of ${event.guest_count} came.\nPool: ${formatUsdc(pool)} USDC.\nEach attendee gets ${formatUsdc(share)} USDC.\n\nThis cannot be undone.`)}
+          >
+            Close event & pay out
+          </button>
+          <div className="flex justify-between text-xs text-muted">
+            <button className="hover:text-warn" disabled={busy} onClick={() => run("cancel", { event_id: id }, "Cancel the event and refund every deposit?")}>
+              Cancel event
+            </button>
+            {guests.length > 0 && <button className="hover:text-text" onClick={exportCsv}>Download guest list</button>}
+          </div>
         </div>
+      )}
+      {open && !isHost && (
+        <p className="text-xs text-muted">
+          Only the host ({event.host}) can close the event. A DAO host closes it through a DAO proposal in Trezu.
+        </p>
       )}
     </div>
   );

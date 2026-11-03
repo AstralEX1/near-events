@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatUsdc, type EventView, type GuestView } from "@/lib/near";
-import { Avatar, AvatarStack, shortAccount } from "./ui";
+import { Avatar, shortAccount } from "./ui";
 import { AccountQr } from "./Qr";
 
 /** "12 going · 8 spots left", or "Full". */
@@ -42,71 +42,52 @@ export function RulesBox({ event }: { event: EventView }) {
   );
 }
 
-type Badge = { label: string; tone: "accent" | "good" | "muted" };
-
-function badge(event: EventView, g: GuestView): Badge {
-  if (event.status === "Cancelled") return { label: "Refunded", tone: "muted" };
-  if (event.status === "Finalized")
-    return g.status === "Attended"
-      ? { label: `Got ${formatUsdc(event.payout_per_attendee)} USDC`, tone: "good" }
-      : { label: "No-show", tone: "muted" };
-  return g.status === "Attended" ? { label: "Checked in ✓", tone: "good" } : { label: "Going", tone: "accent" };
+/** Under each guest after the event: what they made, or that they didn't come. Nothing before. */
+function note(event: EventView, g: GuestView): { text: string; dim: boolean } | null {
+  if (event.status === "Cancelled") return { text: "refunded", dim: false };
+  if (event.status !== "Finalized") return null;
+  if (g.status !== "Attended") return { text: "no-show", dim: true };
+  const profit = BigInt(event.payout_per_attendee) - BigInt(event.deposit);
+  return { text: profit > 0n ? `+${formatUsdc(profit)}` : "came", dim: false };
 }
 
-const TONE = {
-  accent: "bg-accent-soft text-accent",
-  good: "bg-good/15 text-good",
-  muted: "bg-border/60 text-muted",
-};
-
-/** Everyone who registered, with where they stand. Public, like the chain. */
-/** Who's going: an avatar stack; the full list with statuses opens on click. */
+/** Who's going, as a plain grid like Kickback's participants. Search appears for big events. */
 export function GuestGrid({ event, guests, me }: { event: EventView; guests: GuestView[]; me?: string | null }) {
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const closed = event.status !== "Open";
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = guests.filter((g) => g.account_id.toLowerCase().includes(q));
     return [...list.filter((g) => g.account_id === me), ...list.filter((g) => g.account_id !== me)];
   }, [guests, query, me]);
 
-  if (guests.length === 0) return <p className="text-sm text-muted">No one yet. Be the first.</p>;
+  const line =
+    event.status === "Finalized" ? `${event.attended_count} of ${event.guest_count} showed up` : spotsLine(event);
 
   return (
-    <div className="space-y-3">
-      <button className="flex items-center gap-3 w-full text-left group" onClick={() => setOpen(!open)}>
-        <AvatarStack accounts={guests.map((g) => g.account_id)} max={6} />
-        <span className="text-sm">
-          {closed ? `${event.attended_count} of ${event.guest_count} came` : spotsLine(event)}
-        </span>
-        <span className="ml-auto text-xs text-muted group-hover:text-text">{open ? "Hide" : "See all"}</span>
-      </button>
-      {open && (
-        <>
-          {guests.length > 20 && (
-            <input className="input text-sm" placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} />
-          )}
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-            {shown.map((g) => {
-              const b = badge(event, g);
-              return (
-                <Link
-                  href={`/u/${encodeURIComponent(g.account_id)}`}
-                  key={g.account_id}
-                  className={`flex flex-col items-center text-center gap-1 p-2 rounded-xl hover:bg-border/40 ${b.tone === "muted" ? "opacity-40" : ""}`}
-                >
-                  <Avatar account={g.account_id} size={40} />
-                  <div className="text-xs truncate max-w-full" title={g.account_id}>
-                    {g.account_id === me ? "You" : shortAccount(g.account_id)}
-                  </div>
-                  {b.tone === "good" && <span className="text-[11px] text-good">{b.label}</span>}
-                </Link>
-              );
-            })}
-          </div>
-        </>
+    <div className="space-y-4 pt-3 border-t border-border">
+      <div className="font-semibold">{line}</div>
+      {guests.length === 0 && <p className="text-sm text-muted">No one yet. Be the first.</p>}
+      {guests.length > 20 && (
+        <input className="input text-sm" placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} />
       )}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-x-3 gap-y-4">
+        {shown.map((g) => {
+          const n = note(event, g);
+          return (
+            <Link
+              href={`/u/${encodeURIComponent(g.account_id)}`}
+              key={g.account_id}
+              className={`flex flex-col items-center text-center gap-1 ${n?.dim ? "opacity-50 grayscale" : ""}`}
+            >
+              <Avatar account={g.account_id} size={48} />
+              <span className="text-[13px] font-medium truncate max-w-full" title={g.account_id}>
+                {g.account_id === me ? "You" : shortAccount(g.account_id)}
+              </span>
+              {n && <span className={`text-xs ${n.dim ? "text-muted" : "text-good"}`}>{n.text}</span>}
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -144,25 +125,25 @@ function icsUrl(event: EventView, url: string): string {
   return `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`;
 }
 
-/** Shown once you're in: the door pass and one calendar button. */
+/** Shown once you're in: the door pass, one line, and a calendar link. */
 export function NextSteps({ event, accountId }: { event: EventView; accountId: string }) {
   const url = typeof window === "undefined" ? "" : `${window.location.origin}/e/${event.id}`;
+  const [cal, setCal] = useState(false);
   return (
-    <div className="space-y-3 text-center">
-      <div className="font-semibold">You’re going 🎉</div>
-      <div className="flex justify-center">
-        <AccountQr account={accountId} size={168} />
+    <div className="flex gap-5 items-center">
+      <AccountQr account={accountId} size={132} />
+      <div className="space-y-1.5 min-w-0">
+        <div className="font-semibold text-xl">You’re going</div>
+        <p className="text-sm text-muted">Show this code at the door to get checked in.</p>
+        {cal ? (
+          <div className="flex gap-3 text-sm font-medium">
+            <a className="text-accent" href={googleCalendarUrl(event, url)} target="_blank" rel="noopener">Google</a>
+            <a className="text-accent" href={icsUrl(event, url)} download={`event-${event.id}.ics`}>Apple / Outlook</a>
+          </div>
+        ) : (
+          <button className="text-sm font-medium text-accent" onClick={() => setCal(true)}>Add to calendar</button>
+        )}
       </div>
-      <p className="text-sm text-muted">
-        Show this at the door to get checked in. After the event, withdraw your deposit plus your share right here.
-      </p>
-      <details className="relative">
-        <summary className="btn btn-ghost w-full text-sm list-none cursor-pointer">Add to calendar</summary>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <a className="btn btn-ghost text-sm" href={googleCalendarUrl(event, url)} target="_blank" rel="noopener">Google</a>
-          <a className="btn btn-ghost text-sm" href={icsUrl(event, url)} download={`event-${event.id}.ics`}>Apple / Outlook</a>
-        </div>
-      </details>
     </div>
   );
 }
