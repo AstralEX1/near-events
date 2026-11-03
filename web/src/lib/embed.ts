@@ -26,10 +26,31 @@ export function readEmbedStyle(q: URLSearchParams): EmbedStyle {
   };
 }
 
-/** Only the params above, so they can be passed on to the sign-up window. */
+/**
+ * The host's own registration form, opened after the deposit is paid, so we sit
+ * in front of their usual flow (Luma, Typeform, Google Forms…) instead of
+ * replacing it. `{account}` and `{event}` in it are filled in, so the host can
+ * match a form entry to a payment. https only (http on localhost for testing).
+ */
+export function readThen(q: URLSearchParams, account?: string | null, eventId?: number): string | null {
+  const raw = q.get("then");
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    const local = u.hostname === "localhost" || u.hostname === "127.0.0.1";
+    if (u.protocol !== "https:" && !(local && u.protocol === "http:")) return null;
+    return raw
+      .replaceAll("{account}", encodeURIComponent(account ?? ""))
+      .replaceAll("{event}", eventId === undefined ? "" : String(eventId));
+  } catch {
+    return null;
+  }
+}
+
+/** Only the params above (and `then`), so they can be passed on to the sign-up window. */
 export function embedQuery(q: URLSearchParams): string {
   const out = new URLSearchParams();
-  for (const k of ["theme", "accent", "font", "display", "radius"]) {
+  for (const k of ["theme", "accent", "font", "display", "radius", "then"]) {
     const v = q.get(k);
     if (v) out.set(k, v);
   }

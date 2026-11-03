@@ -15,9 +15,10 @@ interface Look {
   display: "sans" | "serif";
   radius: string;
   label: string;
+  then: string;
 }
 
-const PRESETS: { name: string; page: string; look: Omit<Look, "mode" | "label"> }[] = [
+const PRESETS: { name: string; page: string; look: Omit<Look, "mode" | "label" | "then"> }[] = [
   { name: "Near Events", page: "#ffffff", look: { theme: "light", accent: "#5b4bff", font: "geist", display: "sans", radius: "16" } },
   { name: "Bali Squad", page: "#fbf7f2", look: { theme: "light", accent: "#ff401f", font: "poppins", display: "serif", radius: "12" } },
   { name: "Dark", page: "#0e0e10", look: { theme: "dark", accent: "#8b7fff", font: "system", display: "sans", radius: "14" } },
@@ -34,6 +35,7 @@ function attrs(id: string, l: Look) {
   if (l.display === "serif") a.push(["display", "serif"]);
   if (l.radius) a.push(["radius", l.radius]);
   if (l.mode === "button" && l.label.trim()) a.push(["label", l.label.trim()]);
+  if (l.then.trim()) a.push(["then", l.then.trim()]);
   return a;
 }
 
@@ -42,7 +44,7 @@ export default function WidgetBuilder() {
   const { accountId } = useWallet();
   const [list, setList] = useState<EventView[]>([]);
   const [eventId, setEventId] = useState("");
-  const [look, setLook] = useState<Look>({ mode: "card", label: "", ...PRESETS[0].look });
+  const [look, setLook] = useState<Look>({ mode: "card", label: "", then: "", ...PRESETS[0].look });
   const [page, setPage] = useState(PRESETS[0].page);
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
@@ -146,6 +148,19 @@ export default function WidgetBuilder() {
               <input className="input" value={look.label} maxLength={40} onChange={(e) => set("label", e.target.value)} />
             </Field>
           )}
+          <Field label="Already have a registration form? (optional)">
+            <input
+              className="input"
+              type="url"
+              placeholder="https://lu.ma/your-event"
+              value={look.then}
+              onChange={(e) => set("then", e.target.value)}
+            />
+            <p className="text-xs text-muted">
+              Guests pay the deposit first, then continue to your usual form (Luma, Typeform, Google Forms). Add{" "}
+              <code>{"{account}"}</code> to the link to match payments to entries.
+            </p>
+          </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Accent">
               <input className="input !p-1 h-10" type="color" value={look.accent} onChange={(e) => set("accent", e.target.value)} />

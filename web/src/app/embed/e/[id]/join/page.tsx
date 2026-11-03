@@ -3,7 +3,7 @@
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { events, type EventView, type GuestStatus } from "@/lib/near";
-import { embedVars, readEmbedStyle, type EmbedMessage } from "@/lib/embed";
+import { embedVars, readEmbedStyle, readThen, type EmbedMessage } from "@/lib/embed";
 import { useWallet } from "@/lib/wallet";
 import { Cover, formatWhen } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
@@ -15,11 +15,13 @@ import { RegistrationCard } from "@/components/Registration";
  */
 export default function EmbedJoin() {
   const id = Number(useParams<{ id: string }>().id);
-  const style = readEmbedStyle(useSearchParams());
+  const q = useSearchParams();
+  const style = readEmbedStyle(q);
   const { accountId, ready } = useWallet();
   const [event, setEvent] = useState<EventView | null | undefined>(undefined);
   const [status, setStatus] = useState<GuestStatus | null>(null);
   const told = useRef(false);
+  const then = readThen(q, accountId, id);
 
   const load = useCallback(async () => {
     const [e, s] = await Promise.all([
@@ -63,7 +65,13 @@ export default function EmbedJoin() {
             ) : (
               <p className="text-muted text-sm">Loading sign-in…</p>
             )}
-            {status && (
+            {status && then && (
+              <div className="text-center space-y-2">
+                <p className="text-sm text-muted">Deposit paid. One more step on the organizer’s side:</p>
+                <a href={then} className="btn btn-accent w-full !py-3.5">Finish registration →</a>
+              </div>
+            )}
+            {status && !then && (
               <div className="text-center space-y-2">
                 <p className="text-sm text-muted">You can close this window.</p>
                 <button className="btn btn-ghost" onClick={() => window.close()}>Close</button>

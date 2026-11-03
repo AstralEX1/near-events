@@ -22,6 +22,8 @@ Where to put it, depending on the stack:
 - If the platform forbids scripts, use the iframe instead:
   <iframe src="${origin}/embed/e/${eventId}" title="Event registration" loading="lazy" style="width:100%;max-width:560px;height:260px;border:0"></iframe>
 
+If this site already has its own registration (Luma, Typeform, Google Forms, a signup page), keep it: add then="<that registration URL>" so guests pay the deposit first and then continue to the usual form. Use {account} in that URL if the form can take a reference, e.g. ?ref={account}.
+
 Options (attributes on <near-event>): mode="button" for only a button; label="..." button text; theme="light|dark|auto"; accent="#hex"; font="geist|poppins|system"; display="serif"; radius="12". Match accent, font and corners to this site's design. For an existing button, call NearEvents.open(${eventId}) on click instead of using the element.
 
 If the site sets a Content-Security-Policy, allow: script-src ${origin}; frame-src ${origin}; connect-src ${origin}.

@@ -7,6 +7,8 @@
  *
  * Style: theme="light|dark|auto" accent="#ff4d1f" font="geist|poppins|system"
  *        display="serif" radius="12" label="Join the squad"
+ * Flow:  then="https://lu.ma/your-event?ref={account}"  after paying, guests go on
+ *        to your usual registration form; we just sit in front of it
  * Listen: element.addEventListener("registered", e => e.detail.accountId)
  *         window.addEventListener("near-events:registered", ...)
  */
@@ -14,7 +16,9 @@
   if (window.NearEvents) return;
   var script = document.currentScript;
   var BASE = script && script.src ? new URL(script.src).origin : location.origin;
-  var STYLE_ATTRS = ["theme", "accent", "font", "display", "radius"];
+  // Passed through to the card and the sign-up window. `then` = the host's own
+  // registration form, opened after the deposit is paid ({account} and {event} are filled in).
+  var STYLE_ATTRS = ["theme", "accent", "font", "display", "radius", "then"];
 
   function query(opts) {
     var q = new URLSearchParams();

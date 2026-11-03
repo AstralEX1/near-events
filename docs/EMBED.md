@@ -44,6 +44,19 @@ Or your own button:
 | `display` | `serif` for a serif event title (Instrument Serif) | same font |
 | `radius` | corner radius in px, 0 to 32 (buttons: any) | 16 |
 | `label` | button text (`mode="button"` only) | `Register · <deposit> USDC` |
+| `then` | your own registration form; guests go there after paying. `{account}` and `{event}` in the URL are filled in | none |
+
+### Keep your own registration form
+
+We can sit in front of the flow you already have instead of replacing it:
+
+```html
+<near-event event="6" then="https://lu.ma/your-event?ref={account}"></near-event>
+```
+
+The guest pays the deposit in our window, then gets a **Finish registration →**
+button to your usual form (Luma, Typeform, Google Forms, your own page). The
+`{account}` placeholder lets you match each form entry to a payment.
 
 `NearEvents.open(id, { accent, theme, font, display, radius })` takes the same
 style options for the sign-up window.
