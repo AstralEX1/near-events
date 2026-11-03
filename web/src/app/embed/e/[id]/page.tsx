@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { events, formatUsdc, type EventView } from "@/lib/near";
 import { embedQuery, embedVars, readEmbedStyle, type EmbedMessage } from "@/lib/embed";
 import { AvatarStack, Cover, DateBadge, formatWhen } from "@/components/ui";
+import { spotsLine } from "@/components/EventParts";
 
 /**
  * The event card other sites put in an iframe (directly or through /embed.js).
@@ -84,7 +85,7 @@ export default function EmbedCard() {
               <div className="flex items-center gap-2 min-w-0">
                 {guests.length > 0 && <AvatarStack accounts={guests} max={5} />}
                 <span className="text-muted truncate">
-                  {event.guest_count}/{event.capacity} going · pool {formatUsdc(event.total_pool)} USDC
+                  {spotsLine(event)} · pool {formatUsdc(event.total_pool)} USDC
                 </span>
               </div>
             </div>

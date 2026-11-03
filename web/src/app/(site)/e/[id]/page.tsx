@@ -7,6 +7,7 @@ import { events, formatUsdc, type EventView, type GuestView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
 import { Avatar, AvatarStack, Cover, DateBadge, StatusPill, formatWhen, shortAccount } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
+import { GuestGrid, spotsLine } from "@/components/EventParts";
 
 export default function EventPage() {
   const id = Number(useParams<{ id: string }>().id);
@@ -29,7 +30,6 @@ export default function EventPage() {
 
   const me = guests.find((g) => g.account_id === accountId);
   const isStaff = !!accountId && (accountId === event.host || event.cohosts.includes(accountId));
-  const attendees = guests.filter((g) => g.status === "Attended");
 
   return (
     <div className="grid gap-8 md:grid-cols-[340px_1fr]">
@@ -51,9 +51,7 @@ export default function EventPage() {
           </div>
         </div>
         <div>
-          <div className="label mb-2">
-            {event.guest_count} going{event.attended_count > 0 && ` · ${event.attended_count} checked in`}
-          </div>
+          <div className="label mb-2">{spotsLine(event)}</div>
           <AvatarStack accounts={guests.map((g) => g.account_id)} max={8} />
         </div>
         {isStaff && (
@@ -95,18 +93,7 @@ export default function EventPage() {
           </div>
         )}
 
-        {event.status === "Finalized" && attendees.length > 0 && (
-          <div>
-            <div className="label mb-2 pb-2 border-b border-border">Showed up and got paid</div>
-            <div className="flex flex-wrap gap-2">
-              {attendees.map((g) => (
-                <span key={g.account_id} className="flex items-center gap-1.5 text-sm card px-2 py-1">
-                  <Avatar account={g.account_id} size={20} /> {shortAccount(g.account_id)}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
+        <GuestGrid event={event} guests={guests} me={accountId} />
       </section>
     </div>
   );

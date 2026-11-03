@@ -2,7 +2,7 @@
 
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { events, formatUsdc, type EventView, type GuestStatus } from "@/lib/near";
+import { events, type EventView, type GuestStatus } from "@/lib/near";
 import { embedVars, readEmbedStyle, type EmbedMessage } from "@/lib/embed";
 import { useWallet } from "@/lib/wallet";
 import { Cover, formatWhen } from "@/components/ui";
@@ -58,14 +58,6 @@ export default function EmbedJoin() {
                 <div className="text-sm text-muted truncate">{event.metadata.location}</div>
               </div>
             </div>
-            <div className="card p-4 text-sm space-y-1.5">
-              <div className="font-medium">How it works</div>
-              <p className="text-muted">
-                Everyone puts down {formatUsdc(event.deposit)} USDC. The host checks you in at the door. People who came
-                get their deposit back plus an equal share of the no-shows’ deposits. The money sits in a NEAR smart
-                contract, not with the organizer, and there is no platform fee.
-              </p>
-            </div>
             {ready ? (
               <RegistrationCard event={event} myStatus={status} onChange={load} />
             ) : (
@@ -73,7 +65,7 @@ export default function EmbedJoin() {
             )}
             {status && (
               <div className="text-center space-y-2">
-                <p className="text-sm text-muted">You’re on the list. You can close this window.</p>
+                <p className="text-sm text-muted">You can close this window.</p>
                 <button className="btn btn-ghost" onClick={() => window.close()}>Close</button>
               </div>
             )}

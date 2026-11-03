@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, usdc, type EventView, type GuestStatus } from "@/lib/near";
 import { EVENTS_CONTRACT, HAS_FAUCET, USDC_CONTRACT } from "@/lib/config";
 import { useWallet, type Call } from "@/lib/wallet";
-import { Avatar, shortAccount } from "@/components/ui";
 import { SignInOptions } from "@/components/SignIn";
-import { intentsUsdcBalance, registerFromIntents } from "@/lib/intents";
+import { intentsUsdcBalance, pushPayoutToIntents, registerFromIntents } from "@/lib/intents";
+import { NextSteps, RulesBox } from "@/components/EventParts";
 
 /** Sign in, then put down the deposit. Used on the event page and in the embed popup. */
 export function RegistrationCard({
@@ -25,9 +25,13 @@ export function RegistrationCard({
   const [error, setError] = useState<string | null>(null);
   const [balance, setBalance] = useState<bigint>(0n);
 
-  useEffect(() => {
-    if (accountId) events.balance(accountId).then((b) => setBalance(BigInt(b))).catch(() => {});
+  const loadBalance = useCallback(async () => {
+    if (accountId) setBalance(BigInt(await events.balance(accountId).catch(() => "0")));
   }, [accountId]);
+
+  useEffect(() => {
+    loadBalance();
+  }, [loadBalance]);
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -75,6 +79,24 @@ export function RegistrationCard({
 
   const registerViaIntents = () => run(() => registerFromIntents(accountId!, event.id, event.deposit));
 
+  // Payouts land in the contract balance; this sends all of it out. EVM sign-ins
+  // can't call the contract, so the relayer pushes theirs to NEAR Intents.
+  const withdrawAll = () =>
+    run(async () => {
+      if (kind === "evm") await pushPayoutToIntents(accountId!);
+      else
+        await send([
+          {
+            receiverId: EVENTS_CONTRACT,
+            methodName: "withdraw",
+            args: { amount: null, receiver_id: null, to_intents: false },
+            deposit: 1n,
+            gas: 200_000_000_000_000n,
+          },
+        ]);
+      await loadBalance();
+    });
+
   const registerWithBalance = () =>
     run(() => send([{ receiverId: EVENTS_CONTRACT, methodName: "register_with_balance", args: { event_id: event.id } }]));
 
@@ -84,10 +106,23 @@ export function RegistrationCard({
   } else if (event.status === "Finalized") {
     body =
       myStatus === "Attended" ? (
-        <p>
-          You showed up and earned <b>{formatUsdc(event.payout_per_attendee)} USDC</b>.{" "}
-          <Link href="/me" className="text-accent font-medium">Withdraw →</Link>
-        </p>
+        <div className="space-y-3">
+          <p>
+            You showed up and got <b>{formatUsdc(event.payout_per_attendee)} USDC</b> back
+            {BigInt(event.payout_per_attendee) > BigInt(event.deposit) &&
+              ` (your ${formatUsdc(event.deposit)} plus ${formatUsdc(BigInt(event.payout_per_attendee) - BigInt(event.deposit))} from no-shows)`}
+            .
+          </p>
+          {balance > 0n ? (
+            <button className="btn btn-accent w-full" disabled={busy} onClick={withdrawAll}>
+              {busy ? "Confirm in your wallet…" : `Withdraw payout · ${formatUsdc(balance)} USDC`}
+            </button>
+          ) : (
+            <p className="text-sm text-muted">
+              Already withdrawn. <Link href="/me" className="text-accent font-medium">See your balance →</Link>
+            </p>
+          )}
+        </div>
       ) : myStatus === "Registered" ? (
         <p>You weren’t checked in, so your deposit went to the people who came.</p>
       ) : (
@@ -96,15 +131,7 @@ export function RegistrationCard({
   } else if (myStatus === "Attended") {
     body = <p className="font-medium text-good">✓ You’re checked in. Your share arrives when the host closes the event.</p>;
   } else if (myStatus === "Registered") {
-    body = (
-      <div className="flex items-center gap-3">
-        <Avatar account={accountId!} size={40} />
-        <div>
-          <div className="font-semibold">You’re going</div>
-          <div className="text-sm text-muted">Show your account <b>{shortAccount(accountId!)}</b> to the host at the door.</div>
-        </div>
-      </div>
-    );
+    body = <NextSteps event={event} accountId={accountId!} />;
   } else if (event.guest_count >= event.capacity) {
     body = <p>This event is full.</p>;
   } else if (!accountId) {
@@ -152,13 +179,17 @@ export function RegistrationCard({
     );
   }
 
+  const showRules = event.status === "Open" && !myStatus && event.guest_count < event.capacity;
   return (
-    <div className="card overflow-hidden">
-      <div className="px-4 py-2 text-sm font-medium border-b border-border bg-bg/50">Registration</div>
-      <div className="p-4">
-        {body}
-        {error && <p className="text-sm text-warn mt-3 break-words">{error}</p>}
+    <div className="space-y-3">
+      <div className="card overflow-hidden">
+        <div className="px-4 py-2 text-sm font-medium border-b border-border bg-bg/50">Registration</div>
+        <div className="p-4">
+          {body}
+          {error && <p className="text-sm text-warn mt-3 break-words">{error}</p>}
+        </div>
       </div>
+      {showRules && <RulesBox event={event} />}
     </div>
   );
 }
