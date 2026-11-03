@@ -83,6 +83,19 @@ node scripts/dao-demo.mjs setup        # DAO creates + sponsors an event
 node scripts/dao-demo.mjs finalize 3   # DAO votes to pay out event 3
 ```
 
+## Embed on your website
+
+Any business can take deposit-backed registrations on its own site with two lines:
+
+```html
+<script src="https://YOUR-NEAR-EVENTS-HOST/embed.js" async></script>
+<near-event event="6" accent="#ff401f"></near-event>
+```
+
+Hosts get a code builder with live preview at `/widget`; there is an iframe
+fallback and a `NearEvents.open(id)` call for custom buttons. Demo page in a
+client's brand: `/demo/balisquad.html`. Details: [docs/EMBED.md](docs/EMBED.md).
+
 ## How it works
 
 ```

@@ -29,6 +29,7 @@ export default function Home() {
         <div className="mt-6 flex gap-3">
           <Link href="/create" className="btn btn-primary">Host an event</Link>
           <a href="#upcoming" className="btn btn-ghost">Browse events</a>
+          <Link href="/widget" className="btn btn-ghost">Embed on your website</Link>
         </div>
       </section>
 

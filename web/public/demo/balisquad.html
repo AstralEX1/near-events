@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bali Squad × Near Events · embed demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /* A concept page in Bali Squad's palette (cream, coral, forest) to show the embed on a real-looking site. */
+    :root {
+      --bg: #fbf7f2; --card: #fff; --text: #17171c; --muted: #5a5a63; --line: rgba(60, 40, 30, .12);
+      --coral: #ff401f; --forest: #0b3d2e; --sand: #f4ece2;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Poppins, system-ui, sans-serif; }
+    a { color: inherit; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+    .demo-bar { background: var(--forest); color: #e8f3ee; font-size: 13px; text-align: center; padding: 8px 16px; }
+    .demo-bar code { background: rgba(255,255,255,.12); padding: 1px 6px; border-radius: 6px; }
+    nav { display: flex; align-items: center; gap: 24px; height: 68px; }
+    .logo { font-weight: 600; font-size: 20px; letter-spacing: -.02em; text-decoration: none; }
+    .logo span { color: var(--coral); }
+    nav .links { display: flex; gap: 20px; font-size: 14px; color: var(--muted); }
+    nav .links a { text-decoration: none; }
+    .pill { margin-left: auto; background: var(--text); color: var(--bg); border-radius: 999px; padding: 10px 18px; font-size: 14px; font-weight: 500; text-decoration: none; }
+    h1, h2 { font-family: "Instrument Serif", Georgia, serif; font-weight: 400; letter-spacing: -.01em; }
+    .hero { padding: 48px 0 32px; display: grid; gap: 32px; grid-template-columns: 1.1fr 1fr; align-items: center; }
+    .hero h1 { font-size: clamp(44px, 7vw, 76px); line-height: .98; margin: 0; }
+    .hero h1 em { color: var(--coral); }
+    .hero p { color: var(--muted); font-size: 17px; line-height: 1.6; max-width: 460px; }
+    .how { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+    .how div { background: var(--sand); border-radius: 999px; padding: 7px 14px; font-size: 13px; }
+    section { padding: 28px 0; }
+    .section-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 18px; }
+    .section-head h2 { font-size: 40px; margin: 0; }
+    .section-head span { color: var(--muted); font-size: 14px; }
+    .grid { display: grid; gap: 18px; grid-template-columns: repeat(2, 1fr); }
+    .ev { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; }
+    .ev .img { aspect-ratio: 16/9; position: relative; }
+    .ev .img b { position: absolute; left: 14px; top: 14px; background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 500; }
+    .ev .body { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+    .ev h3 { margin: 0; font-size: 18px; font-weight: 600; }
+    .ev .meta { color: var(--muted); font-size: 14px; }
+    .ev .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 10px; }
+    .ev .row small { color: var(--muted); font-size: 12px; max-width: 200px; line-height: 1.4; }
+    .own { background: var(--forest); color: #fff; border-radius: 999px; padding: 12px 20px; border: 0; font: 500 15px Poppins, sans-serif; cursor: pointer; }
+    .dev { background: var(--card); border: 1px dashed var(--line); border-radius: 18px; padding: 18px 20px; font-size: 14px; color: var(--muted); }
+    .dev pre { background: var(--sand); color: var(--text); border-radius: 12px; padding: 12px 14px; overflow-x: auto; font-size: 12.5px; }
+    footer { color: var(--muted); font-size: 13px; padding: 40px 0; }
+    #toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 120px); transition: transform .3s; background: var(--text); color: #fff; padding: 12px 18px; border-radius: 14px; font-size: 14px; max-width: calc(100% - 32px); }
+    #toast.show { transform: translate(-50%, 0); }
+    @media (max-width: 760px) {
+      .hero, .grid { grid-template-columns: 1fr; }
+      nav .links { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-bar">Concept demo for Bali Squad · the event card and buttons below come from <code>&lt;script src="…/embed.js"&gt;</code> · NEAR testnet</div>
+
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="#">Bali<span>Squad</span></a>
+      <div class="links"><a href="#">Events</a><a href="#">People</a><a href="#">Moments</a><a href="#">Community</a></div>
+      <a class="pill" href="#">Join the community</a>
+    </nav>
+
+    <div class="hero">
+      <div>
+        <h1>Say you’re coming. <em>Actually come.</em></h1>
+        <p>Squad events now take a small refundable deposit in USDC. Show up and you get it back, plus a share from the people who didn’t. No fees, and the money sits in a smart contract, not with us.</p>
+        <div class="how"><div>1 · Register with Google or a wallet</div><div>2 · Get checked in at the door</div><div>3 · Get paid back + bonus</div></div>
+      </div>
+      <!-- Embed 1: the full event card. -->
+      <near-event id="featured" event="6" accent="#ff401f" font="poppins" display="serif" radius="16"></near-event>
+    </div>
+
+    <section>
+      <div class="section-head"><h2>This week</h2><span>Your own cards, our button</span></div>
+      <div class="grid">
+        <article class="ev">
+          <div class="img" style="background: radial-gradient(circle at 25% 30%, #ffd6a8, transparent 55%), radial-gradient(circle at 80% 70%, #ff8a5c, transparent 55%), #0b3d2e;"><b>12 seats</b></div>
+          <div class="body">
+            <h3>Founders Breakfast · Ubud</h3>
+            <div class="meta">Mon, Nov 9 · 8:30 AM · Ubud</div>
+            <div class="row">
+              <small>Small deposit, so the seats go to people who come.</small>
+              <!-- Embed 2: just the button, in the site's own card design. -->
+              <near-event event="7" mode="button" accent="#ff401f" radius="999"></near-event>
+            </div>
+          </div>
+        </article>
+        <article class="ev">
+          <div class="img" style="background: radial-gradient(circle at 70% 20%, #bfe8ff, transparent 50%), radial-gradient(circle at 20% 80%, #ffe2b3, transparent 55%), #1f6f8b;"><b>Free + deposit</b></div>
+          <div class="body">
+            <h3>Beach Clean-up + Smoothies</h3>
+            <div class="meta">Wed, Nov 11 · 9:00 AM · Padang Padang, Uluwatu</div>
+            <div class="row">
+              <small>Bags and gloves provided.</small>
+              <!-- Embed 3: the site's own button, calling NearEvents.open(). -->
+              <button class="own" onclick="NearEvents.open(8, { accent: '#0b3d2e', font: 'poppins', display: 'serif' })">I’m in →</button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="dev">
+        <b style="color: var(--text)">How this page does it</b>
+        <pre>&lt;script src="https://YOUR-NEAR-EVENTS-HOST/embed.js" async&gt;&lt;/script&gt;
+
+&lt;near-event event="6" accent="#ff401f" font="poppins" display="serif"&gt;&lt;/near-event&gt;   &lt;!-- card --&gt;
+&lt;near-event event="7" mode="button" accent="#ff401f"&gt;&lt;/near-event&gt;                 &lt;!-- button --&gt;
+&lt;button onclick="NearEvents.open(8)"&gt;I’m in →&lt;/button&gt;                              &lt;!-- your button --&gt;
+
+window.addEventListener("near-events:registered", (e) =&gt; console.log(e.detail));</pre>
+      </div>
+    </section>
+
+    <footer>Concept page made for the Bali Squad pilot. Event sign-up, deposits and payouts by Near Events on NEAR.</footer>
+  </div>
+
+  <div id="toast" role="status"></div>
+
+  <script src="/embed.js" async></script>
+  <script>
+    // The host site hears about every registration and can react (toast, CRM, WhatsApp invite...).
+    window.addEventListener("near-events:registered", function (e) {
+      var t = document.getElementById("toast");
+      t.textContent = "You’re in! See you there. (event #" + e.detail.eventId + ")";
+      t.classList.add("show");
+      setTimeout(function () { t.classList.remove("show"); }, 4000);
+    });
+  </script>
+</body>
+</html>

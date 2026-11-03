@@ -79,3 +79,10 @@ body {
 }
 .input:focus { border-color: var(--accent); }
 .label { font-size: 0.85rem; color: var(--muted); font-weight: 500; }
+
+/* Embeds sit on someone else's page: transparent body, host-picked font and corners. */
+body:has(.embed-root) { background: transparent; }
+.embed { font-family: var(--embed-font); color: var(--text); }
+.embed .card { border-radius: var(--embed-radius); }
+.embed .btn { border-radius: calc(var(--embed-radius) * 0.75); }
+.embed-title { font-family: var(--embed-display); }
