@@ -24,6 +24,9 @@ export function RegistrationCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [balance, setBalance] = useState<bigint>(0n);
+  const [choosing, setChoosing] = useState(false);
+  const [more, setMore] = useState(false);
+  const [rules, setRules] = useState(false);
 
   const loadBalance = useCallback(async () => {
     if (accountId) setBalance(BigInt(await events.balance(accountId).catch(() => "0")));
@@ -100,103 +103,99 @@ export function RegistrationCard({
   const registerWithBalance = () =>
     run(() => send([{ receiverId: EVENTS_CONTRACT, methodName: "register_with_balance", args: { event_id: event.id } }]));
 
+  const price = `${formatUsdc(event.deposit)} USDC`;
+  // One primary button per state; alternatives stay folded away.
   let body;
   if (event.status === "Cancelled") {
-    body = <p>This event was cancelled. Every deposit was returned to the guests’ balances.</p>;
+    body = <p className="text-sm">This event was cancelled. Every deposit went back to its guest.</p>;
   } else if (event.status === "Finalized") {
     body =
       myStatus === "Attended" ? (
         <div className="space-y-3">
-          <p>
-            You showed up and got <b>{formatUsdc(event.payout_per_attendee)} USDC</b> back
-            {BigInt(event.payout_per_attendee) > BigInt(event.deposit) &&
-              ` (your ${formatUsdc(event.deposit)} plus ${formatUsdc(BigInt(event.payout_per_attendee) - BigInt(event.deposit))} from no-shows)`}
-            .
-          </p>
+          <div>
+            <div className="text-sm text-muted">You showed up and got</div>
+            <div className="text-3xl font-semibold mt-0.5">{formatUsdc(event.payout_per_attendee)} USDC</div>
+          </div>
           {balance > 0n ? (
-            <button className="btn btn-accent w-full" disabled={busy} onClick={withdrawAll}>
-              {busy ? "Confirm in your wallet…" : `Withdraw payout · ${formatUsdc(balance)} USDC`}
-            </button>
+            <>
+              <button className="btn btn-accent w-full" disabled={busy} onClick={withdrawAll}>
+                {busy ? "Confirm in your wallet…" : "Withdraw"}
+              </button>
+              <Link href="/me" className="block text-center text-xs text-muted hover:text-text">Other ways to withdraw</Link>
+            </>
           ) : (
-            <p className="text-sm text-good font-medium">
-              ✓ You have withdrawn your payout. <Link href="/me" className="text-accent font-medium">See your balance →</Link>
-            </p>
+            <p className="text-sm text-good font-medium">✓ Withdrawn</p>
           )}
         </div>
       ) : myStatus === "Registered" ? (
-        <p>You didn’t show up (or weren’t checked in), so your deposit went to the people who came.</p>
+        <p className="text-sm">You weren’t checked in, so your deposit went to the people who came.</p>
       ) : (
-        <p>This event has ended and the pool was paid out.</p>
+        <p className="text-sm">This event is over and the pool was paid out.</p>
       );
   } else if (myStatus === "Attended") {
     body = (
       <div>
-        <p className="font-semibold text-good">✓ You have showed up!</p>
-        <p className="text-sm text-muted mt-1">
-          Your deposit plus your share of the no-shows can be withdrawn right here once the host closes the event.
-        </p>
+        <p className="font-semibold text-good">✓ You’re checked in</p>
+        <p className="text-sm text-muted mt-1">Withdraw your payout here once the host closes the event.</p>
       </div>
     );
   } else if (myStatus === "Registered") {
     body = <NextSteps event={event} accountId={accountId!} />;
   } else if (event.guest_count >= event.capacity) {
-    body = <p>This event is full.</p>;
+    body = <p className="text-sm">This event is full.</p>;
   } else if (!accountId) {
-    body = (
-      <div className="space-y-3">
-        <p className="text-sm text-muted">Welcome! Sign in to register. No wallet needed.</p>
+    body = choosing ? (
+      <div className="space-y-2">
+        <div className="text-sm font-medium">How do you want to sign in?</div>
         <SignInOptions />
+        <button className="w-full text-xs text-muted pt-1" onClick={() => setChoosing(false)}>Back</button>
       </div>
+    ) : (
+      <button className="btn btn-accent w-full" onClick={() => setChoosing(true)}>Register · {price}</button>
     );
   } else if (kind === "evm") {
     const enough = intentsBalance !== null && intentsBalance >= BigInt(event.deposit);
-    body = (
-      <div className="space-y-3">
-        <p className="text-sm text-muted">
-          Your NEAR Intents balance: <b className="text-text">{intentsBalance === null ? "…" : formatUsdc(intentsBalance)} USDC</b>.
-          One signature in your wallet moves {formatUsdc(event.deposit)} USDC into the escrow. No gas.
-        </p>
-        {enough ? (
-          <button className="btn btn-primary w-full" disabled={busy} onClick={registerViaIntents}>
-            {busy ? "Sign in your wallet…" : `Register from Intents · ${formatUsdc(event.deposit)} USDC`}
-          </button>
-        ) : (
-          <Link href={`/e/${event.id}/pay`} className="btn btn-primary w-full">Pay from any chain or token</Link>
-        )}
-      </div>
+    body = enough ? (
+      <button className="btn btn-accent w-full" disabled={busy} onClick={registerViaIntents}>
+        {busy ? "Sign in your wallet…" : `Register · ${price}`}
+      </button>
+    ) : (
+      <Link href={`/e/${event.id}/pay`} className="btn btn-accent w-full">Register · {price}</Link>
     );
   } else {
     body = (
-      <div className="space-y-3">
-        <p className="text-sm text-muted">
-          Put down <b className="text-text">{formatUsdc(event.deposit)} USDC</b>. Show up and you get it back plus a share of
-          the no-shows’ deposits.
-        </p>
-        <button className="btn btn-primary w-full" disabled={busy} onClick={register}>
-          {busy ? "Confirm in your wallet…" : `Register · ${formatUsdc(event.deposit)} USDC`}
+      <div className="space-y-2">
+        <button className="btn btn-accent w-full" disabled={busy} onClick={register}>
+          {busy ? "Confirm in your wallet…" : `Register · ${price}`}
         </button>
-        {balance >= BigInt(event.deposit) && (
-          <button className="btn btn-ghost w-full" disabled={busy} onClick={registerWithBalance}>
-            Use my Near Events balance ({formatUsdc(balance)} USDC)
-          </button>
+        {more ? (
+          <div className="space-y-2">
+            {balance >= BigInt(event.deposit) && (
+              <button className="btn btn-ghost w-full text-sm" disabled={busy} onClick={registerWithBalance}>
+                Use my balance ({formatUsdc(balance)} USDC)
+              </button>
+            )}
+            <Link href={`/e/${event.id}/pay`} className="btn btn-ghost w-full text-sm">Pay with any token, any chain</Link>
+          </div>
+        ) : (
+          <button className="w-full text-xs text-muted hover:text-text" onClick={() => setMore(true)}>Other ways to pay</button>
         )}
-        <Link href={`/e/${event.id}/pay`} className="btn btn-ghost w-full">Pay from any chain or token</Link>
-        {HAS_FAUCET && <p className="text-xs text-muted">Testnet: missing test USDC is minted for you in the same step.</p>}
       </div>
     );
   }
 
-  const showRules = event.status === "Open" && !myStatus && event.guest_count < event.capacity;
+  const open = event.status === "Open" && !myStatus && event.guest_count < event.capacity;
   return (
-    <div className="space-y-3">
-      <div className="card overflow-hidden">
-        <div className="px-4 py-2 text-sm font-medium border-b border-border bg-bg/50">Registration</div>
-        <div className="p-4">
-          {body}
-          {error && <p className="text-sm text-warn mt-3 break-words">{error}</p>}
-        </div>
-      </div>
-      {showRules && <RulesBox event={event} />}
+    <div className="card p-4 space-y-3">
+      {body}
+      {error && <p className="text-sm text-warn break-words">{error}</p>}
+      {open && (
+        <p className="text-xs text-muted leading-relaxed">
+          Come and get your deposit back plus a share of the no-shows. No cancelling.{" "}
+          <button className="text-accent" onClick={() => setRules(!rules)}>{rules ? "Hide" : "How it works"}</button>
+        </p>
+      )}
+      {open && rules && <RulesBox event={event} />}
     </div>
   );
 }

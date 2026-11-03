@@ -3,37 +3,26 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { events, formatUsdc, type EventView } from "@/lib/near";
-import { Cover, DateBadge, StatusPill } from "@/components/ui";
+import { Cover, DateBadge } from "@/components/ui";
 import { useWallet } from "@/lib/wallet";
 import { spotsLine } from "@/components/EventParts";
 
-type Tab = "upcoming" | "past" | "hosting" | "going";
+type Tab = "upcoming" | "past";
 
 export default function Home() {
   const { accountId } = useWallet();
   const [list, setList] = useState<EventView[] | null>(null);
-  const [myIds, setMyIds] = useState<number[]>([]);
   const [tab, setTab] = useState<Tab>("upcoming");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     events.list().then(setList).catch((e) => setError(String(e)));
   }, []);
-  useEffect(() => {
-    if (accountId) events.guestEvents(accountId).then(setMyIds).catch(() => {});
-    else setMyIds([]);
-  }, [accountId]);
 
   const all = list ?? [];
   const tabs: [Tab, string, EventView[], string][] = [
     ["upcoming", "Upcoming", all.filter((e) => e.status === "Open"), "No open events yet. Host the first one."],
     ["past", "Past", all.filter((e) => e.status !== "Open"), "No past events yet."],
-    ...(accountId
-      ? ([
-          ["going", "Going", all.filter((e) => myIds.includes(e.id)), "You haven’t registered for anything yet."],
-          ["hosting", "Hosting", all.filter((e) => e.host === accountId || e.cohosts.includes(accountId)), "You aren’t hosting any events."],
-        ] as [Tab, string, EventView[], string][])
-      : []),
   ];
   const current = tabs.find((t) => t[0] === tab) ?? tabs[0];
 
@@ -44,17 +33,15 @@ export default function Home() {
           Show up. <span className="text-accent">Split the pool.</span>
         </h1>
         <p className="mt-4 text-lg text-muted max-w-xl">
-          Free events lose half their guests. Here every guest puts down the same small USDC deposit. People who come get
-          it back plus a share of the no-shows. Pay from any chain. No platform fee.
+          Everyone puts down a small deposit. People who come get it back plus a share of the no-shows.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link href="/create" className="btn btn-primary">Host an event</Link>
           <a href="#events" className="btn btn-ghost">Browse events</a>
-          <Link href="/widget" className="btn btn-ghost">Embed on your website</Link>
         </div>
       </section>
 
-      <HowItWorks />
+      {!accountId && <HowItWorks />}
 
       <section id="events" className="space-y-4 scroll-mt-20">
         <div className="flex flex-wrap items-center gap-2">
@@ -74,16 +61,6 @@ export default function Home() {
         {list && <EventGrid items={current[2]} empty={current[3]} />}
       </section>
 
-      <section className="card p-6 sm:p-8 grid gap-6 sm:grid-cols-[1fr_auto] items-center">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Run a community, coworking or club?</h2>
-          <p className="text-muted mt-2 max-w-xl">
-            Put registration with deposits on your own website in two lines of code, or send one prompt to your AI agent
-            and let it do it.
-          </p>
-        </div>
-        <Link href="/widget" className="btn btn-accent">Get the widget</Link>
-      </section>
     </div>
   );
 }
@@ -132,7 +109,6 @@ function EventGrid({ items, empty }: { items: EventView[]; empty?: string }) {
                   hour: "numeric",
                   minute: "2-digit",
                 })}
-                <StatusPill status={e.status} />
               </div>
               <div className="font-semibold mt-1 truncate">{e.metadata.title}</div>
               <div className="text-sm text-muted truncate">{e.metadata.location}</div>

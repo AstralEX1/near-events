@@ -9,9 +9,23 @@ import { useWallet } from "@/lib/wallet";
  * Anyone can top up the pool (Kickback's "Contribute"): the bonus is split
  * between the people who come. If the event is cancelled it goes to the host.
  */
-export function SponsorButton({ event, onDone }: { event: EventView; onDone: () => Promise<void> }) {
+export function SponsorButton({
+  event,
+  onDone,
+  startOpen = false,
+  onClose,
+}: {
+  event: EventView;
+  onDone: () => Promise<void>;
+  startOpen?: boolean;
+  onClose?: () => void;
+}) {
   const { accountId, kind, send, signIn } = useWallet();
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(startOpen);
+  const setOpen = (v: boolean) => {
+    setOpenState(v);
+    if (!v) onClose?.();
+  };
   const [amount, setAmount] = useState("10");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

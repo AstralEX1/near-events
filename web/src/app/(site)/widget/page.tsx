@@ -18,7 +18,7 @@ interface Look {
 }
 
 const PRESETS: { name: string; page: string; look: Omit<Look, "mode" | "label"> }[] = [
-  { name: "Near Events", page: "#f6f5f2", look: { theme: "light", accent: "#5b4bff", font: "geist", display: "sans", radius: "16" } },
+  { name: "Near Events", page: "#ffffff", look: { theme: "light", accent: "#5b4bff", font: "geist", display: "sans", radius: "16" } },
   { name: "Bali Squad", page: "#fbf7f2", look: { theme: "light", accent: "#ff401f", font: "poppins", display: "serif", radius: "12" } },
   { name: "Dark", page: "#0e0e10", look: { theme: "dark", accent: "#8b7fff", font: "system", display: "sans", radius: "14" } },
 ];

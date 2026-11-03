@@ -38,14 +38,12 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
       >
         Connect a NEAR wallet
       </button>
-      <button
-        className="btn btn-ghost w-full"
-        disabled={!ready || busy || !HAS_INTENTS}
-        title={HAS_INTENTS ? undefined : "Uses NEAR Intents, which runs on mainnet"}
-        onClick={run(signInWithEvm)}
-      >
-        MetaMask / EVM wallet{!HAS_INTENTS && " · mainnet"}
-      </button>
+      {/* EVM wallets sign in through NEAR Intents, which exists on mainnet only. */}
+      {HAS_INTENTS && (
+        <button className="btn btn-ghost w-full" disabled={!ready || busy} onClick={run(signInWithEvm)}>
+          MetaMask, Rabby or another EVM wallet
+        </button>
+      )}
       {error && <p className="text-xs text-warn break-words">{error}</p>}
     </div>
   );

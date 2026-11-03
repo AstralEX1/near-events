@@ -37,7 +37,7 @@ export function embedQuery(q: URLSearchParams): string {
   return s ? `?${s}` : "";
 }
 
-const LIGHT = { "--bg": "#f6f5f2", "--surface": "#ffffff", "--text": "#16161a", "--muted": "#6b6b76", "--border": "#e7e5e0" };
+const LIGHT = { "--bg": "#ffffff", "--surface": "#ffffff", "--text": "#16161a", "--muted": "#6b6b76", "--border": "#ebebef" };
 const DARK = { "--bg": "#111114", "--surface": "#1a1a1f", "--text": "#f2f2f4", "--muted": "#9a9aa6", "--border": "#2a2a31" };
 const FONTS = {
   geist: "var(--font-geist-sans), system-ui, sans-serif",

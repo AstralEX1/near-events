@@ -96,39 +96,33 @@ export default function ManageEvent() {
   const share = event.attended_count > 0 ? pool / BigInt(event.attended_count) : 0n;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 max-w-xl mx-auto">
       <div className="flex flex-wrap items-center gap-3">
         <Link href={`/e/${id}`} className="text-muted hover:text-text">← {event.metadata.title}</Link>
         <StatusPill status={event.status} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label="Checked in" value={`${event.attended_count} / ${event.guest_count}`} />
-        <Stat label="Pool" value={`${formatUsdc(pool)} USDC`} />
-        <Stat label="Each attendee would get" value={event.attended_count ? `${formatUsdc(share)} USDC` : "—"} />
-      </div>
+      <p className="text-sm">
+        <b>{event.attended_count}</b>/{event.guest_count} checked in
+        {event.attended_count > 0 && <span className="text-muted"> · each gets {formatUsdc(share)} USDC</span>}
+        <span className="text-muted"> · pool {formatUsdc(pool)} USDC</span>
+      </p>
 
-      {open && (
-        <div className="card p-4 space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="min-w-0">
-              <div className="font-semibold">Check in at the door</div>
-              <p className="text-sm text-muted">Guests show the QR code from their event page. Scan a few, then check them in together.</p>
-            </div>
-            {!scanning && (
-              <button className="btn btn-accent ml-auto whitespace-nowrap" onClick={() => setScanning(true)}>
-                Scan QR codes
-              </button>
-            )}
+      {open &&
+        (scanning ? (
+          <div className="space-y-2">
+            <QrScanner onScan={onScan} onClose={() => setScanning(false)} />
           </div>
-          {scanning && <QrScanner onScan={onScan} onClose={() => setScanning(false)} />}
-          {scanNote && <p className={`text-sm ${scanNote.ok ? "text-good" : "text-warn"}`}>{scanNote.text}</p>}
-        </div>
-      )}
+        ) : (
+          <button className="btn btn-accent w-full !py-3.5 text-base" onClick={() => setScanning(true)}>
+            Scan guest QR codes
+          </button>
+        ))}
+      {scanNote && <p className={`text-sm ${scanNote.ok ? "text-good" : "text-warn"}`}>{scanNote.text}</p>}
 
       <div className="card">
         <div className="p-3 flex gap-2 border-b border-border">
-          <input className="input" placeholder="Search guest account…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input className="input" placeholder="Search guest…" value={query} onChange={(e) => setQuery(e.target.value)} />
           {open && (
             <button
               className="btn btn-accent whitespace-nowrap"
@@ -138,9 +132,7 @@ export default function ManageEvent() {
               Check in {selected.size > 0 && `(${selected.size})`}
             </button>
           )}
-          <button className="btn btn-ghost whitespace-nowrap" disabled={guests.length === 0} onClick={exportCsv} title="Download the guest list">
-            CSV
-          </button>
+
         </div>
         {filtered.length === 0 && <p className="p-4 text-muted text-sm">No guests yet.</p>}
         <ul>
@@ -181,6 +173,9 @@ export default function ManageEvent() {
       </div>
 
       {error && <p className="text-sm text-warn break-words">{error}</p>}
+      {guests.length > 0 && (
+        <button className="text-xs text-muted hover:text-text" onClick={exportCsv}>Download guest list (CSV)</button>
+      )}
 
       {/* Sputnik DAOs live under sputnik-dao.near (mainnet) or sputnik-v2.testnet. */}
       {open && event.host.includes("sputnik") && <DaoSponsor eventId={id} dao={event.host} />}
@@ -229,15 +224,6 @@ export default function ManageEvent() {
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="card p-4">
-      <div className="text-xs text-muted">{label}</div>
-      <div className="text-xl font-semibold mt-1">{value}</div>
     </div>
   );
 }

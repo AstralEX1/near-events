@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatUsdc, type EventView, type GuestView } from "@/lib/near";
-import { Avatar, shortAccount } from "./ui";
+import { Avatar, AvatarStack, shortAccount } from "./ui";
 import { AccountQr } from "./Qr";
 
 /** "12 going · 8 spots left", or "Full". */
@@ -60,98 +60,51 @@ const TONE = {
 };
 
 /** Everyone who registered, with where they stand. Public, like the chain. */
-type Filter = "all" | "going" | "in" | "out";
-type Sort = "new" | "old" | "name";
-
-/** Everyone who registered, with where they stand. Public, like the chain. */
+/** Who's going: an avatar stack; the full list with statuses opens on click. */
 export function GuestGrid({ event, guests, me }: { event: EventView; guests: GuestView[]; me?: string | null }) {
+  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
-  const [sort, setSort] = useState<Sort>("new");
   const closed = event.status !== "Open";
-
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = guests.filter(
-      (g) =>
-        g.account_id.toLowerCase().includes(q) &&
-        (filter === "all" ||
-          (filter === "in" && g.status === "Attended") ||
-          (filter === "going" && g.status === "Registered" && !closed) ||
-          (filter === "out" && g.status === "Registered" && closed)),
-    );
-    list.sort((a, b) =>
-      sort === "name" ? a.account_id.localeCompare(b.account_id) : sort === "old" ? a.registered_at - b.registered_at : b.registered_at - a.registered_at,
-    );
-    // You first, so you can always find yourself.
+    const list = guests.filter((g) => g.account_id.toLowerCase().includes(q));
     return [...list.filter((g) => g.account_id === me), ...list.filter((g) => g.account_id !== me)];
-  }, [guests, query, filter, sort, closed, me]);
+  }, [guests, query, me]);
 
-  const filters: [Filter, string][] = closed
-    ? [["all", "All"], ["in", event.status === "Finalized" ? "Got paid" : "Checked in"], ["out", "No-show"]]
-    : [["all", "All"], ["going", "Going"], ["in", "Checked in"]];
+  if (guests.length === 0) return <p className="text-sm text-muted">No one yet. Be the first.</p>;
 
   return (
-    <div>
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3 pb-2 border-b border-border">
-        <div className="font-semibold">Guests</div>
-        <div className="text-sm text-muted">{spotsLine(event)}</div>
-        <div className="text-sm text-muted ml-auto">
-          {event.attended_count}/{event.guest_count} {closed ? "showed up" : "checked in"}
-        </div>
-      </div>
-      {guests.length === 0 ? (
-        <p className="text-sm text-muted">Nobody yet. Be the first.</p>
-      ) : (
+    <div className="space-y-3">
+      <button className="flex items-center gap-3 w-full text-left group" onClick={() => setOpen(!open)}>
+        <AvatarStack accounts={guests.map((g) => g.account_id)} max={6} />
+        <span className="text-sm">
+          {closed ? `${event.attended_count} of ${event.guest_count} came` : spotsLine(event)}
+        </span>
+        <span className="ml-auto text-xs text-muted group-hover:text-text">{open ? "Hide" : "See all"}</span>
+      </button>
+      {open && (
         <>
-          <input
-            className="input mb-2 text-sm"
-            placeholder="Search by account or address"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <div className="flex items-center gap-2 mb-3 text-sm">
-            <div className="flex rounded-xl border border-border p-0.5">
-              {filters.map(([v, l]) => (
-                <button
-                  key={v}
-                  onClick={() => setFilter(v)}
-                  className={`px-2.5 py-1 rounded-lg ${filter === v ? "bg-accent-soft text-accent font-medium" : "text-muted"}`}
-                >
-                  {l}
-                </button>
-              ))}
-            </div>
-            <select
-              className="ml-auto bg-transparent text-muted outline-none cursor-pointer"
-              value={sort}
-              onChange={(e) => setSort(e.target.value as Sort)}
-              aria-label="Sort guests"
-            >
-              <option value="new">Newest</option>
-              <option value="old">Oldest</option>
-              <option value="name">A–Z</option>
-            </select>
-          </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+          {guests.length > 20 && (
+            <input className="input text-sm" placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} />
+          )}
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {shown.map((g) => {
               const b = badge(event, g);
               return (
                 <Link
                   href={`/u/${encodeURIComponent(g.account_id)}`}
                   key={g.account_id}
-                  className={`flex flex-col items-center text-center gap-1.5 p-2 rounded-xl hover:bg-border/40 ${g.account_id === me ? "bg-accent-soft/60" : ""}`}
+                  className={`flex flex-col items-center text-center gap-1 p-2 rounded-xl hover:bg-border/40 ${b.tone === "muted" ? "opacity-40" : ""}`}
                 >
-                  <Avatar account={g.account_id} size={44} />
-                  <div className="text-xs font-medium truncate max-w-full" title={g.account_id}>
+                  <Avatar account={g.account_id} size={40} />
+                  <div className="text-xs truncate max-w-full" title={g.account_id}>
                     {g.account_id === me ? "You" : shortAccount(g.account_id)}
                   </div>
-                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${TONE[b.tone]}`}>{b.label}</span>
+                  {b.tone === "good" && <span className="text-[11px] text-good">{b.label}</span>}
                 </Link>
               );
             })}
           </div>
-          {shown.length === 0 && <p className="text-sm text-muted">No guests match.</p>}
         </>
       )}
     </div>
@@ -191,51 +144,25 @@ function icsUrl(event: EventView, url: string): string {
   return `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`;
 }
 
-/** Shown once you're in: what happens next, and a calendar reminder. */
+/** Shown once you're in: the door pass and one calendar button. */
 export function NextSteps({ event, accountId }: { event: EventView; accountId: string }) {
   const url = typeof window === "undefined" ? "" : `${window.location.origin}/e/${event.id}`;
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Avatar account={accountId} size={40} />
-        <div>
-          <div className="font-semibold">You’re going 🎉</div>
-          <div className="text-sm text-muted">{formatUsdc(event.deposit)} USDC is held for you in the contract.</div>
+    <div className="space-y-3 text-center">
+      <div className="font-semibold">You’re going 🎉</div>
+      <div className="flex justify-center">
+        <AccountQr account={accountId} size={168} />
+      </div>
+      <p className="text-sm text-muted">
+        Show this at the door to get checked in. After the event, withdraw your deposit plus your share right here.
+      </p>
+      <details className="relative">
+        <summary className="btn btn-ghost w-full text-sm list-none cursor-pointer">Add to calendar</summary>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <a className="btn btn-ghost text-sm" href={googleCalendarUrl(event, url)} target="_blank" rel="noopener">Google</a>
+          <a className="btn btn-ghost text-sm" href={icsUrl(event, url)} download={`event-${event.id}.ics`}>Apple / Outlook</a>
         </div>
-      </div>
-      <ol className="space-y-2 text-sm">
-        {[
-          "Add it to your calendar and come on time. Only people the host checks in get paid.",
-          <>
-            At the door, tell the host your account: <b className="break-all">{shortAccount(accountId)}</b>.
-          </>,
-          "Snap a photo at the event. If the host forgets to check you in, it’s your proof.",
-          "Back on this page, your badge should turn “Checked in ✓”. Not there? Ask the host before the event closes.",
-          "When the host closes the event, press “Withdraw payout” here: your deposit plus your share.",
-        ].map((t, i) => (
-          <li key={i} className="flex gap-3">
-            <span className="w-6 h-6 shrink-0 rounded-full bg-accent-soft text-accent text-xs font-semibold flex items-center justify-center">
-              {i + 1}
-            </span>
-            <span className="pt-0.5">{t}</span>
-          </li>
-        ))}
-      </ol>
-      <div className="flex items-center gap-4 rounded-2xl border border-border p-3">
-        <AccountQr account={accountId} size={120} />
-        <div className="text-sm">
-          <div className="font-medium">Your door pass</div>
-          <p className="text-muted mt-1">The host scans this to check you in. Screenshot it or just open this page at the door.</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <a className="btn btn-ghost text-sm" href={googleCalendarUrl(event, url)} target="_blank" rel="noopener">
-          Google Calendar
-        </a>
-        <a className="btn btn-ghost text-sm" href={icsUrl(event, url)} download={`event-${event.id}.ics`}>
-          Apple / Outlook (.ics)
-        </a>
-      </div>
+      </details>
     </div>
   );
 }
