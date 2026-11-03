@@ -21,6 +21,7 @@ export default function EmbedJoin() {
   const [event, setEvent] = useState<EventView | null | undefined>(undefined);
   const [status, setStatus] = useState<GuestStatus | null>(null);
   const told = useRef(false);
+  const [luma, setLuma] = useState(false);
   const then = readThen(q, accountId, id);
 
   const load = useCallback(async () => {
@@ -35,6 +36,11 @@ export default function EmbedJoin() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Is this event connected to the host's Luma? Then paid guests get a Luma ticket.
+  useEffect(() => {
+    fetch(`/api/luma/registered?e=${id}`).then((r) => r.json()).then((j) => setLuma(!!j.luma)).catch(() => {});
+  }, [id]);
 
   useEffect(() => {
     if (!status || !accountId || told.current) return;
@@ -65,6 +71,7 @@ export default function EmbedJoin() {
             ) : (
               <p className="text-muted text-sm">Loading sign-in…</p>
             )}
+            {status && luma && accountId && <LumaTicket eventId={id} accountId={accountId} />}
             {status && then && (
               <div className="text-center space-y-2">
                 <p className="text-sm text-muted">Deposit paid. One more step on the organizer’s side:</p>
@@ -81,5 +88,35 @@ export default function EmbedJoin() {
         )}
       </div>
     </div>
+  );
+}
+
+/** After the deposit, on Luma-connected events: where to send the Luma ticket. */
+function LumaTicket({ eventId, accountId }: { eventId: number; accountId: string }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const submit = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    setState("busy");
+    setError(null);
+    const r = await fetch("/api/luma/registered", { method: "POST", body: JSON.stringify({ eventId, accountId, name, email }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) setState("done");
+    else {
+      setError(j.error ?? "Something went wrong");
+      setState("idle");
+    }
+  };
+  if (state === "done") return <p className="text-sm text-good font-medium text-center">✓ Your ticket is on its way to {email}.</p>;
+  return (
+    <form onSubmit={submit} className="space-y-2">
+      <div className="text-sm font-medium">Where should we send your ticket?</div>
+      <input className="input" required placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
+      <input className="input" required type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+      <button className="btn btn-accent w-full" disabled={state === "busy"}>{state === "busy" ? "Sending…" : "Get my ticket"}</button>
+      {error && <p className="text-sm text-warn">{error}</p>}
+    </form>
   );
 }

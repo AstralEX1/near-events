@@ -2,11 +2,13 @@ import { events, formatUsdc, type EventView, type GuestView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { relayer } from "@/lib/relayer";
 import { PUBLIC_URL, checkSecret, chatToken, loadStore, tg, tgDocument, updateStore, type Draft } from "@/lib/telegram";
+import { createWebhook, getEvent, seal } from "@/lib/luma";
 
 // The host's admin lives in Telegram. Telegram posts every update here
 // (webhook in production, scripts/telegram-dev.mjs locally).
 
 interface Msg {
+  message_id: number;
   chat: { id: number };
   text?: string;
 }
@@ -25,7 +27,7 @@ export async function POST(req: Request) {
   const update = (await req.json()) as Update;
   try {
     if (update.callback_query) await onButton(update.callback_query);
-    else if (update.message?.text) await onText(update.message.chat.id, update.message.text.trim());
+    else if (update.message?.text) await onText(update.message.chat.id, update.message.text.trim(), update.message.message_id);
   } catch (e) {
     const chat = update.message?.chat.id ?? update.callback_query?.message?.chat.id;
     if (chat) await say(chat, `Something went wrong: ${e instanceof Error ? e.message : String(e)}`).catch(() => {});
@@ -52,11 +54,12 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 
 // ------------------------------------------------------------------ text
 
-async function onText(chat: number, text: string) {
+async function onText(chat: number, text: string, messageId: number) {
   const cmd = text.split(/\s+/)[0].split("@")[0].toLowerCase();
   if (cmd === "/start" || cmd === "/help") return help(chat);
   if (cmd === "/new") return startDraft(chat);
-  if (cmd === "/events") return listEvents(chat);
+  if (cmd === "/events" || cmd === "/status") return listEvents(chat);
+  if (cmd === "/luma") return connectLuma(chat, text, messageId);
   if (cmd === "/cancel") {
     await updateStore((s) => void delete s.drafts[chat]);
     return say(chat, "Okay, dropped the draft.");
@@ -77,7 +80,8 @@ function help(chat: number) {
       "Here you get: a ping for every registration, the guest list, check-in at the door, and payouts.",
       "",
       "/new — create an event",
-      "/events — your events",
+      "/status — your events, pool and buttons",
+      "/luma — on Luma Plus? connect your Luma event",
     ].join("\n"),
   );
 }
@@ -250,4 +254,51 @@ async function checkInKeyboard(chat: number, e: EventView, guests: GuestView[], 
   if ((page + 1) * PAGE < waiting.length) nav.push({ text: "More →", callback_data: `c:${e.id}:${page + 1}` });
   if (nav.length) rows.push(nav);
   return say(chat, `Tap a guest to check them in. ${e.attended_count}/${e.guest_count} in so far.`, rows);
+}
+
+// ------------------------------------------------------------------ Luma
+
+/**
+ * /luma <our event id> <Luma event id> <Luma API key>
+ * After this, paying guests land on the Luma list as Going and Luma check-ins
+ * count on-chain. The key message is deleted right away; we keep it encrypted.
+ */
+async function connectLuma(chat: number, text: string, messageId: number) {
+  const [, idStr, lumaEventId, apiKey] = text.split(/\s+/);
+  if (!apiKey) {
+    return say(
+      chat,
+      [
+        "<b>Connect a Luma event</b> (needs Luma Plus)",
+        "",
+        "1. In Luma: Calendar → Settings → Developer → create an API key.",
+        "2. Open your event in Luma and copy its id (starts with <code>evt-</code>).",
+        "3. Send here: <code>/luma &lt;event #&gt; &lt;evt-…&gt; &lt;API key&gt;</code>",
+        "",
+        "In the Luma event, turn on Require Approval and make the ticket free: people who skip the deposit then wait in Pending until they pay.",
+      ].join("\n"),
+    );
+  }
+  await tg("deleteMessage", { chat_id: chat, message_id: messageId }).catch(() => {});
+  const id = Number(idStr.replace("#", ""));
+  if ((await loadStore()).events[id]?.chat !== chat) return say(chat, `Event #${idStr} isn’t managed from this chat.`);
+  const ev = await getEvent(apiKey, lumaEventId).catch((e) => {
+    throw new Error(`Luma didn’t accept that key or event id (${e instanceof Error ? e.message : e}).`);
+  });
+  const secret = await createWebhook(apiKey, `${PUBLIC_URL()}/api/luma/webhook?e=${id}`).catch(() => undefined);
+  await updateStore((s) => {
+    s.luma ??= {};
+    const prev = s.luma[id];
+    s.luma[id] = {
+      lumaEventId,
+      apiKey: seal(apiKey),
+      webhookSecret: secret ? seal(secret) : prev?.webhookSecret,
+      guests: prev?.guests ?? {},
+    };
+  });
+  return say(
+    chat,
+    `🔗 Connected to <b>${esc(ev.name ?? lumaEventId)}</b> on Luma. I deleted your message with the key.\n\nNow guests who pay the deposit get your normal Luma ticket, and scanning them in the Luma app counts for the payout.` +
+      (secret ? "" : "\n\n⚠️ I couldn’t set up the Luma webhook, so Luma check-ins won’t reach me yet. Use “Check in at the door” here instead."),
+  );
 }

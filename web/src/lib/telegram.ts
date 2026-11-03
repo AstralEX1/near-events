@@ -78,9 +78,20 @@ export interface Draft {
   deposit?: string;
 }
 
+export interface LumaLink {
+  lumaEventId: string;
+  /** Host's Luma API key and our webhook's signing secret, both encrypted (see luma.ts). */
+  apiKey: string;
+  webhookSecret?: string;
+  /** NEAR account → who they are in Luma. Filled when a guest pays from the widget. */
+  guests: Record<string, { email: string; name: string }>;
+}
+
 export interface Store {
   /** eventId → chat that manages it, and the guests we already announced. */
   events: Record<string, { chat: number; seen: string[] }>;
+  /** eventId → its Luma event, for hosts on Luma Plus. */
+  luma?: Record<string, LumaLink>;
   /** chatId → event being drafted with /new. */
   drafts: Record<string, Draft>;
   /** Telegram getUpdates offset for the local poller. */
