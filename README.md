@@ -106,23 +106,27 @@ checks it is only a Near Events registration and submits it to `intents.near`
 |---|---|---|
 | `create_event(metadata, deposit, capacity, cohosts)` | anyone (caller = host) | attaches NEAR for storage; unused storage is refunded on close |
 | `ft_transfer_call` → `ft_on_transfer` | guest / friend / 1Click / intents.near | `{"action":"register","event_id":N,"guest":"..."}` or `{"action":"sponsor",...}` |
-| `check_in`, `undo_check_in` | host, co-hosts | mark who showed up |
-| `finalize` | host (DAO via proposal) | pool ÷ attendees to balances; remainder to host; nobody came → full refund |
-| `cancel`, `refund_if_abandoned` | host / anyone after 30 days | refund every deposit |
-| `register_with_balance` | guest | reuse a payout for the next event |
-| `withdraw(amount, receiver_id, to_intents)` | guest | to any NEAR account, or into NEAR Intents |
-| `payout_to_intents(account_id)` | anyone (relayer button) | moves an account's balance into *that same account's* Intents balance; how EVM-wallet guests get paid |
+| `check_in`, `undo_check_in` | host, co-hosts (+1 yocto) | mark who showed up; check-in batch ≤ capacity |
+| `finalize` | host (DAO via proposal, +1 yocto) | pool ÷ attendees to balances; remainder to host; nobody came → full refund |
+| `cancel`, `refund_if_abandoned` | host (+1 yocto) / anyone after 30 days | refund guest deposits and sponsor bonuses |
+| `register_with_balance` | guest (+1 yocto) | reuse a payout for the next event |
+| `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to any NEAR account, or into NEAR Intents |
+| `payout_to_intents(account_id)` | owner or configured relayer | moves that account's balance into *its own* Intents balance; how EVM-wallet guests get paid |
+
+Init: `new(usdc, intents, relayer)` — `relayer` may be `null` on testnet until the web
+relayer account is set. Privileged mutators require exactly 1 yoctoNEAR.
 
 Safety notes: only the configured USDC is accepted; a payment made for someone
 else (friend, 1Click, intents.near) never bounces, because a refund might not
 reach the guest; it lands on the guest's balance instead. Capacity is capped at
-300 so payout fits in one transaction.
+300 so payout fits in one transaction. On cancel/abandon, sponsor USDC returns
+to the sponsors who funded it (not the host).
 
 ## Build and test
 
 ```bash
 cd contracts
-cargo test -p near-events                       # 21 unit tests
+cargo test -p near-events                       # 27 unit tests
 cd events && cargo near build non-reproducible-wasm
 ```
 

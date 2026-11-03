@@ -198,11 +198,22 @@ function RegistrationCard({
   const registerViaIntents = () => run(() => registerFromIntents(accountId!, event.id, event.deposit));
 
   const registerWithBalance = () =>
-    run(() => send([{ receiverId: EVENTS_CONTRACT, methodName: "register_with_balance", args: { event_id: event.id } }]));
+    run(() =>
+      send([
+        {
+          receiverId: EVENTS_CONTRACT,
+          methodName: "register_with_balance",
+          args: { event_id: event.id },
+          deposit: 1n,
+        },
+      ]),
+    );
 
   let body;
   if (event.status === "Cancelled") {
-    body = <p>This event was cancelled. Every deposit was returned to the guests’ balances.</p>;
+    body = (
+      <p>This event was cancelled. Guest deposits and sponsor bonuses were returned to their balances.</p>
+    );
   } else if (event.status === "Finalized") {
     body =
       myStatus === "Attended" ? (

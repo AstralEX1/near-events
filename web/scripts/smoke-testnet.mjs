@@ -56,8 +56,8 @@ await call(guest, USDC, "ft_transfer_call", {
 }, 1n);
 console.log("status", await view("get_guest_status", { event_id: eventId, account_id: GUEST }));
 
-await call(host, EVENTS, "check_in", { event_id: eventId, accounts: [GUEST] });
-await call(host, EVENTS, "finalize", { event_id: eventId });
+await call(host, EVENTS, "check_in", { event_id: eventId, accounts: [GUEST] }, 1n);
+await call(host, EVENTS, "finalize", { event_id: eventId }, 1n);
 console.log("event", JSON.stringify(await view("get_event", { event_id: eventId })));
 console.log("balance", await view("balance_of", { account_id: GUEST }));
 

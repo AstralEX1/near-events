@@ -117,7 +117,7 @@ async function setup() {
 }
 
 async function finalize(eventId) {
-  await propose(`Pay out event ${eventId}`, EVENTS, "finalize", { event_id: eventId }, 0n, 250n * TGAS);
+  await propose(`Pay out event ${eventId}`, EVENTS, "finalize", { event_id: eventId }, 1n, 250n * TGAS);
   console.log(JSON.stringify(await view(EVENTS, "get_event", { event_id: eventId })));
 }
 
