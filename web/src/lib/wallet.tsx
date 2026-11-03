@@ -60,7 +60,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       const { NearConnector } = await import("@hot-labs/near-connect");
-      const c = new NearConnector({ network: NETWORK, footerBranding: null });
+      // "Ethereum Wallets" maps an EVM wallet to a different NEAR account and has no
+      // testnet; EVM wallets sign in through our own NEAR Intents path instead.
+      const c = new NearConnector({ network: NETWORK, footerBranding: null, excludedWallets: ["ethereum-wallets"] });
       connector.current = c;
       c.on("wallet:signIn", (t) => remember("wallet", t.accounts[0]?.accountId ?? null));
       c.on("wallet:signOut", () => remember(null, null));

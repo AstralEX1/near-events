@@ -14,14 +14,40 @@ interface Eip1193 {
 
 function ethereum(): Eip1193 {
   const eth = (window as unknown as { ethereum?: Eip1193 }).ethereum;
-  if (!eth) throw new Error("No EVM wallet found. Install MetaMask or another browser wallet.");
+  if (!eth) throw new Error("No EVM wallet found. Install MetaMask, Rabby or another browser wallet.");
   return eth;
 }
 
-export async function connectEvm(): Promise<string> {
-  const [address] = (await ethereum().request({ method: "eth_requestAccounts" })) as string[];
-  if (!address) throw new Error("Wallet returned no address");
-  return address.toLowerCase();
+/** Turns wallet error codes (EIP-1193) into something a guest can act on. */
+function walletError(e: unknown): Error {
+  const code = (e as { code?: number })?.code;
+  if (code === -32002)
+    return new Error("Your wallet already has a request open. Click the wallet icon in your browser, finish or close it, then try again.");
+  if (code === 4001) return new Error("You declined in your wallet. Try again when ready.");
+  return e instanceof Error ? e : new Error(String((e as { message?: string })?.message ?? e));
+}
+
+// Wallets refuse a second connect while one is pending (Rabby: "Connection
+// declined"), so a double click or React re-run must reuse the first request.
+let connecting: Promise<string> | null = null;
+
+export function connectEvm(): Promise<string> {
+  connecting ??= (async () => {
+    try {
+      const eth = ethereum();
+      // Already approved for this site: no pop-up at all.
+      const [known] = ((await eth.request({ method: "eth_accounts" }).catch(() => [])) as string[]) ?? [];
+      if (known) return known.toLowerCase();
+      const [address] = (await eth.request({ method: "eth_requestAccounts" })) as string[];
+      if (!address) throw new Error("Wallet returned no address");
+      return address.toLowerCase();
+    } catch (e) {
+      throw walletError(e);
+    }
+  })().finally(() => {
+    connecting = null;
+  });
+  return connecting;
 }
 
 export async function evmAccount(): Promise<string | null> {
@@ -71,7 +97,11 @@ export async function registerFromIntents(address: string, eventId: number, depo
     ],
   });
   const hexMessage = "0x" + Array.from(new TextEncoder().encode(payload), (b) => b.toString(16).padStart(2, "0")).join("");
-  const sigHex = (await ethereum().request({ method: "personal_sign", params: [hexMessage, address] })) as string;
+  const sigHex = (await ethereum()
+    .request({ method: "personal_sign", params: [hexMessage, address] })
+    .catch((e) => {
+      throw walletError(e);
+    })) as string;
   const sig = Uint8Array.from(sigHex.slice(2).match(/../g)!.map((h) => parseInt(h, 16)));
   if (sig[64] >= 27) sig[64] -= 27; // The verifier expects v in {0, 1}.
 
