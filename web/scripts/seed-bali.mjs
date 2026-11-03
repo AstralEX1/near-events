@@ -6,7 +6,7 @@ import { Account, JsonRpcProvider } from "near-api-js";
 
 const env = (k) => process.env[k] ?? (() => { throw new Error(`Set ${k}`); })();
 const [EVENTS, USDC, HOST, GUEST] = ["EVENTS_CONTRACT", "USDC_CONTRACT", "HOST_ACCOUNT", "GUEST_ACCOUNT"].map(env);
-const provider = new JsonRpcProvider({ url: "https://rpc.testnet.near.org" });
+const provider = new JsonRpcProvider({ url: process.env.RPC ?? "https://test.rpc.fastnear.com" });
 const account = (id) =>
   new Account(id, provider, JSON.parse(readFileSync(`${homedir()}/.near-credentials/testnet/${id}.json`, "utf8")).private_key);
 const gas = 100_000_000_000_000n;
@@ -52,9 +52,12 @@ const demo = [
   },
 ];
 
+// Safe to re-run: reuses events that already exist and skips guests already in.
+const existing = await provider.callFunction({ contractId: EVENTS, method: "get_events", args: {} });
 for (const e of demo) {
   const storage = await provider.callFunction({ contractId: EVENTS, method: "storage_cost", args: { capacity: e.capacity } });
-  const id = await host.callFunction({
+  const found = existing.find((x) => x.metadata.title === e.title && x.status === "Open");
+  const id = found ? found.id : await host.callFunction({
     contractId: EVENTS,
     methodName: "create_event",
     args: {
@@ -73,7 +76,8 @@ for (const e of demo) {
     deposit: BigInt(storage),
     gas,
   });
-  if (e.guestJoins) {
+  const already = await provider.callFunction({ contractId: EVENTS, method: "get_guest_status", args: { event_id: id, account_id: GUEST } });
+  if (e.guestJoins && !already) {
     await guest.callFunction({ contractId: USDC, methodName: "mint", args: { amount: e.deposit }, gas });
     await guest.callFunction({
       contractId: USDC,

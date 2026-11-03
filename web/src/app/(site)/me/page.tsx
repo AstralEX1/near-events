@@ -151,7 +151,7 @@ export default function Me() {
           <h2 className="text-xl font-semibold mb-3">{title}</h2>
           {list.length === 0 && (
             <p className="text-muted">
-              {empty} <Link href={title === "Going" ? "/" : "/create"} className="text-accent">{title === "Going" ? "Find an event" : "Host one"}</Link>
+              {empty} <Link href={title === "Going" ? "/events" : "/create"} className="text-accent">{title === "Going" ? "Find an event" : "Host one"}</Link>
             </p>
           )}
           <div className="grid gap-3 sm:grid-cols-2">

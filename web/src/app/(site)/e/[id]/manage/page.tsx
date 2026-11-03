@@ -53,7 +53,8 @@ export default function ManageEvent() {
     setBusy(true);
     setError(null);
     try {
-      await send([{ receiverId: EVENTS_CONTRACT, methodName, args, gas: 300_000_000_000_000n }]);
+      // Host and co-host actions need 1 yoctoNEAR, so only a full-access key can make them.
+      await send([{ receiverId: EVENTS_CONTRACT, methodName, args, gas: 300_000_000_000_000n, deposit: 1n }]);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -144,6 +145,18 @@ export default function ManageEvent() {
                 </button>
               ) : (
                 open && (
+                  <>
+                  {isHost && (
+                    <button
+                      className="h-11 px-2 text-xs text-muted hover:text-warn"
+                      disabled={busy}
+                      onClick={() =>
+                        run("refund_guest", { event_id: id, account_id: g.account_id }, `Return ${g.account_id}’s deposit and free their spot?`)
+                      }
+                    >
+                      Refund
+                    </button>
+                  )}
                   <button
                     className={`btn !py-2 ${selected.has(g.account_id) ? "btn-accent" : "btn-ghost"}`}
                     disabled={busy}
@@ -151,6 +164,7 @@ export default function ManageEvent() {
                   >
                     Check in
                   </button>
+                  </>
                 )
               )}
             </li>
@@ -175,7 +189,7 @@ export default function ManageEvent() {
             Close event & pay out
           </button>
           <div className="flex justify-between text-xs text-muted">
-            <button className="hover:text-warn" disabled={busy} onClick={() => run("cancel", { event_id: id }, "Cancel the event and refund every deposit?")}>
+            <button className="hover:text-warn" disabled={busy} onClick={() => run("cancel", { event_id: id }, "Cancel the event and refund every guest deposit and sponsor bonus?")}>
               Cancel event
             </button>
             {guests.length > 0 && <button className="hover:text-text" onClick={exportCsv}>Download guest list</button>}

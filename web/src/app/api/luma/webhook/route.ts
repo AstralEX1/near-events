@@ -38,6 +38,7 @@ export async function POST(req: Request) {
         methodName: "check_in",
         args: { event_id: id, accounts: [account] },
         gas: 50_000_000_000_000n,
+        deposit: 1n,
       });
       const e = await events.get(id);
       await notifyHost(id, `✅ ${esc(link.guests[account].name)} checked in${e ? ` · ${e.attended_count}/${e.guest_count}` : ""}`);
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
     const e = await events.get(id);
     await notifyHost(
       id,
-      `🕓 ${esc(guest.name ?? email)} (${esc(email)}) asked to join on Luma but hasn’t paid the ${e ? formatUsdc(e.deposit) : ""} USDC deposit yet. Send them:\n${PUBLIC_URL()}/embed/e/${id}/join\nThey’re approved automatically once it’s paid.`,
+      `🕓 ${esc(guest.name ?? email)} (${esc(email)}) asked to join on Luma but hasn’t paid the ${e ? formatUsdc(e.deposit) : ""} USDC deposit yet. Send them:\n${PUBLIC_URL()}/p/${id}\nThey’re approved automatically once it’s paid.`,
     );
   }
   return Response.json({ ok: true });

@@ -101,13 +101,15 @@ export function RegistrationCard({
     });
 
   const registerWithBalance = () =>
-    run(() => send([{ receiverId: EVENTS_CONTRACT, methodName: "register_with_balance", args: { event_id: event.id } }]));
+    run(() =>
+      send([{ receiverId: EVENTS_CONTRACT, methodName: "register_with_balance", args: { event_id: event.id }, deposit: 1n }]),
+    );
 
   const price = `${formatUsdc(event.deposit)} USDC`;
   // One primary button per state; alternatives stay folded away.
   let body;
   if (event.status === "Cancelled") {
-    body = <p className="text-sm">This event was cancelled. Every deposit went back to its guest.</p>;
+    body = <p className="text-sm">This event was cancelled. Deposits and sponsor bonuses went back to their owners.</p>;
   } else if (event.status === "Finalized") {
     body =
       myStatus === "Attended" ? (

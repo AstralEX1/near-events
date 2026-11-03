@@ -50,7 +50,7 @@ export default function Guide() {
         </div>
       </section>
       <div className="flex gap-3">
-        <Link href="/" className="btn btn-primary">Browse events</Link>
+        <Link href="/events" className="btn btn-primary">Browse events</Link>
         <Link href="/create" className="btn btn-ghost">Host an event</Link>
       </div>
     </div>

@@ -1,72 +1,111 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { events, formatUsdc, type EventView } from "@/lib/near";
-import { Cover } from "@/components/ui";
+import Script from "next/script";
+import { useEffect, useRef, useState } from "react";
+import { events } from "@/lib/near";
 
-type Tab = "upcoming" | "past";
+const BOT = process.env.NEXT_PUBLIC_TELEGRAM_BOT;
 
-export default function Home() {
-  const [list, setList] = useState<EventView[] | null>(null);
-  const [tab, setTab] = useState<Tab>("upcoming");
-  const [error, setError] = useState<string | null>(null);
+/**
+ * The product page for organizers. Near Events is a button for their own
+ * site plus an admin in Telegram, not another place to list events.
+ */
+export default function Landing() {
+  const demo = useRef<HTMLDivElement>(null);
+  const [eventId, setEventId] = useState<number | null>(null);
 
   useEffect(() => {
-    events.list().then(setList).catch((e) => setError(String(e)));
+    events.list().then((l) => setEventId(l.find((e) => e.status === "Open")?.id ?? null)).catch(() => {});
   }, []);
-
-  const all = list ?? [];
-  const tabs: [Tab, string, EventView[], string][] = [
-    ["upcoming", "Upcoming", all.filter((e) => e.status === "Open"), "No open events yet. Host the first one."],
-    ["past", "Past", all.filter((e) => e.status !== "Open"), "No past events yet."],
-  ];
-  const current = tabs.find((t) => t[0] === tab) ?? tabs[0];
+  useEffect(() => {
+    if (demo.current && eventId !== null) demo.current.innerHTML = `<near-event event="${eventId}"></near-event>`;
+  }, [eventId]);
 
   return (
-    <div className="space-y-7 pt-4">
-      <div className="space-y-2">
-        <h1 className="text-4xl font-semibold tracking-tight">Show up. Split the pool.</h1>
-        <p className="text-lg text-muted">Put down a small deposit. Come, and get it back plus a share of the no-shows.</p>
-      </div>
-      <div className="flex gap-6 border-b border-border" role="group" aria-label="Event lists">
-        {tabs.map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            aria-pressed={tab === k}
-            className={`h-11 -mb-px border-b-2 ${tab === k ? "border-text font-semibold" : "border-transparent text-muted"}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {error && <p className="text-warn text-sm">Could not load events: {error}</p>}
-      {!list && !error && <p className="text-muted">Loading events…</p>}
-      {list && <EventGrid items={current[2]} empty={current[3]} />}
-    </div>
-  );
-}
+    <div className="space-y-20 pt-6 pb-10">
+      <Script src="/embed.js" strategy="afterInteractive" />
 
-function EventGrid({ items, empty }: { items: EventView[]; empty?: string }) {
-  if (items.length === 0) return <p className="text-muted">{empty}</p>;
-  return (
-    <div className="grid gap-x-6 gap-y-8 grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
-      {items.map((e) => (
-        <Link key={e.id} href={`/e/${e.id}`} className="flex flex-col gap-2 group">
-          <Cover event={e} className="aspect-[16/10] w-full rounded-2xl [&>span]:hidden group-hover:opacity-90 transition-opacity" />
-          <span className="text-sm text-muted">
-            {new Date(e.metadata.starts_at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-            {e.metadata.location && ` · ${e.metadata.location}`}
-          </span>
-          <span className="font-semibold text-[17px]">{e.metadata.title}</span>
-          <span className="text-sm text-muted">
-            {e.status === "Finalized"
-              ? `${e.attended_count} of ${e.guest_count} came · ${formatUsdc(e.payout_per_attendee)} USDC each`
-              : `${formatUsdc(e.deposit)} USDC · ${e.guest_count >= e.capacity ? "full" : `${e.guest_count} going`}`}
-          </span>
-        </Link>
-      ))}
+      <section className="grid gap-10 md:grid-cols-[1.1fr_1fr] items-center">
+        <div className="space-y-5">
+          <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight leading-[1.05]">
+            Half your RSVPs don’t show up. Make them.
+          </h1>
+          <p className="text-lg text-muted max-w-lg">
+            Add a refundable deposit to registration on the site you already have. People who come get it back plus a
+            share of the no-shows. You run it from Telegram. No fee.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {BOT ? (
+              <a href={`https://t.me/${BOT}`} className="btn btn-accent !py-3">Start in Telegram</a>
+            ) : (
+              <Link href="/widget" className="btn btn-accent !py-3">Get the button</Link>
+            )}
+            <Link href="/widget" className="btn btn-ghost !py-3">See the widget</Link>
+          </div>
+          <p className="text-sm text-muted">Works on Tilda, Webflow, WordPress, Wix, any HTML page, and next to Luma.</p>
+        </div>
+        <div className="rounded-3xl border border-border p-5 sm:p-8 bg-[color-mix(in_srgb,var(--accent)_5%,var(--bg))]">
+          <div className="text-xs text-muted mb-3">This is the real widget, live on testnet:</div>
+          <div ref={demo}>{eventId === null && <div className="h-56 rounded-2xl bg-border/40" />}</div>
+        </div>
+      </section>
+
+      <section className="space-y-6">
+        <h2 className="text-2xl font-semibold tracking-tight">How it works</h2>
+        <div className="grid gap-6 sm:grid-cols-3">
+          {[
+            ["Create the event in Telegram", "Tell the bot the name, date, deposit and spots. Confirm once with Google. The event and its money stay under your account."],
+            ["Put the button on your site", "Two lines of code, or send one prompt to your AI agent. Already on Luma or Typeform? Guests pay first, then land on your usual form."],
+            ["Check people in, pay out", "Tap guests in Telegram or scan their QR. Close the event and everyone who came splits the pool. Refund anyone in one tap."],
+          ].map(([t, d], i) => (
+            <div key={t} className="space-y-2">
+              <div className="w-8 h-8 rounded-full bg-accent-soft text-accent font-semibold flex items-center justify-center">{i + 1}</div>
+              <div className="font-semibold">{t}</div>
+              <p className="text-sm text-muted">{d}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="grid gap-8 md:grid-cols-2">
+        <div className="space-y-3">
+          <h2 className="text-2xl font-semibold tracking-tight">Your guests</h2>
+          <ul className="space-y-2 text-muted">
+            <li>Pay with Google sign-in, a NEAR wallet, or almost any token from any chain.</li>
+            <li>Get their deposit back for coming, plus a share of the no-shows.</li>
+            <li>See where the money is: a public smart contract, not your bank account.</li>
+          </ul>
+        </div>
+        <div className="space-y-3">
+          <h2 className="text-2xl font-semibold tracking-tight">You</h2>
+          <ul className="space-y-2 text-muted">
+            <li>A message for every deposit, the guest list and a CSV, all in Telegram.</li>
+            <li>On Luma Plus: paid guests appear in Luma, and Luma check-ins count for the payout.</li>
+            <li>Never hold anyone’s money. Payouts and refunds need your confirmation.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-border p-6 sm:p-10 space-y-4">
+        <h2 className="text-2xl font-semibold tracking-tight">Have an AI agent add it</h2>
+        <p className="text-muted max-w-2xl">
+          Open Claude Code, Cursor or Codex in your website’s project and send it the prompt from the widget page. It knows
+          where the code goes for your stack. Agents can also read <a href="/llms.txt" className="text-accent">/llms.txt</a>.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Link href="/widget" className="btn btn-primary">Copy the prompt</Link>
+          <a href="/demo/balisquad.html" className="btn btn-ghost">Example: Bali Squad</a>
+        </div>
+      </section>
+
+      <section className="text-sm text-muted flex flex-wrap gap-x-6 gap-y-2">
+        <span>No platform fee</span>
+        <span>USDC on NEAR</span>
+        <span>Refund if the host cancels or disappears</span>
+        <Link href="/events" className="text-accent">Browse events</Link>
+        <Link href="/guide" className="text-accent">Guide & FAQ</Link>
+      </section>
     </div>
   );
 }

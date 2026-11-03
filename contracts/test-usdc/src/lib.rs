@@ -27,6 +27,12 @@ pub struct Contract {
 impl Contract {
     #[init]
     pub fn new() -> Self {
+        // L-02: open faucet must never land on mainnet (*.near, not *.testnet).
+        let id = env::current_account_id();
+        require!(
+            !id.as_str().ends_with(".near"),
+            "test-usdc is testnet-only; do not deploy to mainnet"
+        );
         Self { token: FungibleToken::new(b"t".to_vec()) }
     }
 

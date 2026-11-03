@@ -3,7 +3,7 @@
 export function agentPrompt(origin: string, eventId: string, element: string): string {
   return `Add a Near Events registration widget to this website.
 
-Near Events lets guests register for an event by putting down a small refundable USDC deposit; people who show up get it back plus a share of the no-shows. The widget is a dependency-free script that defines a <near-event> custom element. Its usage notes are in the header comment of ${origin}/embed.js.
+Near Events lets guests register for an event by putting down a small refundable USDC deposit; people who show up get it back plus a share of the no-shows. The widget is a dependency-free script that defines a <near-event> custom element. Full reference for agents: ${origin}/llms.txt
 
 What to add:
 1. Load the script once per page, before </body> or in <head>:

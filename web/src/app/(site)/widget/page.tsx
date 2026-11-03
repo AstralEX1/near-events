@@ -65,7 +65,7 @@ export default function WidgetBuilder() {
   const snippets = {
     script: `<script src="${origin}/embed.js" async></script>\n${element}`,
     iframe: `<iframe src="${origin}/embed/e/${eventId}${query ? `?${query}` : ""}"\n  title="Event registration" loading="lazy"\n  style="width:100%;max-width:560px;height:260px;border:0"></iframe>`,
-    link: `${origin}/e/${eventId}`,
+    link: `${origin}/p/${eventId}${look.then.trim() ? `?then=${encodeURIComponent(look.then.trim())}` : ""}`,
     agent: agentPrompt(origin, eventId, element),
   };
 
@@ -195,7 +195,7 @@ export default function WidgetBuilder() {
           />
           <Snippet title="Embed code (recommended)" note="Card resizes itself; sign-up opens in a small window where wallets and Google sign-in just work." code={snippets.script} copied={copied === "script"} onCopy={() => copy("script")} />
           <Snippet title="No scripts allowed? Use an iframe" note="Same card. Set the height yourself." code={snippets.iframe} copied={copied === "iframe"} onCopy={() => copy("iframe")} />
-          <Snippet title="Or just share the link" code={snippets.link} copied={copied === "link"} onCopy={() => copy("link")} />
+          <Snippet title="Payment link (Luma description, Instagram, WhatsApp, QR)" code={snippets.link} copied={copied === "link"} onCopy={() => copy("link")} />
           <p className="text-sm text-muted">
             Developers: listen for <code className="text-text">registered</code> on the element, or call{" "}
             <code className="text-text">NearEvents.open({eventId || "id"})</code> from your own button. See{" "}

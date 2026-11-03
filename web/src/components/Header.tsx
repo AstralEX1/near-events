@@ -19,7 +19,7 @@ export function Header() {
           <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-accent-soft text-accent">testnet</span>
         )}
         <nav className="ml-auto flex items-center gap-2 text-sm">
-          <Link href="/" className="hidden sm:inline text-muted hover:text-text px-2">Events</Link>
+          <Link href="/events" className="hidden sm:inline text-muted hover:text-text px-2">Events</Link>
           <Link href="/create" className="text-muted hover:text-text px-2">Host an event</Link>
           {accountId ? (
             <>
