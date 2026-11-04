@@ -127,15 +127,6 @@ your page ── embed.js ──► <iframe /embed/e/:id>  (card, read-only)
 4. **On the day**, the host or a co-host opens the event's *Manage* page and
    checks people in. Closing the event pays everyone who came.
 
-## Demo: Bali Squad
-
-`/demo/balisquad.html` (served by the web app, e.g.
-`http://localhost:3000/demo/balisquad.html`) is a concept page in Bali Squad's
-palette (cream `#fbf7f2`, coral `#ff401f`, forest `#0b3d2e`, Poppins with
-Instrument Serif) showing all three options: the card, the button in the
-site's own card, and the site's own button. Its testnet events (#6, #7, #8)
-were created by `web/scripts/seed-bali.mjs`.
-
 ## Before giving it to a client
 
 The snippet needs a public HTTPS host for the web app (see `docs/DEPLOY.md`).

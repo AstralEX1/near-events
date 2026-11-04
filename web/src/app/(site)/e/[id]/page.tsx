@@ -70,7 +70,7 @@ export default function EventPage() {
             </div>
           )}
           {isStaff && event.status === "Open" && (
-            <Link href={`/e/${id}/manage`} className="btn btn-ghost w-full">Check in guests</Link>
+            <Link href={`/e/${id}/manage`} className="btn btn-ghost w-full">Manage event</Link>
           )}
         </aside>
 
@@ -172,7 +172,7 @@ function MoreMenu({ id, isStaff, canSponsor, onSponsor }: { id: number; isStaff:
             {isStaff && (
               <>
                 <div className="border-t border-border my-1" />
-                <Link className={item} href={`/e/${id}/manage`}>Check in guests</Link>
+                <Link className={item} href={`/e/${id}/manage`}>Manage event</Link>
                 <Link className={item} href={`/create?from=${id}`}>Duplicate event</Link>
                 <Link className={item} href={`/widget?event=${id}`}>Put it on your website</Link>
               </>

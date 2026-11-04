@@ -5,7 +5,10 @@ import type { NearConnector } from "@hot-labs/near-connect";
 import { NETWORK } from "./config";
 import { useRouter } from "next/navigation";
 import { connectEvm, evmAccount } from "./intents";
-import { RETURN_KEY, fastAuthLogin, fastAuthLogout, fastAuthPrepare, fastAuthRestore, fastAuthSend } from "./fastauth";
+import { RETURN_KEY, fastAuthEnsure, fastAuthLogin, fastAuthLogout, fastAuthPrepare, fastAuthRestore, fastAuthSend } from "./fastauth";
+
+/** Implicit NEAR accounts from Google/email login are a 64-char hex id. */
+const isImplicit = (id: string) => /^[0-9a-f]{64}$/i.test(id);
 
 type Kind = "wallet" | "email" | "evm";
 const KIND_KEY = "near-events:login";
@@ -120,16 +123,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [kind]);
 
   const send = useCallback(async (calls: Call[]) => {
-    if (kind === "email") {
+    if (!accountId) throw new Error("Sign in first.");
+
+    // Google/email (or a stale session that still shows an implicit account id).
+    const useEmail = kind === "email" || (kind == null && isImplicit(accountId));
+    if (useEmail) {
+      await fastAuthEnsure();
       for (const call of calls) await fastAuthSend(call);
       return;
     }
     if (kind === "evm") throw new Error("EVM wallets act through NEAR Intents; this action needs a NEAR account.");
+
     const c = connector.current;
-    if (!c) throw new Error("Wallet is still loading");
+    if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");
     const wallet = await c.wallet();
+    const accounts = await wallet.getAccounts().catch(() => []);
+    const signerId = accounts[0]?.accountId ?? accountId;
+    if (!signerId) throw new Error("Wallet session expired. Sign in again.");
+
+    // Wallets that build the NEAR tx client-side need signerId; without it
+    // near-api-js throws "Expected string not undefined at value.signerId".
     await wallet.signAndSendTransactions({
       transactions: calls.map((call) => ({
+        signerId,
         receiverId: call.receiverId,
         actions: [
           {
@@ -144,7 +160,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         ],
       })),
     });
-  }, [kind]);
+  }, [kind, accountId]);
 
   return (
     <WalletContext.Provider value={{ accountId, kind, ready, signIn, signInWithEmail, signInWithEvm, signOut, send }}>{children}</WalletContext.Provider>

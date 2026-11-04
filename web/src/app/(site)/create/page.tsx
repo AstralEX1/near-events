@@ -128,7 +128,7 @@ export default function CreateEvent() {
     }
   };
 
-  if (created) return <Created event={created} lumaUrl={imported} />;
+  if (created) return <Created event={created} />;
 
   const preview = { id: 0, metadata: { title: form.title || "Event", cover_url: encodeTheme(theme) } } as EventView;
 
@@ -307,6 +307,12 @@ export default function CreateEvent() {
               <SignInOptions />
             </div>
           )}
+          <p className="text-xs text-muted">
+            After create you get your event page, plus an embed for your own site.{" "}
+            <Link href="/widget" className="text-accent hover:underline">
+              Want to integrate on your website?
+            </Link>
+          </p>
           <p className="text-xs text-muted">
             A little NEAR is attached for on-chain storage and comes back when the event closes.
           </p>
@@ -643,12 +649,12 @@ function ThemeBar({ theme, onChange, onClose }: { theme: Theme; onChange: (t: Th
   );
 }
 
-/** After creating: the three ways to take registrations. */
-function Created({ event, lumaUrl }: { event: EventView; lumaUrl: string | null }) {
+/** After creating: share our page, or embed on the host’s own site. */
+function Created({ event }: { event: EventView }) {
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
   const page = `${origin}/e/${event.id}`;
-  const pay = `${origin}/p/${event.id}`;
+  const widget = `${origin}/widget?event=${event.id}`;
   return (
     <div className="max-w-xl mx-auto space-y-6">
       <div className="flex gap-4 items-center">
@@ -656,37 +662,72 @@ function Created({ event, lumaUrl }: { event: EventView; lumaUrl: string | null 
         <div>
           <div className="text-sm text-good font-medium">✓ Event created</div>
           <h1 className="text-2xl font-semibold tracking-tight">{event.metadata.title}</h1>
+          <p className="text-sm text-muted mt-1">Share the page, or put the widget on your own site.</p>
         </div>
       </div>
+
       <div className="space-y-3">
-        <Way title="Your event page" text="Share it anywhere. Registration, deposit and check-in all happen here." value={page} />
-        {lumaUrl && (
-          <Way
-            title="On your Luma event"
-            text="Replace Luma's register button: put this link at the top of the Luma description and turn on Require Approval, so all sign-ups come here."
-            value={pay}
-          />
-        )}
-        <Way title="On your website" text="Add the button with two lines of code, or let your AI agent do it." value={`${origin}/widget?event=${event.id}`} link />
+        <Way
+          title="1 · Near Events page"
+          text="Share this link. Registration, deposit and check-in all happen here."
+          value={page}
+        />
+        <Way
+          title="2 · Your own website"
+          text="Two lines of code, or paste a prompt into Cursor / Claude and let it add the widget."
+          value={widget}
+          link
+          linkLabel="Open integrate guide"
+          extra={
+            <Link href={widget} className="text-sm font-medium text-accent hover:underline">
+              Want to integrate on your website? →
+            </Link>
+          }
+        />
       </div>
-      <div className="flex gap-3">
-        <Link href={`/e/${event.id}`} className="btn btn-primary">Open event page</Link>
-        <Link href={`/e/${event.id}/manage`} className="btn btn-ghost">Check-in page</Link>
+
+      <div className="flex flex-wrap gap-3">
+        <Link href={`/e/${event.id}`} className="btn btn-primary">
+          Open event page
+        </Link>
+        <Link href={`/e/${event.id}/manage`} className="btn btn-ghost">
+          Manage event
+        </Link>
+        <Link href={widget} className="btn btn-ghost">
+          Integrate widget
+        </Link>
       </div>
     </div>
   );
 }
 
-function Way({ title, text, value, link }: { title: string; text: string; value: string; link?: boolean }) {
+function Way({
+  title,
+  text,
+  value,
+  link,
+  linkLabel,
+  extra,
+}: {
+  title: string;
+  text: string;
+  value: string;
+  link?: boolean;
+  linkLabel?: string;
+  extra?: ReactNode;
+}) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="card p-4 space-y-2">
       <div className="font-medium">{title}</div>
       <p className="text-sm text-muted">{text}</p>
+      {extra}
       <div className="flex gap-2">
         <code className="flex-1 min-w-0 truncate text-xs bg-bg rounded-lg px-3 py-2 border border-border">{value}</code>
         {link ? (
-          <a href={value} className="btn btn-ghost !py-1.5 text-sm">Open</a>
+          <a href={value} className="btn btn-ghost !py-1.5 text-sm">
+            {linkLabel ?? "Open"}
+          </a>
         ) : (
           <button
             type="button"
