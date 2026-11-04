@@ -10,6 +10,20 @@ import { RETURN_KEY, fastAuthEnsure, fastAuthLogin, fastAuthLogout, fastAuthPrep
 /** Implicit NEAR accounts from Google/email login are a 64-char hex id. */
 const isImplicit = (id: string) => /^[0-9a-f]{64}$/i.test(id);
 
+/**
+ * A named account from the other network (e.g. `name.near` while the site runs
+ * on testnet). Wallets can stay signed in to mainnet; the transaction then goes
+ * to testnet, where that account and its key don't exist, and the wallet only
+ * says "access key ... doesn't exist".
+ */
+function wrongNetwork(id: string): boolean {
+  if (isImplicit(id) || /^0x[0-9a-f]{40}$/i.test(id)) return false;
+  return NETWORK === "testnet" ? !id.endsWith(".testnet") : id.endsWith(".testnet");
+}
+const wrongNetworkMessage = (id: string) =>
+  `${id} is a ${NETWORK === "testnet" ? "mainnet" : "testnet"} account, but this site runs on ${NETWORK}. ` +
+  `Sign out, switch your wallet to ${NETWORK} and sign in with a ${NETWORK === "testnet" ? "name.testnet" : "name.near"} account.`;
+
 type Kind = "wallet" | "email" | "evm";
 const KIND_KEY = "near-events:login";
 
@@ -140,6 +154,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const accounts = await wallet.getAccounts().catch(() => []);
     const signerId = accounts[0]?.accountId ?? accountId;
     if (!signerId) throw new Error("Wallet session expired. Sign in again.");
+    if (wrongNetwork(signerId)) throw new Error(wrongNetworkMessage(signerId));
 
     // Wallets that build the NEAR tx client-side need signerId; without it
     // near-api-js throws "Expected string not undefined at value.signerId".
