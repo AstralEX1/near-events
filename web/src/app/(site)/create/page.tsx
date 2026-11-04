@@ -9,48 +9,8 @@ import { Cover } from "@/components/ui";
 import { Themed } from "@/components/Themed";
 import { COLORS, FONTS, THEMES, decodeTheme, defaultTheme, encodeTheme, shuffleTheme, themeCover, themeStyle, type FontKey, type Theme, type ThemeName } from "@/lib/theme";
 import { SignInOptions } from "@/components/SignIn";
+import { LOCAL_TZ, city, dayLabel, fromEpoch, gmtLabel, toEpoch } from "@/lib/time";
 
-// ---- Time zones: the host picks wall-clock time in a zone, we store UTC ms. ----
-
-const LOCAL_TZ = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC";
-
-/** Milliseconds the zone is ahead of UTC at instant `ts`. */
-function zoneOffset(tz: string, ts: number): number {
-  const p = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
-      .formatToParts(ts)
-      .map((x) => [x.type, x.value]),
-  );
-  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(ts / 1000) * 1000;
-}
-
-/** "2026-11-05" + "18:30" in `tz` → UTC ms. */
-function toEpoch(date: string, time: string, tz: string): number {
-  const [y, m, d] = date.split("-").map(Number);
-  const [h, mi] = time.split(":").map(Number);
-  const wall = Date.UTC(y, m - 1, d, h, mi);
-  const first = wall - zoneOffset(tz, wall);
-  return wall - zoneOffset(tz, first);
-}
-
-/** UTC ms → wall-clock date and time in `tz`. */
-function fromEpoch(ts: number, tz: string): { date: string; time: string } {
-  const s = new Date(ts + zoneOffset(tz, ts)).toISOString();
-  return { date: s.slice(0, 10), time: s.slice(11, 16) };
-}
-
-function gmtLabel(tz: string, ts = Date.now()): string {
-  const min = Math.round(zoneOffset(tz, ts) / 60000);
-  const a = Math.abs(min);
-  return `GMT${min < 0 ? "−" : "+"}${String(Math.floor(a / 60)).padStart(2, "0")}:${String(a % 60).padStart(2, "0")}`;
-}
-
-const city = (tz: string) => tz.split("/").pop()!.replace(/_/g, " ");
-
-function dayLabel(date: string): string {
-  const [y, m, d] = date.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
-}
 
 const SLOTS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
 

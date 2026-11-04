@@ -12,6 +12,7 @@ import { SponsorButton } from "@/components/Sponsor";
 import { EVENTS_CONTRACT, EXPLORER_URL } from "@/lib/config";
 import { Themed } from "@/components/Themed";
 import { decodeTheme } from "@/lib/theme";
+import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
 
 /**
  * The hosted event page, laid out like Luma so hosts and guests feel at home.
@@ -47,7 +48,7 @@ export default function EventPage() {
   // the left; title, time, place, the registration card and the description on the right.
   return (
     <Themed theme={decodeTheme(event.metadata.cover_url)}>
-      <div className="grid gap-8 lg:gap-10 md:grid-cols-[300px_1fr] items-start max-w-4xl mx-auto">
+      <div className="grid gap-8 md:grid-cols-[330px_1fr] items-start max-w-[928px] mx-auto">
         <aside className="space-y-6">
           <Cover event={event} className="aspect-square w-full rounded-2xl shadow-sm [&>span]:hidden" />
           <div>
@@ -77,7 +78,7 @@ export default function EventPage() {
           <div className="flex items-start gap-2">
             <div className="min-w-0">
               {event.status !== "Open" && <StatusPill status={event.status} />}
-              <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight mt-1">{event.metadata.title}</h1>
+              <h1 className="text-3xl sm:text-[40px] sm:leading-[1.15] font-semibold tracking-tight mt-1">{event.metadata.title}</h1>
             </div>
             <MoreMenu id={id} isStaff={isStaff} canSponsor={event.status === "Open"} onSponsor={() => setSponsoring(true)} />
           </div>
@@ -87,11 +88,17 @@ export default function EventPage() {
               <DateBadge ms={event.metadata.starts_at} />
               <div className="text-sm">
                 <div className="font-medium">{formatWhen(event.metadata.starts_at, event.metadata.ends_at)}</div>
-                <div className="text-muted">{Intl.DateTimeFormat().resolvedOptions().timeZone}</div>
+                <div className="text-muted">
+                  {gmtLabel(LOCAL_TZ, event.metadata.starts_at)} · {city(LOCAL_TZ)}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 shrink-0 rounded-lg border border-border bg-surface flex items-center justify-center">📍</div>
+              <div className="w-11 h-11 shrink-0 rounded-lg lu-field flex items-center justify-center text-muted">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 21s-7-6.2-7-11.5A7 7 0 0119 9.5C19 14.8 12 21 12 21zM12 12a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
+                </svg>
+              </div>
               <div className="text-sm">
                 <div className="font-medium">{event.metadata.location || "Location TBA"}</div>
                 <div className="text-muted">
