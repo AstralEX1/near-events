@@ -9,7 +9,7 @@ import { SignInMenu } from "./SignIn";
 
 const BOT = process.env.NEXT_PUBLIC_TELEGRAM_BOT;
 
-/** Lean nav on marketing pages so the page CTA stays the conversion path. */
+/** On marketing pages: Luma-lean — logo + Create (+ Sign in only when needed). */
 export function Header() {
   const { accountId, signOut } = useWallet();
   const path = usePathname() || "/";
@@ -33,8 +33,8 @@ export function Header() {
             </Link>
           )}
           {marketing ? (
-            <a href={hostHref} className="btn btn-accent !py-1.5 !px-3 !text-sm">
-              Create event
+            <a href={hostHref} className="btn btn-primary !rounded-full !py-1.5 !px-4 !text-sm">
+              Create Event
             </a>
           ) : (
             <Link href="/create" className="text-muted hover:text-text px-2">
@@ -52,7 +52,7 @@ export function Header() {
               </button>
             </>
           ) : (
-            !marketing && <SignInMenu />
+            <SignInMenu />
           )}
         </nav>
       </div>
