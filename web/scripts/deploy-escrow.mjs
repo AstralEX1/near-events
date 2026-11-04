@@ -1,6 +1,7 @@
 // Deploys the escrow to a fresh testnet sub-account of the deployer and initialises it.
 // Keys are read from ~/.near-credentials (never printed); the new account's key is saved there too.
-// Env: DEPLOYER, NEW_ACCOUNT (prefix), USDC_CONTRACT, RELAYER_ACCOUNT, WASM
+// Env: DEPLOYER, NEW_ACCOUNT (prefix), USDC_CONTRACT, RELAYER_ACCOUNT, WASM,
+// optional INTENTS_CONTRACT (e.g. verifier.tidepool-sandbox.testnet) and NEAR_AMOUNT (default 5)
 import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { Account, JsonRpcProvider, KeyPair, parseNearAmount } from "near-api-js";
@@ -13,7 +14,7 @@ const deployer = new Account(DEPLOYER, provider, creds(DEPLOYER).private_key);
 
 const id = `${PREFIX}.${DEPLOYER}`;
 const key = KeyPair.fromRandom("ed25519");
-await deployer.createSubAccount({ accountOrPrefix: PREFIX, publicKey: key.getPublicKey().toString(), nearToTransfer: BigInt(parseNearAmount("5")) });
+await deployer.createSubAccount({ accountOrPrefix: PREFIX, publicKey: key.getPublicKey().toString(), nearToTransfer: BigInt(parseNearAmount(process.env.NEAR_AMOUNT ?? "5")) });
 writeFileSync(
   `${homedir()}/.near-credentials/testnet/${id}.json`,
   JSON.stringify({ account_id: id, public_key: key.getPublicKey().toString(), private_key: key.toString() }),
@@ -21,5 +22,7 @@ writeFileSync(
 );
 const contract = new Account(id, provider, key.toString());
 await contract.deployContract(new Uint8Array(readFileSync(WASM)));
-await contract.callFunction({ contractId: id, methodName: "new", args: { usdc: USDC, intents: null, relayer: RELAYER }, gas: 100_000_000_000_000n });
+await contract.callFunction({ contractId: id, methodName: "new", args: { usdc: USDC, intents: process.env.INTENTS_CONTRACT || null, relayer: RELAYER }, gas: 100_000_000_000_000n });
+// The escrow must hold a USDC storage registration to receive deposits.
+await deployer.callFunction({ contractId: USDC, methodName: "storage_deposit", args: { account_id: id, registration_only: true }, deposit: BigInt(parseNearAmount("0.0125")), gas: 30_000_000_000_000n });
 console.log("deployed", id);

@@ -4,9 +4,9 @@ import Link from "next/link";
 const GUEST = [
   ["Find an event", "Open the event link from the organizer, or browse events on the home page."],
   ["Sign in", "Google or email works, no crypto needed: we create a NEAR account for you. NEAR and EVM wallets work too."],
-  ["Put down the deposit", "Press Register. On testnet the test USDC is minted for you. On mainnet you can pay with almost any token from any chain."],
+  ["Put down the deposit", "Press Register. The deposit goes through NEAR Intents: pay with USDC from your NEAR wallet or with almost any token from any chain. On testnet the test USDC comes from a faucet."],
   ["Come and get checked in", "Show the QR code from the event page at the door. Your badge turns “Checked in ✓”."],
-  ["Withdraw", "When the host closes the event, press “Withdraw payout” on the event page: your deposit plus your share of the no-shows."],
+  ["Withdraw", "When the host closes the event, press Withdraw on the event page: your deposit plus your share of the no-shows, sent through NEAR Intents to any chain or wallet."],
 ];
 
 const HOST = [
@@ -23,7 +23,7 @@ const FAQ = [
   ["What if the host forgets to close the event?", "30 days after it ends, anyone can trigger a full refund to every guest."],
   ["What if I came but wasn’t checked in?", "Tell the host before they close the event; they can still check you in. A photo from the event helps."],
   ["Why USDC?", "So the deposit is worth the same at the door as when you paid it."],
-  ["Is there a time limit to withdraw?", "No. Your payout stays in your balance until you withdraw it or use it for your next event."],
+  ["Is there a time limit to withdraw?", "No. Your payout stays in your balance until you withdraw it."],
 ];
 
 export default function Guide() {
