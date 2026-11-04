@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { events, formatUsdc, type EventView } from "@/lib/near";
-import { EVENTS_CONTRACT, NETWORK } from "@/lib/config";
+import { EVENTS_CONTRACT, NETWORK, ONECLICK_REGISTERS } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import type { OneClickToken } from "@/lib/oneclick";
 import { nep141Contract, payDepositAddress } from "@/lib/oneclickClient";
@@ -34,7 +34,8 @@ export default function PayFromAnyChain() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const live = NETWORK === "mainnet";
+  // Only a 1Click that honours customRecipientMsg can register the guest.
+  const live = ONECLICK_REGISTERS;
 
   useEffect(() => {
     events.get(id).then(setEvent);
@@ -112,10 +113,10 @@ export default function PayFromAnyChain() {
         <b className="text-text">{formatUsdc(event.deposit)} USDC</b> and delivers it to the event escrow, which registers{" "}
         {accountId ? <b className="text-text">{accountId}</b> : "you"} in the same step. Anything extra is refunded.
       </p>
-      {!live && (
+      {NETWORK === "testnet" && (
         <div className="card p-3 text-sm border-accent/40 bg-accent-soft/40">
-          NEAR Intents runs on mainnet only, so on testnet this shows a live <b>price preview</b> (dry quote). On testnet,
-          register with test USDC from the event page.
+          Testnet runs on Tidepool, a NEAR Intents 1Click sandbox. It can’t register a guest inside the swap yet, so this
+          page shows a live <b>price preview</b>. On testnet, register with free test USDC from the event page.
         </div>
       )}
 

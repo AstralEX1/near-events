@@ -91,9 +91,9 @@ export async function registerFromIntents(address: string, eventId: number, depo
 }
 
 /**
- * Moves USDC from the wallet's Intents balance to a 1Click deposit address
- * (a quote with depositType INTENTS): 1Click then swaps it and sends it to
- * the chosen chain. One signature, no gas.
+ * Moves USDC from the wallet's Intents balance to another Intents account:
+ * a 1Click deposit address (quote with depositType INTENTS, which 1Click then
+ * swaps and sends to the chosen chain) or any Intents wallet. One signature, no gas.
  */
 export async function transferFromIntents(address: string, depositAddress: string, amount: string): Promise<void> {
   await signAndRelay(address, { intent: "transfer", receiver_id: depositAddress, tokens: { [`nep141:${USDC_CONTRACT}`]: amount } });

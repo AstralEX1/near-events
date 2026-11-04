@@ -4,11 +4,11 @@ import { relayer } from "@/lib/relayer";
 
 // Submits a guest's signed intent to intents.near; the relayer pays the gas.
 // Only two shapes are relayed: a registration (one `ft_withdraw` of USDC to the
-// escrow with a register message) and a cash-out (one USDC `transfer` to a
-// 1Click deposit address). The signature itself is checked on-chain.
+// escrow with a register message) and a cash-out (one USDC `transfer` inside
+// NEAR Intents). The signature itself is checked on-chain.
 export async function POST(req: Request) {
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
-  if (!INTENTS_CONTRACT) return Response.json({ error: "NEAR Intents is mainnet only" }, { status: 403 });
+  if (!INTENTS_CONTRACT) return Response.json({ error: "NEAR Intents is not configured" }, { status: 403 });
   const signed = await req.json();
   type Intent = { intent: string; token?: string; receiver_id?: string; msg?: string; tokens?: Record<string, string> };
   let payload: { intents?: Intent[] };
@@ -31,10 +31,11 @@ export async function POST(req: Request) {
       return false;
     }
   };
-  // Cash-out: USDC only, to a 1Click deposit address (a 64-hex implicit account).
+  // Cash-out: a USDC-only transfer inside NEAR Intents (to a 1Click deposit
+  // address or to another Intents account).
   const isCashOut = (i: Intent) =>
     i.intent === "transfer" &&
-    /^[0-9a-f]{64}$/.test(i.receiver_id ?? "") &&
+    /^(([a-z0-9]+[-_])*[a-z0-9]+\.)*([a-z0-9]+[-_])*[a-z0-9]+$/.test(i.receiver_id ?? "") &&
     Object.keys(i.tokens ?? {}).join() === `nep141:${USDC_CONTRACT}`;
   const ok = signed.standard === "erc191" && intents.length === 1 && (isRegister(one) || isCashOut(one));
   if (!ok) return Response.json({ error: "Only Near Events registrations and cash-outs are relayed" }, { status: 400 });

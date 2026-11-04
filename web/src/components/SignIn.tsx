@@ -38,7 +38,7 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
       >
         Connect a NEAR wallet
       </button>
-      {/* EVM wallets sign in through NEAR Intents, which exists on mainnet only. */}
+      {/* EVM wallets sign in through NEAR Intents (Tidepool's verifier on testnet). */}
       {HAS_INTENTS && (
         <button className="btn btn-ghost w-full" disabled={!ready || busy} onClick={run(signInWithEvm)}>
           MetaMask, Rabby or another EVM wallet
