@@ -5,13 +5,17 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { events, formatUsdc, type EventView, type GuestStatus } from "@/lib/near";
 import { Avatar, Cover, StatusPill, shortAccount } from "@/components/ui";
+import { Timeline } from "@/components/Timeline";
 
 interface Row {
   event: EventView;
   status: GuestStatus | null;
 }
 
-/** Public track record, like Kickback's profile: what someone signed up for and whether they came. */
+/**
+ * A person's public page: for hosts, their events like a Luma calendar page;
+ * for guests, a Kickback-style track record of what they signed up for and whether they came.
+ */
 export default function Profile() {
   const account = decodeURIComponent(useParams<{ account: string }>().account);
   const [rows, setRows] = useState<Row[] | null>(null);
@@ -43,6 +47,18 @@ export default function Profile() {
         </div>
       </div>
 
+      {hosting.length > 0 && (
+        <section className="space-y-4">
+          <h2 className="text-xl font-semibold">Events by {shortAccount(account)}</h2>
+          <Timeline
+            items={[...hosting].sort((a, b) =>
+              a.status === b.status ? a.metadata.starts_at - b.metadata.starts_at : a.status === "Open" ? -1 : 1,
+            )}
+            empty=""
+          />
+        </section>
+      )}
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border rounded-2xl overflow-hidden border border-border">
         {[
           ["Registered", rows ? String(rows.length) : "…"],
@@ -58,7 +74,7 @@ export default function Profile() {
       </div>
 
       <List title="Events" rows={rows ?? []} empty={rows ? "No events yet." : "Loading…"} />
-      {hosting.length > 0 && <List title="Hosting" rows={hosting.map((event) => ({ event, status: null }))} />}
+
     </div>
   );
 }

@@ -32,8 +32,8 @@ export default function Landing() {
             Half your RSVPs don’t show up. Make them.
           </h1>
           <p className="text-lg text-muted max-w-lg">
-            Add a refundable deposit to registration on the site you already have. People who come get it back plus a
-            share of the no-shows. You run it from Telegram. No fee.
+            Add a refundable deposit to registration. People who come get it back plus a share of the no-shows. Run it
+            from Telegram. No fee.
           </p>
           <div className="flex flex-wrap gap-3">
             {BOT ? (
@@ -41,13 +41,30 @@ export default function Landing() {
             ) : (
               <Link href="/widget" className="btn btn-accent !py-3">Get the button</Link>
             )}
-            <Link href="/widget" className="btn btn-ghost !py-3">See the widget</Link>
+            <Link href="/create" className="btn btn-ghost !py-3">Create an event</Link>
           </div>
-          <p className="text-sm text-muted">Works on Tilda, Webflow, WordPress, Wix, any HTML page, and next to Luma.</p>
+          <p className="text-sm text-muted">Your own event page, a link next to Luma, or a button on Tilda, Webflow, WordPress or any site.</p>
         </div>
         <div className="rounded-3xl border border-border p-5 sm:p-8 bg-[color-mix(in_srgb,var(--accent)_5%,var(--bg))]">
           <div className="text-xs text-muted mb-3">This is the real widget, live on testnet:</div>
           <div ref={demo}>{eventId === null && <div className="h-56 rounded-2xl bg-border/40" />}</div>
+        </div>
+      </section>
+
+      <section className="space-y-6">
+        <h2 className="text-2xl font-semibold tracking-tight">Three ways to use it</h2>
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            ["Event page", "A page for your event, set up like Luma: cover, time, place, registration with a deposit, guest list, check-in.", "/create", "Create an event"],
+            ["Next to Luma", "Paste your Luma link and we import the event. Put our link on Luma instead of its register button; everyone signs up and pays here.", "/create", "Import from Luma"],
+            ["On your website", "A button or event card on the site you already have. Two lines of code, or one prompt for your AI agent.", "/widget", "Get the button"],
+          ].map(([t, d, href, cta]) => (
+            <Link key={t} href={href} className="card p-5 flex flex-col gap-2 hover:border-accent/40 transition-colors">
+              <div className="font-semibold text-lg">{t}</div>
+              <p className="text-sm text-muted flex-1">{d}</p>
+              <span className="text-sm text-accent font-medium">{cta} →</span>
+            </Link>
+          ))}
         </div>
       </section>
 

@@ -5,15 +5,16 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, type EventView, type GuestView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
-import { Cover, StatusPill, formatWhen, shortAccount } from "@/components/ui";
+import { Avatar, AvatarStack, Cover, DateBadge, StatusPill, eventHue, formatWhen, shortAccount } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
 import { GuestGrid } from "@/components/EventParts";
 import { SponsorButton } from "@/components/Sponsor";
 import { EVENTS_CONTRACT, EXPLORER_URL } from "@/lib/config";
 
 /**
- * Kept minimal, like Kickback: the event on the left, one card on the right
- * that changes with your state (register → going → withdraw). Extras live in "…".
+ * The hosted event page, laid out like Luma so hosts and guests feel at home.
+ * The registration card changes with your state (register → going → withdraw);
+ * extras live in "…".
  */
 export default function EventPage() {
   const id = Number(useParams<{ id: string }>().id);
@@ -38,45 +39,93 @@ export default function EventPage() {
   const me = guests.find((g) => g.account_id === accountId);
   const isStaff = !!accountId && (accountId === event.host || event.cohosts.includes(accountId));
 
+  const hue = eventHue(event);
+  const going = guests.map((g) => g.account_id);
+
+  // Luma's layout in our colors: cover, hosts and who's going on the left;
+  // title, time, place, the registration card and the description on the right.
   return (
-    <div className="grid gap-8 lg:gap-12 md:grid-cols-[1.15fr_1fr] items-start">
-      <section className="space-y-5 min-w-0">
-        <div>
-          <div className="flex items-center gap-2 text-muted">
-            {formatWhen(event.metadata.starts_at, event.metadata.ends_at)}
-            {event.status === "Cancelled" && <StatusPill status={event.status} />}
+    <div className="relative">
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-10 opacity-60"
+        style={{
+          background: `radial-gradient(60% 50% at 15% 0%, hsl(${hue} 90% 85% / 0.55), transparent 70%),
+            radial-gradient(50% 40% at 90% 10%, hsl(${(hue + 60) % 360} 90% 85% / 0.45), transparent 70%)`,
+        }}
+      />
+      <div className="grid gap-8 lg:gap-10 md:grid-cols-[300px_1fr] items-start max-w-4xl mx-auto">
+        <aside className="space-y-6">
+          <Cover event={event} className="aspect-square w-full rounded-2xl shadow-sm [&>span]:hidden" />
+          <div>
+            <div className="label pb-2 mb-3 border-b border-border">Hosted by</div>
+            <div className="space-y-2.5">
+              {[event.host, ...event.cohosts].map((a, i) => (
+                <Link key={a} href={`/u/${encodeURIComponent(a)}`} className="flex items-center gap-2 text-sm hover:text-accent">
+                  <Avatar account={a} size={24} />
+                  <span className="truncate font-medium">{shortAccount(a)}</span>
+                  {i > 0 && <span className="text-xs text-muted">door</span>}
+                </Link>
+              ))}
+            </div>
+          </div>
+          {going.length > 0 && (
+            <div>
+              <div className="label pb-2 mb-3 border-b border-border">{event.guest_count} going</div>
+              <AvatarStack accounts={going} max={9} />
+            </div>
+          )}
+          {isStaff && event.status === "Open" && (
+            <Link href={`/e/${id}/manage`} className="btn btn-ghost w-full">Check in guests</Link>
+          )}
+        </aside>
+
+        <section className="space-y-6 min-w-0">
+          <div className="flex items-start gap-2">
+            <div className="min-w-0">
+              {event.status !== "Open" && <StatusPill status={event.status} />}
+              <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight mt-1">{event.metadata.title}</h1>
+            </div>
             <MoreMenu id={id} isStaff={isStaff} canSponsor={event.status === "Open"} onSponsor={() => setSponsoring(true)} />
           </div>
-          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight mt-2">{event.metadata.title}</h1>
-        </div>
 
-        <Cover event={event} className="aspect-[16/10] w-full rounded-2xl [&>span]:hidden" />
-
-        <div className="space-y-2 text-[15px] text-text/80">
-          <div className="flex items-center gap-2">
-            <span>Hosted by</span>
-            <Link href={`/u/${encodeURIComponent(event.host)}`} className="font-medium hover:text-accent truncate">
-              {shortAccount(event.host)}
-            </Link>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <DateBadge ms={event.metadata.starts_at} />
+              <div className="text-sm">
+                <div className="font-medium">{formatWhen(event.metadata.starts_at, event.metadata.ends_at)}</div>
+                <div className="text-muted">{Intl.DateTimeFormat().resolvedOptions().timeZone}</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 shrink-0 rounded-lg border border-border bg-surface flex items-center justify-center">📍</div>
+              <div className="text-sm">
+                <div className="font-medium">{event.metadata.location || "Location TBA"}</div>
+                <div className="text-muted">
+                  {formatUsdc(event.deposit)} USDC deposit · pool {formatUsdc(event.total_pool)} USDC
+                </div>
+              </div>
+            </div>
           </div>
-          <div>{event.metadata.location || "Location TBA"}</div>
-          <div>
-            Pot {formatUsdc(event.total_pool)} USDC
-            <span className="text-muted"> · {formatUsdc(event.deposit)} USDC per guest</span>
+
+          {sponsoring && <SponsorButton event={event} onDone={load} startOpen onClose={() => setSponsoring(false)} />}
+          <div className="card overflow-hidden bg-surface/80 backdrop-blur">
+            <div className="px-4 py-2.5 text-sm font-medium text-muted border-b border-border">Registration</div>
+            <div className="p-4">
+              <RegistrationCard event={event} myStatus={me?.status ?? null} onChange={load} />
+            </div>
           </div>
-        </div>
 
-        {event.metadata.description && <p className="whitespace-pre-wrap leading-relaxed">{event.metadata.description}</p>}
-      </section>
+          {event.metadata.description && (
+            <div>
+              <div className="label pb-2 mb-3 border-b border-border">About event</div>
+              <p className="whitespace-pre-wrap leading-relaxed">{event.metadata.description}</p>
+            </div>
+          )}
 
-      <section className="space-y-5 md:sticky md:top-20 md:pt-[4.5rem]">
-        {sponsoring && <SponsorButton event={event} onDone={load} startOpen onClose={() => setSponsoring(false)} />}
-        <RegistrationCard event={event} myStatus={me?.status ?? null} onChange={load} />
-        <GuestGrid event={event} guests={guests} me={accountId} />
-        {isStaff && event.status === "Open" && (
-          <Link href={`/e/${id}/manage`} className="block text-sm text-accent">Check in guests →</Link>
-        )}
-      </section>
+          {event.status !== "Open" && <GuestGrid event={event} guests={guests} me={accountId} />}
+        </section>
+      </div>
     </div>
   );
 }
@@ -87,7 +136,7 @@ function MoreMenu({ id, isStaff, canSponsor, onSponsor }: { id: number; isStaff:
   const [copied, setCopied] = useState(false);
   const item = "block w-full text-left px-3 py-2 rounded-lg hover:bg-border/50";
   return (
-    <div className="relative ml-auto">
+    <div className="relative ml-auto shrink-0">
       <button className="w-8 h-8 rounded-lg hover:bg-border/50 text-muted" aria-label="More" onClick={() => setOpen(!open)}>
         •••
       </button>
