@@ -96,14 +96,15 @@ export default function WidgetBuilder() {
       <Script src="/embed.js" strategy="afterInteractive" />
       <div className="max-w-2xl space-y-3">
         <p className="text-sm text-muted">
-          <Link href="/" className="hover:text-text">
-            Near Events
-          </Link>{" "}
-          · Integrate widget
+          <Link href="/create" className="hover:text-text">
+            ← Create event
+          </Link>
+          {" · "}
+          Integrate
         </p>
-        <h1 className="text-3xl font-semibold tracking-tight">Integrate widget</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Integrate on your site</h1>
         <p className="text-muted">
-          Keep your existing page. Guests pay the deposit with us; you keep Luma or your own landing as the front door.
+          Keep Luma or your landing as the front door. Guests leave the deposit with us. Easiest path: copy the AI prompt and paste it into Cursor or Claude.
         </p>
       </div>
 
@@ -229,9 +230,15 @@ export default function WidgetBuilder() {
               </div>
               <div ref={preview} />
             </div>
-            <Snippet title="Embed code" note="Recommended. Sign-up opens in a small window." code={snippets.script} copied={copied === "script"} onCopy={() => copy("script")} />
-            <Snippet title="Iframe" note="If your site blocks scripts." code={snippets.iframe} copied={copied === "iframe"} onCopy={() => copy("iframe")} />
-            <Snippet title="AI agent prompt" code={snippets.agent} copied={copied === "agent"} onCopy={() => copy("agent")} collapsed />
+            <Snippet
+              title="AI prompt (easiest)"
+              note="Paste into Cursor, Claude, or ChatGPT with your site open. It adds the widget for you."
+              code={snippets.agent}
+              copied={copied === "agent"}
+              onCopy={() => copy("agent")}
+            />
+            <Snippet title="Or paste this code yourself" note="Sign-up opens in a small window on our domain." code={snippets.script} copied={copied === "script"} onCopy={() => copy("script")} />
+            <Snippet title="Iframe fallback" note="If your site blocks scripts." code={snippets.iframe} copied={copied === "iframe"} onCopy={() => copy("iframe")} collapsed />
             <p className="text-sm text-muted">
               Or a bare link:{" "}
               <button type="button" className="text-accent" onClick={() => copy("link")}>
