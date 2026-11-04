@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, usdc, type EventView, type GuestStatus } from "@/lib/near";
-import { EVENTS_CONTRACT, HAS_FAUCET, USDC_CONTRACT } from "@/lib/config";
-import { useWallet, type Call } from "@/lib/wallet";
+import { EVENTS_CONTRACT, HAS_FAUCET, ONECLICK_REGISTERS, USDC_CONTRACT } from "@/lib/config";
+import { useWallet } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
-import { intentsUsdcBalance, pushPayoutToIntents, registerFromIntents } from "@/lib/intents";
+import { intentsUsdcBalance, registerFromIntents } from "@/lib/intents";
 import { NextSteps, RulesBox } from "@/components/EventParts";
+import { CashOut } from "@/components/CashOut";
+import { payDepositAddress, registerQuote, USDC_ASSET, waitForSwap } from "@/lib/oneclickClient";
 
 /** Sign in, then put down the deposit. Used on the event page and in the embed popup. */
 export function RegistrationCard({
@@ -20,13 +23,14 @@ export function RegistrationCard({
   onChange: () => Promise<void>;
 }) {
   const { accountId, kind, send } = useWallet();
+  const router = useRouter();
   const [intentsBalance, setIntentsBalance] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [balance, setBalance] = useState<bigint>(0n);
   const [choosing, setChoosing] = useState(false);
-  const [more, setMore] = useState(false);
   const [rules, setRules] = useState(false);
+  const [stage, setStage] = useState<string | null>(null);
 
   const loadBalance = useCallback(async () => {
     if (accountId) setBalance(BigInt(await events.balance(accountId).catch(() => "0")));
@@ -46,35 +50,52 @@ export function RegistrationCard({
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+      setStage(null);
     }
   };
 
-  const register = () =>
-    run(async () => {
-      const deposit = BigInt(event.deposit);
-      const calls: Call[] = [];
-      const have = BigInt(await usdc.balance(accountId!));
-      if (have < deposit) {
-        if (!HAS_FAUCET) throw new Error(`You need ${formatUsdc(deposit)} USDC on NEAR. Use “Pay from any chain”.`);
-        // Testnet: our faucet mints the missing test USDC, no extra signature needed.
-        const r = await fetch("/api/faucet", {
-          method: "POST",
-          body: JSON.stringify({ accountId, amount: (deposit - have).toString() }),
-        });
-        if (!r.ok) throw new Error((await r.json()).error ?? "Faucet failed");
-      }
-      calls.push({
+  // Mainnet: the deposit goes through NEAR Intents (1Click). The wallet pays a
+  // 1Click address in USDC; 1Click delivers exactly the deposit to the escrow
+  // with a register message, so the swap registers the guest. No USDC on NEAR
+  // → the pay page takes any token from any chain.
+  const registerViaOneClick = async () => {
+    setStage("Getting a NEAR Intents quote…");
+    const quote = await registerQuote({ originAsset: USDC_ASSET, eventId: event.id, deposit: event.deposit, guest: accountId!, refundTo: accountId! });
+    if (!quote.depositAddress) throw new Error("NEAR Intents returned no deposit address. Try again.");
+    const have = BigInt(await usdc.balance(accountId!).catch(() => "0"));
+    if (have < BigInt(quote.amountIn)) {
+      router.push(`/e/${event.id}/pay`);
+      return;
+    }
+    setStage("Confirm in your wallet…");
+    await send(payDepositAddress(USDC_CONTRACT, quote.depositAddress, quote.amountIn));
+    setStage("NEAR Intents is delivering your deposit…");
+    await waitForSwap(quote.depositAddress, (s) => setStage(`NEAR Intents: ${s.toLowerCase().replaceAll("_", " ")}…`));
+  };
+
+  // Testnet: Tidepool can't register in the swap (see ONECLICK_REGISTERS), so
+  // the test USDC from the Tidepool faucet goes straight to the escrow.
+  // Payouts still leave through NEAR Intents.
+  const registerDirect = async () => {
+    const deposit = BigInt(event.deposit);
+    if (BigInt(await usdc.balance(accountId!).catch(() => "0")) < deposit) {
+      if (!HAS_FAUCET) throw new Error(`You need ${formatUsdc(deposit)} USDC on NEAR.`);
+      setStage("Getting test USDC…");
+      const r = await fetch("/api/faucet", { method: "POST", body: JSON.stringify({ accountId }) });
+      if (!r.ok) throw new Error((await r.json()).error ?? "Faucet failed");
+    }
+    setStage("Confirm in your wallet…");
+    await send([
+      {
         receiverId: USDC_CONTRACT,
         methodName: "ft_transfer_call",
-        args: {
-          receiver_id: EVENTS_CONTRACT,
-          amount: event.deposit,
-          msg: JSON.stringify({ action: "register", event_id: event.id }),
-        },
+        args: { receiver_id: EVENTS_CONTRACT, amount: event.deposit, msg: JSON.stringify({ action: "register", event_id: event.id }) },
         deposit: 1n,
-      });
-      await send(calls);
-    });
+      },
+    ]);
+  };
+
+  const register = () => run(ONECLICK_REGISTERS ? registerViaOneClick : registerDirect);
 
   useEffect(() => {
     if (kind === "evm" && accountId) intentsUsdcBalance(accountId).then(setIntentsBalance).catch(() => setIntentsBalance(0n));
@@ -82,46 +103,25 @@ export function RegistrationCard({
 
   const registerViaIntents = () => run(() => registerFromIntents(accountId!, event.id, event.deposit));
 
-  // Payouts land in the contract balance; this sends all of it out. EVM sign-ins
-  // can't call the contract, so the relayer pushes theirs to NEAR Intents.
-  const withdrawAll = () =>
-    run(async () => {
-      if (kind === "evm") await pushPayoutToIntents(accountId!);
-      else
-        await send([
-          {
-            receiverId: EVENTS_CONTRACT,
-            methodName: "withdraw",
-            args: { amount: null, receiver_id: null, to_intents: false },
-            deposit: 1n,
-            gas: 200_000_000_000_000n,
-          },
-        ]);
-      await loadBalance();
-    });
-
-  const registerWithBalance = () =>
-    run(() =>
-      send([{ receiverId: EVENTS_CONTRACT, methodName: "register_with_balance", args: { event_id: event.id }, deposit: 1n }]),
-    );
-
   const price = `${formatUsdc(event.deposit)} USDC`;
   // One primary button per state; alternatives stay folded away.
   let body;
   if (event.status === "Cancelled") {
-    body = <p className="text-sm">This event was cancelled. Every deposit went back to its guest.</p>;
+    body = (
+      <div className="space-y-2">
+        <p className="text-sm">This event was cancelled. Every deposit went back to its guest.</p>
+        {balance > 0n && <CashOut accountId={accountId!} kind={kind} balance={balance} onDone={loadBalance} startOpen />}
+      </div>
+    );
   } else if (event.status === "Finalized") {
     body =
       myStatus === "Attended" ? (
         balance > 0n ? (
           <div className="space-y-2">
-            <button className="btn btn-good w-full !py-3.5" disabled={busy} onClick={withdrawAll}>
-              {busy ? "Confirm in your wallet…" : `Withdraw ${formatUsdc(balance)} USDC`}
-            </button>
-            <p className="text-sm text-muted">
-              You showed up. {event.attended_count} of {event.guest_count} came.{" "}
-              <Link href="/me" className="text-accent">Other ways to withdraw</Link>
+            <p className="text-sm">
+              You showed up. {event.attended_count} of {event.guest_count} came. You have <b>{formatUsdc(balance)} USDC</b>.
             </p>
+            <CashOut accountId={accountId!} kind={kind} balance={balance} onDone={loadBalance} startOpen />
           </div>
         ) : (
           <p className="text-sm">
@@ -167,20 +167,11 @@ export function RegistrationCard({
     body = (
       <div className="space-y-2">
         <button className="btn btn-accent w-full !py-3.5" disabled={busy} onClick={register}>
-          {busy ? "Confirm in your wallet…" : `Register · ${price}`}
+          {busy ? stage ?? "Working…" : `Register · ${price}`}
         </button>
-        {more ? (
-          <div className="space-y-2">
-            {balance >= BigInt(event.deposit) && (
-              <button className="btn btn-ghost w-full text-sm" disabled={busy} onClick={registerWithBalance}>
-                Use my balance ({formatUsdc(balance)} USDC)
-              </button>
-            )}
-            <Link href={`/e/${event.id}/pay`} className="btn btn-ghost w-full text-sm">Pay with any token, any chain</Link>
-          </div>
-        ) : (
-          <button className="w-full text-xs text-muted hover:text-text" onClick={() => setMore(true)}>Other ways to pay</button>
-        )}
+        <p className="text-xs text-muted text-center">
+          {ONECLICK_REGISTERS ? "Paid through NEAR Intents. No USDC on NEAR? You can pay with any token from any chain." : "Testnet: free test USDC. Payouts go out through NEAR Intents."}
+        </p>
       </div>
     );
   }

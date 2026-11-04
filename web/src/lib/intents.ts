@@ -81,20 +81,32 @@ async function nonce(): Promise<string> {
  * with `ft_transfer_call`, and the escrow registers the guest.
  */
 export async function registerFromIntents(address: string, eventId: number, deposit: string): Promise<void> {
+  await signAndRelay(address, {
+    intent: "ft_withdraw",
+    token: USDC_CONTRACT,
+    receiver_id: EVENTS_CONTRACT,
+    amount: deposit,
+    msg: JSON.stringify({ action: "register", event_id: eventId, guest: address }),
+  });
+}
+
+/**
+ * Moves USDC from the wallet's Intents balance to another Intents account:
+ * a 1Click deposit address (quote with depositType INTENTS, which 1Click then
+ * swaps and sends to the chosen chain) or any Intents wallet. One signature, no gas.
+ */
+export async function transferFromIntents(address: string, depositAddress: string, amount: string): Promise<void> {
+  await signAndRelay(address, { intent: "transfer", receiver_id: depositAddress, tokens: { [`nep141:${USDC_CONTRACT}`]: amount } });
+}
+
+/** Signs one intent with the EVM wallet (ERC-191); our relayer submits it to intents.near. */
+async function signAndRelay(address: string, intent: Record<string, unknown>): Promise<void> {
   const payload = JSON.stringify({
     signer_id: address,
     verifying_contract: INTENTS_CONTRACT,
     deadline: new Date(Date.now() + 5 * 60_000).toISOString(),
     nonce: await nonce(),
-    intents: [
-      {
-        intent: "ft_withdraw",
-        token: USDC_CONTRACT,
-        receiver_id: EVENTS_CONTRACT,
-        amount: deposit,
-        msg: JSON.stringify({ action: "register", event_id: eventId, guest: address }),
-      },
-    ],
+    intents: [intent],
   });
   const hexMessage = "0x" + Array.from(new TextEncoder().encode(payload), (b) => b.toString(16).padStart(2, "0")).join("");
   const sigHex = (await ethereum()

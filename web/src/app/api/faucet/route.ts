@@ -1,32 +1,26 @@
 import { rateLimited } from "@/lib/ratelimit";
-import { NETWORK, USDC_CONTRACT } from "@/lib/config";
-import { relayer } from "@/lib/relayer";
+import { NETWORK } from "@/lib/config";
+import { ONECLICK_URL } from "@/lib/oneclick";
 
-// Testnet only: mints test USDC to an account so guests can register without
-// signing an extra transaction. The token itself caps each mint at 1000 USDC.
-const MAX_UNITS = 100_000_000n; // 100 USDC
-
+// Testnet only: asks the Tidepool faucet for test USDC on the guest's NEAR
+// account (100 USDC, once an hour per account).
 export async function POST(req: Request) {
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
   if (NETWORK !== "testnet") return Response.json({ error: "Testnet only" }, { status: 403 });
-  const { accountId, amount } = await req.json();
-  let units: bigint;
-  try {
-    units = BigInt(amount);
-  } catch {
-    return Response.json({ error: "Bad amount" }, { status: 400 });
-  }
-  if (typeof accountId !== "string" || units <= 0n || units > MAX_UNITS) {
+  const { accountId } = await req.json();
+  if (typeof accountId !== "string" || !/^[a-z0-9._-]{2,64}$/.test(accountId)) {
     return Response.json({ error: "Bad request" }, { status: 400 });
   }
   try {
-    await relayer().callFunction({
-      contractId: USDC_CONTRACT,
-      methodName: "mint",
-      args: { amount: units.toString(), account_id: accountId },
-      gas: 30_000_000_000_000n,
+    const res = await fetch(`${ONECLICK_URL}/v0/faucet`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountId, mode: "wallet" }),
+      cache: "no-store",
     });
-    return Response.json({ minted: units.toString() });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return Response.json({ error: json.message ?? json.error ?? `Faucet error ${res.status}` }, { status: 502 });
+    return Response.json(json);
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 502 });
   }

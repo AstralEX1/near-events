@@ -7,7 +7,7 @@ import { view } from "@/lib/near";
 // only move an account's balance into that same account's Intents balance.
 export async function POST(req: Request) {
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
-  if (!INTENTS_CONTRACT) return Response.json({ error: "NEAR Intents is mainnet only" }, { status: 403 });
+  if (!INTENTS_CONTRACT) return Response.json({ error: "NEAR Intents is not configured" }, { status: 403 });
   const { accountId } = await req.json();
   if (typeof accountId !== "string") return Response.json({ error: "Bad request" }, { status: 400 });
   if (BigInt(await view<string>("balance_of", { account_id: accountId })) === 0n) {
