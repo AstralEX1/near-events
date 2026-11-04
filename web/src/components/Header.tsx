@@ -34,7 +34,7 @@ export function Header() {
           )}
           {marketing ? (
             <a href={hostHref} className="btn btn-primary !rounded-full !py-1.5 !px-4 !text-sm">
-              Create Event
+              Fill a slot
             </a>
           ) : (
             <Link href="/create" className="text-muted hover:text-text px-2">

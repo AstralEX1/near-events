@@ -8,8 +8,8 @@ const BOT = process.env.NEXT_PUBLIC_TELEGRAM_BOT;
 const CREATE = BOT ? `https://t.me/${BOT}` : "/create";
 
 /**
- * Luma / Partiful style: first viewport is almost only headline + one line + CTA.
- * Long pitch lives on /guide. Campaign copy on /try.
+ * Organizer ICP (Feevent / reli), Luma-short form:
+ * big host outcome → one mechanism line → one CTA. Not a guest discovery page.
  */
 export default function Landing() {
   const [open, setOpen] = useState<EventView[]>([]);
@@ -23,45 +23,45 @@ export default function Landing() {
 
   const create = BOT ? (
     <a href={CREATE} className="btn btn-primary !rounded-full !px-6 !py-3">
-      Create Your First Event
+      Fill your next event
     </a>
   ) : (
     <Link href="/create" className="btn btn-primary !rounded-full !px-6 !py-3">
-      Create Your First Event
+      Fill your next event
     </Link>
   );
 
   return (
     <div className="pb-16">
-      {/* First viewport — Luma-simple */}
       <section className="relative min-h-[calc(100vh-8rem)] flex flex-col items-center justify-center text-center px-2">
         <FloatingHints />
         <div className="relative z-[1] space-y-6 max-w-2xl mx-auto">
+          <p className="text-sm font-medium text-muted tracking-wide">For organizers</p>
           <h1 className="text-5xl sm:text-6xl md:text-7xl font-semibold tracking-tight leading-[1.02]">
-            They clicked Going.
+            Turn sign-ups
             <br />
-            Half won’t come.
+            into show-ups.
           </h1>
-          <p className="text-lg sm:text-xl text-muted max-w-md mx-auto">
-            A small refundable deposit. Who shows up gets it back — plus a share of the no-shows.
+          <p className="text-lg sm:text-xl text-muted max-w-lg mx-auto">
+            A small refundable deposit. Who comes gets it back — plus a share of the no-shows. Communities that actually
+            show up.
           </p>
           <div className="flex flex-col items-center gap-3 pt-1">
             {create}
-            <Link href="/events" className="text-sm text-muted hover:text-text">
-              Discover events →
+            <Link href="/guide" className="text-sm text-muted hover:text-text">
+              How it works →
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Quiet proof — one line, not a deck */}
       <p className="text-center text-sm text-muted pb-16">
-        Free RSVP ~50% no-show · with a deposit ~10% · $0 fee
+        Free RSVP ~50% no-show · with a deposit ~10% · $0 fee · you never hold the money
       </p>
 
       {open.length > 0 && (
         <section className="space-y-6">
-          <h2 className="text-sm font-medium text-muted text-center tracking-wide uppercase">Open now</h2>
+          <h2 className="text-sm font-medium text-muted text-center tracking-wide uppercase">Live events</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {open.map((e) => (
               <Link
@@ -82,13 +82,12 @@ export default function Landing() {
   );
 }
 
-/** Soft atmosphere cards — show the idea without a feature list (Luma floating tiles). */
 function FloatingHints() {
   const tiles = [
-    { t: "Going", d: "costs $0", className: "left-[4%] top-[12%] -rotate-6 hidden sm:block" },
-    { t: "Deposit", d: "$5 back if you come", className: "right-[6%] top-[18%] rotate-3 hidden sm:block" },
-    { t: "No-show", d: "pool → attendees", className: "left-[8%] bottom-[18%] rotate-2 hidden md:block" },
-    { t: "You", d: "never hold the money", className: "right-[5%] bottom-[14%] -rotate-3 hidden md:block" },
+    { t: "Sign-ups", d: "easy to fake", className: "left-[4%] top-[12%] -rotate-6 hidden sm:block" },
+    { t: "Show-ups", d: "what you need", className: "right-[6%] top-[18%] rotate-3 hidden sm:block" },
+    { t: "Deposit", d: "back if they come", className: "left-[8%] bottom-[18%] rotate-2 hidden md:block" },
+    { t: "No-shows", d: "split the pool", className: "right-[5%] bottom-[14%] -rotate-3 hidden md:block" },
   ];
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
