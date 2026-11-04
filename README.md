@@ -23,7 +23,7 @@ Hackathon track focus: Real-World Money (USDC, 1Click, gasless onboarding).
 
 | What | Account |
 |---|---|
-| Event escrow | [`nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/nearevents-11022103.testnet) |
+| Event escrow | [`escrow-v3.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-v3.nearevents-11022103.testnet) |
 | Test USDC (open faucet) | [`usdc-nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/usdc-nearevents-11022103.testnet) |
 
 NEAR Intents has no testnet, so the full event cycle runs on testnet with test
@@ -60,7 +60,7 @@ accounts from `~/.near-credentials`):
 
 ```bash
 cd web
-EVENTS_CONTRACT=nearevents-11022103.testnet USDC_CONTRACT=usdc-nearevents-11022103.testnet \
+EVENTS_CONTRACT=escrow-v3.nearevents-11022103.testnet USDC_CONTRACT=usdc-nearevents-11022103.testnet \
 HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet node scripts/smoke-testnet.mjs
 ```
 
@@ -101,11 +101,12 @@ checks it is only a Near Events registration and submits it to `intents.near`
 
 | Method | Who | What |
 |---|---|---|
-| `create_event(metadata, deposit, capacity, cohosts)` | anyone (caller = host) | attaches NEAR for storage; unused storage is refunded on close |
+| `create_event(metadata, deposit, capacity, cohosts)` | anyone (caller = host) | free; contract pays storage from its own balance; max 5 open events per host, deposit ≥ 0.1 USDC |
 | `ft_transfer_call` → `ft_on_transfer` | guest / friend / 1Click / intents.near | `{"action":"register","event_id":N,"guest":"..."}` or `{"action":"top_up",...}` |
 | `check_in`, `undo_check_in` | host, co-hosts (+1 yocto) | mark who showed up; check-in batch ≤ capacity |
 | `finalize` | host (+1 yocto) | pool ÷ attendees to balances; remainder to host; nobody came → full refund |
 | `cancel`, `refund_if_abandoned` | host (+1 yocto) / anyone after 30 days | refund every guest deposit |
+| `cleanup_event(event_id, limit)` | anyone, 7 days after close | deletes up to 100 guest records so their storage NEAR returns to the contract; payouts stay on balances |
 | `register_with_balance` | guest (+1 yocto) | reuse a payout for the next event |
 | `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to any NEAR account, or into NEAR Intents |
 | `payout_to_intents(account_id)` | owner or configured relayer | moves that account's balance into *its own* Intents balance; how EVM-wallet guests get paid |

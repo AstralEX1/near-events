@@ -32,14 +32,13 @@ export default function ConfirmEvent() {
   }, []);
 
   const starts = startWall ? new Date(startWall) : null; // parsed in this browser's time zone
-  const valid = title && starts && !isNaN(starts.getTime()) && Number(deposit) > 0 && capacity > 0 && token;
+  const valid = title && starts && !isNaN(starts.getTime()) && Number(deposit) >= 0.1 && capacity > 0 && token;
 
   const create = async () => {
     setBusy(true);
     setError(null);
     try {
       if (!bot) throw new Error("The bot isn’t set up on this server yet.");
-      const storage = BigInt(await events.storageCost(capacity));
       await send([
         {
           receiverId: EVENTS_CONTRACT,
@@ -57,7 +56,6 @@ export default function ConfirmEvent() {
             capacity,
             cohosts: [bot],
           },
-          deposit: storage,
         },
       ]);
       const mine = (await events.list()).find((e) => e.host === accountId && e.metadata.title === title);
@@ -105,7 +103,7 @@ export default function ConfirmEvent() {
       )}
       {error && <p className="text-sm text-warn break-words">{error}</p>}
       <p className="text-xs text-muted">
-        You attach a little NEAR for on-chain storage; it comes back when the event closes. The Near Events bot is added as
+        Creating an event is free (up to 5 open events at a time). The Near Events bot is added as
         co-host so it can check guests in. Payouts and refunds always need your confirmation.
       </p>
     </div>

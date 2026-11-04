@@ -165,7 +165,6 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     }
 
     let now_ms = worker.view_block().await?.timestamp() / 1_000_000;
-    let storage: String = events.view("storage_cost").args_json(json!({ "capacity": 10 })).await?.json()?;
     let event_id: u64 = host
         .call(events.id(), "create_event")
         .args_json(json!({
@@ -181,7 +180,6 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
             "capacity": 10,
             "cohosts": [cohost.id()]
         }))
-        .deposit(yocto(storage.parse()?))
         .transact()
         .await?
         .json()?;
@@ -369,7 +367,6 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     assert_eq!(token_balance(&usdc, guest.id()).await?, guest_tokens_before + 20 * 1_000_000);
 
     // A second event: cancel returns the deposit.
-    let storage: String = events.view("storage_cost").args_json(json!({ "capacity": 4 })).await?.json()?;
     let cancel_id: u64 = host
         .call(events.id(), "create_event")
         .args_json(json!({
@@ -385,7 +382,6 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
             "capacity": 4,
             "cohosts": null
         }))
-        .deposit(yocto(storage.parse()?))
         .transact()
         .await?
         .json()?;
@@ -423,7 +419,6 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
             "capacity": 4,
             "cohosts": [cohost.id()]
         }))
-        .deposit(yocto(storage.parse()?))
         .transact()
         .await?
         .json()?;
@@ -468,11 +463,6 @@ async fn measure_finalize_gas(
 ) -> anyhow::Result<()> {
     let guests = 20u64;
     let now_ms = worker.view_block().await?.timestamp() / 1_000_000;
-    let storage: String = events
-        .view("storage_cost")
-        .args_json(json!({ "capacity": guests }))
-        .await?
-        .json()?;
     let event_id: u64 = host
         .call(events.id(), "create_event")
         .args_json(json!({
@@ -488,7 +478,6 @@ async fn measure_finalize_gas(
             "capacity": guests,
             "cohosts": null
         }))
-        .deposit(yocto(storage.parse()?))
         .transact()
         .await?
         .json()?;

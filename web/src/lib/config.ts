@@ -1,6 +1,6 @@
 // Public settings only. Account ids are not secrets; keys never live in the web app.
 export const NETWORK = (process.env.NEXT_PUBLIC_NETWORK ?? "testnet") as "testnet" | "mainnet";
-export const EVENTS_CONTRACT = process.env.NEXT_PUBLIC_EVENTS_CONTRACT ?? "escrow-v2.nearevents-11022103.testnet";
+export const EVENTS_CONTRACT = process.env.NEXT_PUBLIC_EVENTS_CONTRACT ?? "escrow-v3.nearevents-11022103.testnet";
 export const USDC_CONTRACT = process.env.NEXT_PUBLIC_USDC_CONTRACT ?? "usdc-nearevents-11022103.testnet";
 export const RPC_URL =
   process.env.NEXT_PUBLIC_RPC_URL ??

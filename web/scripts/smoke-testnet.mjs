@@ -25,7 +25,6 @@ const guest = account(GUEST);
 const call = (who, contractId, methodName, args, deposit = 0n, gas = 100n * TGAS) =>
   who.callFunction({ contractId, methodName, args, deposit, gas });
 
-const storage = await view("storage_cost", { capacity: 5 });
 const now = Date.now();
 const eventId = await call(host, EVENTS, "create_event", {
   metadata: {
@@ -39,7 +38,7 @@ const eventId = await call(host, EVENTS, "create_event", {
   deposit: "10000000",
   capacity: 5,
   cohosts: [GUEST],
-}, BigInt(storage));
+});
 console.log("event", eventId);
 
 // The escrow must be registered with the token to receive USDC (one-time).
