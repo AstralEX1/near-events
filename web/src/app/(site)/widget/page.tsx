@@ -7,8 +7,6 @@ import { events, type EventView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
 import { agentPrompt } from "@/lib/agentPrompt";
 
-type Path = "luma" | "site";
-
 interface Look {
   mode: "card" | "button";
   theme: "light" | "dark" | "auto";
@@ -41,13 +39,9 @@ function attrs(id: string, l: Look) {
   return a;
 }
 
-/**
- * Product 2 — Integrate widget.
- * Two options: Luma (payment link) · your landing (embed).
- */
+/** Product 2 — embed the deposit widget on your own site. */
 export default function WidgetBuilder() {
   const { accountId } = useWallet();
-  const [path, setPath] = useState<Path>("luma");
   const [list, setList] = useState<EventView[]>([]);
   const [eventId, setEventId] = useState("");
   const [look, setLook] = useState<Look>({ mode: "card", label: "", then: "", ...PRESETS[0].look });
@@ -59,8 +53,6 @@ export default function WidgetBuilder() {
   useEffect(() => {
     setOrigin(window.location.origin);
     const fromUrl = new URLSearchParams(window.location.search).get("event");
-    const pathParam = new URLSearchParams(window.location.search).get("path");
-    if (pathParam === "luma" || pathParam === "site") setPath(pathParam);
     events.list().then((l) => {
       setList(l);
       setEventId((cur) => cur || fromUrl || String(l.find((e) => e.status === "Open")?.id ?? l[0]?.id ?? ""));
@@ -79,8 +71,8 @@ export default function WidgetBuilder() {
   };
 
   useEffect(() => {
-    if (preview.current && eventId && path === "site") preview.current.innerHTML = element;
-  }, [element, eventId, path]);
+    if (preview.current && eventId) preview.current.innerHTML = element;
+  }, [element, eventId]);
 
   const copy = (k: keyof typeof snippets) => {
     navigator.clipboard.writeText(snippets[k]).then(() => {
@@ -104,23 +96,8 @@ export default function WidgetBuilder() {
         </p>
         <h1 className="text-3xl font-semibold tracking-tight">Integrate on your site</h1>
         <p className="text-muted">
-          Keep Luma or your landing as the front door. Guests leave the deposit with us. Easiest path: copy the AI prompt and paste it into Cursor or Claude.
+          Keep your landing as the front door. Guests leave the deposit with us. Easiest: copy the AI prompt into Cursor or Claude.
         </p>
-      </div>
-
-      <div className="grid sm:grid-cols-2 gap-3">
-        <PathCard
-          active={path === "luma"}
-          title="Integrate with Luma"
-          body="Paste a payment link next to your Luma register button. Deposit first, then they continue on Luma."
-          onClick={() => setPath("luma")}
-        />
-        <PathCard
-          active={path === "site"}
-          title="Integrate on your landing"
-          body="Embed a card or button on your site (Webflow, Tilda, WordPress, HTML)."
-          onClick={() => setPath("site")}
-        />
       </div>
 
       <Field label="Event">
@@ -138,143 +115,88 @@ export default function WidgetBuilder() {
           <Link href="/create" className="text-accent">
             Create event
           </Link>
-          {path === "luma" && (
-            <>
-              {" "}
-              (you can import a public lu.ma link there).
-            </>
-          )}
         </p>
       </Field>
 
-      {path === "luma" ? (
-        <div className="space-y-4 max-w-2xl">
-          <ol className="space-y-3 text-sm text-muted list-decimal list-inside">
-            <li>Create the event here (or import from Luma on Create).</li>
-            <li>Copy the payment link below into your Luma description or as the main CTA instead of free RSVP.</li>
-            <li>
-              Optional: set “then” to your lu.ma URL so after deposit guests land back on Luma (
-              <code className="text-text">{"{account}"}</code> matches payment to their entry).
-            </li>
-            <li>Check guests in from the event’s Manage page (or Luma Plus webhook when configured).</li>
-          </ol>
-          <Field label="After deposit, send guest to (optional)">
+      <div className="grid gap-6 md:grid-cols-[320px_1fr]">
+        <div className="card p-5 space-y-4 h-fit">
+          <Field label="Start from a style">
+            <div className="flex flex-wrap gap-2">
+              {PRESETS.map((p) => (
+                <button
+                  key={p.name}
+                  type="button"
+                  className="btn btn-ghost !py-1 !px-3 text-sm"
+                  onClick={() => {
+                    setLook((l) => ({ ...l, ...p.look }));
+                    setPage(p.page);
+                  }}
+                >
+                  <span className="w-3 h-3 rounded-full" style={{ background: p.look.accent }} />
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Field label="What to show">
+            <Segmented value={look.mode} options={[["card", "Event card"], ["button", "Just a button"]]} onChange={(v) => set("mode", v)} />
+          </Field>
+          {look.mode === "button" && (
+            <Field label="Button text">
+              <input className="input" value={look.label} maxLength={40} onChange={(e) => set("label", e.target.value)} placeholder="Register · 5 USDC" />
+            </Field>
+          )}
+          <Field label="After deposit → (optional)">
             <input
               className="input"
               type="url"
-              placeholder="https://lu.ma/your-event"
+              placeholder="https://yoursite.com/thanks"
               value={look.then}
               onChange={(e) => set("then", e.target.value)}
             />
           </Field>
-          <Snippet title="Payment link for Luma" code={snippets.link} copied={copied === "link"} onCopy={() => copy("link")} />
-        </div>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-[320px_1fr]">
-          <div className="card p-5 space-y-4 h-fit">
-            <Field label="Start from a style">
-              <div className="flex flex-wrap gap-2">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.name}
-                    type="button"
-                    className="btn btn-ghost !py-1 !px-3 text-sm"
-                    onClick={() => {
-                      setLook((l) => ({ ...l, ...p.look }));
-                      setPage(p.page);
-                    }}
-                  >
-                    <span className="w-3 h-3 rounded-full" style={{ background: p.look.accent }} />
-                    {p.name}
-                  </button>
-                ))}
-              </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Accent">
+              <input className="input !p-1 h-10" type="color" value={look.accent} onChange={(e) => set("accent", e.target.value)} />
             </Field>
-            <Field label="What to show">
-              <Segmented value={look.mode} options={[["card", "Event card"], ["button", "Just a button"]]} onChange={(v) => set("mode", v)} />
-            </Field>
-            {look.mode === "button" && (
-              <Field label="Button text">
-                <input className="input" value={look.label} maxLength={40} onChange={(e) => set("label", e.target.value)} placeholder="Register · 5 USDC" />
-              </Field>
-            )}
-            <Field label="After deposit → (optional)">
-              <input
-                className="input"
-                type="url"
-                placeholder="https://yoursite.com/thanks"
-                value={look.then}
-                onChange={(e) => set("then", e.target.value)}
-              />
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Accent">
-                <input className="input !p-1 h-10" type="color" value={look.accent} onChange={(e) => set("accent", e.target.value)} />
-              </Field>
-              <Field label="Corners (px)">
-                <input className="input" type="number" min="0" max="32" value={look.radius} onChange={(e) => set("radius", e.target.value)} />
-              </Field>
-            </div>
-            <Field label="Theme">
-              <Segmented value={look.theme} options={[["light", "Light"], ["dark", "Dark"], ["auto", "Auto"]]} onChange={(v) => set("theme", v)} />
-            </Field>
-            <Field label="Font">
-              <Segmented value={look.font} options={[["geist", "Geist"], ["poppins", "Poppins"], ["system", "System"]]} onChange={(v) => set("font", v)} />
+            <Field label="Corners (px)">
+              <input className="input" type="number" min="0" max="32" value={look.radius} onChange={(e) => set("radius", e.target.value)} />
             </Field>
           </div>
+          <Field label="Theme">
+            <Segmented value={look.theme} options={[["light", "Light"], ["dark", "Dark"], ["auto", "Auto"]]} onChange={(v) => set("theme", v)} />
+          </Field>
+          <Field label="Font">
+            <Segmented value={look.font} options={[["geist", "Geist"], ["poppins", "Poppins"], ["system", "System"]]} onChange={(v) => set("font", v)} />
+          </Field>
+        </div>
 
-          <div className="space-y-4 min-w-0">
-            <div className="rounded-2xl border border-border p-6 sm:p-10 transition-colors" style={{ background: page }}>
-              <div className="text-xs mb-3" style={{ color: page === "#0e0e10" ? "#9a9aa6" : "#6b6b76" }}>
-                Preview on your page
-              </div>
-              <div ref={preview} />
+        <div className="space-y-4 min-w-0">
+          <div className="rounded-2xl border border-border p-6 sm:p-10 transition-colors" style={{ background: page }}>
+            <div className="text-xs mb-3" style={{ color: page === "#0e0e10" ? "#9a9aa6" : "#6b6b76" }}>
+              Preview on your page
             </div>
-            <Snippet
-              title="AI prompt (easiest)"
-              note="Paste into Cursor, Claude, or ChatGPT with your site open. It adds the widget for you."
-              code={snippets.agent}
-              copied={copied === "agent"}
-              onCopy={() => copy("agent")}
-            />
-            <Snippet title="Or paste this code yourself" note="Sign-up opens in a small window on our domain." code={snippets.script} copied={copied === "script"} onCopy={() => copy("script")} />
-            <Snippet
-              title="Bare payment link"
-              note="Paste into Luma, Instagram, WhatsApp, or any CTA. Opens deposit → optional redirect."
-              code={snippets.link}
-              copied={copied === "link"}
-              onCopy={() => copy("link")}
-            />
-            <Snippet title="Iframe fallback" note="If your site blocks scripts." code={snippets.iframe} copied={copied === "iframe"} onCopy={() => copy("iframe")} collapsed />
+            <div ref={preview} />
           </div>
+          <Snippet
+            title="AI prompt (easiest)"
+            note="Paste into Cursor, Claude, or ChatGPT with your site open. It adds the widget for you."
+            code={snippets.agent}
+            copied={copied === "agent"}
+            onCopy={() => copy("agent")}
+          />
+          <Snippet title="Or paste this code yourself" note="Sign-up opens in a small window on our domain." code={snippets.script} copied={copied === "script"} onCopy={() => copy("script")} />
+          <Snippet
+            title="Bare payment link"
+            note="Paste into Instagram, WhatsApp, or any CTA when you don’t need the widget."
+            code={snippets.link}
+            copied={copied === "link"}
+            onCopy={() => copy("link")}
+          />
+          <Snippet title="Iframe fallback" note="If your site blocks scripts." code={snippets.iframe} copied={copied === "iframe"} onCopy={() => copy("iframe")} collapsed />
         </div>
-      )}
+      </div>
     </div>
-  );
-}
-
-function PathCard({
-  active,
-  title,
-  body,
-  onClick,
-}: {
-  active: boolean;
-  title: string;
-  body: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`text-left rounded-2xl border p-5 space-y-2 transition-colors ${
-        active ? "border-accent bg-accent-soft/40" : "border-border bg-surface hover:border-accent/40"
-      }`}
-    >
-      <div className="font-semibold">{title}</div>
-      <p className="text-sm text-muted leading-snug">{body}</p>
-    </button>
   );
 }
 

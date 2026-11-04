@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Fill every slot · Near Events",
   description:
-    "Turn sign-ups into show-ups. Create an event or integrate the deposit widget on Luma or your site.",
+    "Turn sign-ups into show-ups. Create an event or embed the deposit widget on your site.",
 };
 
 /** Same two products as home — short campaign page. */
@@ -22,7 +22,7 @@ export default function TryPage() {
         </Link>
         <Link href="/widget" className="rounded-2xl border border-border bg-surface p-4 hover:border-accent/40 transition-colors">
           <div className="font-semibold">Integrate widget</div>
-          <p className="text-sm text-muted mt-1">Luma or your landing</p>
+          <p className="text-sm text-muted mt-1">Embed on your landing</p>
         </Link>
       </div>
       <a
