@@ -168,6 +168,7 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .bar { height: 18px; border-radius: 999px; background: var(--soft); overflow: hidden; }
 .bar i { display: block; height: 100%; border-radius: 999px; transition: width 1.4s cubic-bezier(.2,.7,.2,1); }
 .bar.free i { background: var(--bad); width: 50%; }
+.stat-line { font-size: clamp(26px, 3.4vw, 40px); font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; }
 .bars-q { font-size: clamp(24px, 3vw, 32px); font-weight: 750; letter-spacing: -0.03em; line-height: 1.1; }
 .bar-lab span small { display: block; font-size: 13px; font-weight: 500; color: var(--muted); }
 .bar-lab b em { font-style: normal; font-size: 16px; font-weight: 500; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
@@ -350,17 +351,9 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
   <section>
     <div class="wrap nos">
       <div class="bars reveal" id="bars">
-        <span class="eyebrow">What changes</span>
-        <h3 class="bars-q">20 people sign up. Who actually comes?</h3>
-        <div class="bar-row">
-          <div class="bar-lab"><span>Free RSVP<small>20 signed up</small></span><b style="color:var(--bad)">10<em>/20 came</em></b></div>
-          <div class="bar free pending"><i></i></div>
-        </div>
-        <div class="bar-row">
-          <div class="bar-lab"><span>With a deposit<small>20 signed up</small></span><b style="color:var(--good)">18<em>/20 came</em></b></div>
-          <div class="bar dep pending"><i></i></div>
-        </div>
-        <p class="src">Kickback / BlockParty data: about half come to a free event, about 9 in 10 with a deposit. <a href="https://medium.com/noblocknoparty/how-blockparty-can-decrease-no-shows-at-your-next-event-5e5895f1a23f" target="_blank" rel="noreferrer">Source</a></p>
+        <p class="stat-line" style="color:#e5484d">20 sign up without a deposit.<br>10 come.</p>
+        <p class="stat-line" style="color:#30a46c">20 sign up with a deposit.<br>18 come.</p>
+        <p class="src"><a href="https://medium.com/noblocknoparty/how-blockparty-can-decrease-no-shows-at-your-next-event-5e5895f1a23f" target="_blank" rel="noreferrer">Kickback data</a></p>
       </div>
       <div class="quote reveal">
         <blockquote>“It costs nothing to click Sign in. Which ruins everything.”</blockquote>
