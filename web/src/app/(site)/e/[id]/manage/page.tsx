@@ -211,7 +211,7 @@ function ManageEvent() {
                 : `Close the event and pay out?\n\n${event.attended_count} of ${event.guest_count} came.\nPool: ${formatUsdc(pool)} USDC.\nEach attendee gets ${formatUsdc(share)} USDC.\n\nThis cannot be undone.`,
             )
           }
-          onCancel={() => run("cancel", { event_id: id }, "Cancel the event and refund every guest deposit and sponsor bonus?")}
+          onCancel={() => run("cancel", { event_id: id }, "Cancel the event and refund every guest deposit?")}
         />
       )}
 

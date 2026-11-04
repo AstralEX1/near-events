@@ -8,7 +8,6 @@ import { useWallet } from "@/lib/wallet";
 import { Avatar, AvatarStack, Cover, DateBadge, StatusPill, formatWhen, shortAccount } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
 import { GuestGrid } from "@/components/EventParts";
-import { SponsorButton } from "@/components/Sponsor";
 import { EVENTS_CONTRACT, EXPLORER_URL } from "@/lib/config";
 import { Themed } from "@/components/Themed";
 import { decodeTheme } from "@/lib/theme";
@@ -24,7 +23,6 @@ export default function EventPage() {
   const { accountId } = useWallet();
   const [event, setEvent] = useState<EventView | null | undefined>(undefined);
   const [guests, setGuests] = useState<GuestView[]>([]);
-  const [sponsoring, setSponsoring] = useState(false);
 
   const load = useCallback(async () => {
     const [e, g] = await Promise.all([events.get(id), events.guests(id).catch(() => [])]);
@@ -80,7 +78,7 @@ export default function EventPage() {
               {event.status !== "Open" && <StatusPill status={event.status} />}
               <h1 className="text-3xl sm:text-[40px] sm:leading-[1.15] font-semibold tracking-tight mt-1">{event.metadata.title}</h1>
             </div>
-            <MoreMenu id={id} isStaff={isStaff} canSponsor={event.status === "Open"} onSponsor={() => setSponsoring(true)} />
+            <MoreMenu id={id} isStaff={isStaff} />
           </div>
 
           <div className="space-y-3">
@@ -108,7 +106,6 @@ export default function EventPage() {
             </div>
           </div>
 
-          {sponsoring && <SponsorButton event={event} onDone={load} startOpen onClose={() => setSponsoring(false)} />}
           <div className="card overflow-hidden bg-surface/80 backdrop-blur">
             <div className="px-4 py-2.5 text-sm font-medium text-muted border-b border-border">Registration</div>
             <div className="p-4">
@@ -130,8 +127,8 @@ export default function EventPage() {
   );
 }
 
-/** Everything secondary: share link, contract, sponsoring, host tools. */
-function MoreMenu({ id, isStaff, canSponsor, onSponsor }: { id: number; isStaff: boolean; canSponsor: boolean; onSponsor: () => void }) {
+/** Everything secondary: share link, contract, host tools. */
+function MoreMenu({ id, isStaff }: { id: number; isStaff: boolean }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const item = "block w-full text-left px-3 py-2 rounded-lg hover:bg-border/50";
@@ -155,17 +152,6 @@ function MoreMenu({ id, isStaff, canSponsor, onSponsor }: { id: number; isStaff:
             >
               {copied ? "Link copied ✓" : "Copy link"}
             </button>
-            {canSponsor && (
-              <button
-                className={item}
-                onClick={() => {
-                  setOpen(false);
-                  onSponsor();
-                }}
-              >
-                Sponsor this event
-              </button>
-            )}
             <a className={item} href={`${EXPLORER_URL}/address/${EVENTS_CONTRACT}`} target="_blank" rel="noopener">
               View contract ↗
             </a>

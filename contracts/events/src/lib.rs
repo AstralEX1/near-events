@@ -2,7 +2,7 @@
 //!
 //! Guests register by sending an equal USDC deposit with `ft_transfer_call`.
 //! The host and its co-hosts check guests in. On
-//! `finalize` the whole pool (deposits + sponsor bonus) is split equally
+//! `finalize` the whole pool of deposits is split equally
 //! between the guests who showed up. No platform fee.
 //!
 //! Payouts land on an internal balance that the guest can withdraw to any
@@ -42,7 +42,6 @@ const MAX_TITLE_LEN: usize = 120;
 const MAX_TEXT_LEN: usize = 2000;
 const MAX_SHORT_LEN: usize = 300;
 const MAX_COHOSTS: usize = 10;
-const MAX_SPONSORS: usize = 50;
 const MAX_CHECK_IN_BATCH: usize = MAX_CAPACITY as usize;
 /// Events must end within a year, so the abandoned-event refund is always reachable.
 const MAX_EVENT_HORIZON_MS: u64 = 365 * 24 * 60 * 60 * 1000;
@@ -98,13 +97,10 @@ pub struct Event {
     pub status: EventStatus,
     pub guest_count: u32,
     pub attended_count: u32,
-    pub bonus_pool: u128,
     pub payout_per_attendee: u128,
     /// NEAR (yocto) left from the host's storage pre-payment.
     pub storage_budget: u128,
     pub created_at: u64,
-    /// Per-sponsor USDC amounts; refunded to sponsors on cancel/abandon.
-    pub sponsors: Vec<(AccountId, u128)>,
 }
 
 #[near(serializers = [json])]
@@ -118,7 +114,6 @@ pub struct EventView {
     pub status: EventStatus,
     pub guest_count: u32,
     pub attended_count: u32,
-    pub bonus_pool: U128,
     pub total_pool: U128,
     pub payout_per_attendee: U128,
     pub created_at: u64,
@@ -147,8 +142,6 @@ pub enum TransferMsg {
     /// Take a seat. `guest` defaults to the sender, so anyone (or 1Click on
     /// a guest's behalf) can pay for a seat.
     Register { event_id: u64, guest: Option<AccountId> },
-    /// Add a bonus to the event's pool (anyone can sponsor).
-    Sponsor { event_id: u64 },
     /// Top up an internal balance for future registrations.
     TopUp { account_id: Option<AccountId> },
 }
@@ -221,11 +214,9 @@ impl Contract {
             status: EventStatus::Open,
             guest_count: 0,
             attended_count: 0,
-            bonus_pool: 0,
             payout_per_attendee: 0,
             storage_budget: 0,
             created_at: env::block_timestamp_ms(),
-            sponsors: Vec::new(),
         });
         self.events.flush();
         let event_cost = bytes_cost(env::storage_usage().saturating_sub(initial_storage));
@@ -377,9 +368,9 @@ impl Contract {
         }
 
         let initial_storage = env::storage_usage();
-        let (host, deposit, guest_count, attended, bonus) =
-            (event.host.clone(), event.deposit, event.guest_count, event.attended_count, event.bonus_pool);
-        let pool = deposit * guest_count as u128 + bonus;
+        let (host, deposit, guest_count, attended) =
+            (event.host.clone(), event.deposit, event.guest_count, event.attended_count);
+        let pool = deposit * guest_count as u128;
         let share = pool / attended as u128;
         let remainder = pool - share * attended as u128;
 
@@ -608,23 +599,6 @@ impl FungibleTokenReceiver for Contract {
                 }
                 PromiseOrValue::Value(U128(0))
             }
-            TransferMsg::Sponsor { event_id } => {
-                let before = env::storage_usage();
-                {
-                    let event = self.event_mut(event_id);
-                    require!(event.status == EventStatus::Open, "Event is closed");
-                    event.bonus_pool += amount.0;
-                    if let Some((_, funded)) = event.sponsors.iter_mut().find(|(a, _)| a == &sender_id) {
-                        *funded += amount.0;
-                    } else {
-                        require!(event.sponsors.len() < MAX_SPONSORS, "Too many sponsors");
-                        event.sponsors.push((sender_id.clone(), amount.0));
-                    }
-                }
-                self.account_for_storage(event_id, before);
-                emit("sponsored", json!({ "event_id": event_id, "sponsor": sender_id, "amount": amount }));
-                PromiseOrValue::Value(U128(0))
-            }
             TransferMsg::TopUp { account_id } => {
                 let account = account_id.unwrap_or(sender_id);
                 let initial_storage = env::storage_usage();
@@ -767,22 +741,13 @@ impl Contract {
     fn close_with_refunds(&mut self, event_id: u64, status: EventStatus) {
         let initial_storage = env::storage_usage();
         let event = self.event(event_id);
-        let (deposit, guest_count, sponsors) =
-            (event.deposit, event.guest_count, event.sponsors.clone());
+        let (deposit, guest_count) = (event.deposit, event.guest_count);
         for i in 0..guest_count {
             let account = self.guest_index[&(event_id, i)].clone();
             self.credit(&account, deposit);
         }
-        // Sponsor bonuses go back to the sponsors who funded them.
-        for (sponsor, amount) in sponsors {
-            if amount > 0 {
-                self.credit(&sponsor, amount);
-            }
-        }
         let event = self.event_mut(event_id);
         event.status = status;
-        event.bonus_pool = 0;
-        event.sponsors.clear();
         self.settle_storage(event_id, initial_storage);
         emit("closed", json!({ "event_id": event_id, "status": status }));
     }
@@ -846,8 +811,7 @@ fn view_event(id: u64, e: &Event) -> EventView {
         status: e.status,
         guest_count: e.guest_count,
         attended_count: e.attended_count,
-        bonus_pool: U128(e.bonus_pool),
-        total_pool: U128(e.deposit * e.guest_count as u128 + e.bonus_pool),
+        total_pool: U128(e.deposit * e.guest_count as u128),
         payout_per_attendee: U128(e.payout_per_attendee),
         created_at: e.created_at,
     }

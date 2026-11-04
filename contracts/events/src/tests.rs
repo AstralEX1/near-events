@@ -77,34 +77,34 @@ fn full_cycle_attendees_split_pool() {
     for g in [accounts(2), accounts(3), accounts(4), accounts(5)] {
         register(&mut c, id, &g);
     }
-    pay(&mut c, &accounts(0), 2 * USDC, &format!(r#"{{"action":"sponsor","event_id":{}}}"#, id));
-
     ctx(&accounts(1), one_yocto());
     c.check_in(id, vec![accounts(2), accounts(3), accounts(4)]);
     ctx(&accounts(0), one_yocto());
     c.finalize(id);
 
-    // 4 x 10 + 2 bonus = 42, split by 3 attendees.
+    // 4 x 10 = 40, split by 3 attendees; 1 unit of dust goes to the host.
     let e = c.get_event(id).unwrap();
     assert_eq!(e.status, EventStatus::Finalized);
-    assert_eq!(e.payout_per_attendee.0, 14 * USDC);
-    assert_eq!(c.balance_of(accounts(2)).0, 14 * USDC);
+    assert_eq!(e.total_pool.0, 40 * USDC);
+    assert_eq!(e.payout_per_attendee.0, 40 * USDC / 3);
+    assert_eq!(c.balance_of(accounts(2)).0, 40 * USDC / 3);
     assert_eq!(c.balance_of(accounts(5)).0, 0);
-    assert_eq!(c.balance_of(accounts(0)).0, 0);
+    assert_eq!(c.balance_of(accounts(0)).0, 40 * USDC - 3 * (40 * USDC / 3));
 }
 
 #[test]
 fn remainder_goes_to_host() {
-    let (mut c, id) = setup(10);
+    let (mut c, _) = setup(10);
+    ctx(&accounts(0), NearToken::from_near(5));
+    let id = c.create_event(meta(), U128(10 * USDC + 1), 10, None);
     for g in [accounts(2), accounts(3), accounts(4)] {
-        register(&mut c, id, &g);
+        pay(&mut c, &g, 10 * USDC + 1, &format!(r#"{{"action":"register","event_id":{id}}}"#));
     }
-    pay(&mut c, &accounts(0), 1, &format!(r#"{{"action":"sponsor","event_id":{}}}"#, id));
     ctx(&accounts(0), one_yocto());
     c.check_in(id, vec![accounts(2), accounts(3)]);
     c.finalize(id);
-    // 30 USDC + 1 unit split by 2 → 1 unit remainder to host.
-    assert_eq!(c.balance_of(accounts(2)).0, 15 * USDC);
+    // 30 USDC + 3 units split by 2 → 1 unit remainder to host.
+    assert_eq!(c.balance_of(accounts(2)).0, 15 * USDC + 1);
     assert_eq!(c.balance_of(accounts(0)).0, 1);
 }
 
@@ -117,20 +117,6 @@ fn nobody_attended_refunds_everyone() {
     c.finalize(id);
     assert_eq!(c.balance_of(accounts(2)).0, 10 * USDC);
     assert_eq!(c.balance_of(accounts(3)).0, 10 * USDC);
-}
-
-#[test]
-fn cancel_refunds_deposits_and_bonus_to_sponsors() {
-    let (mut c, id) = setup(10);
-    register(&mut c, id, &accounts(2));
-    pay(&mut c, &accounts(4), 5 * USDC, &format!(r#"{{"action":"sponsor","event_id":{}}}"#, id));
-    ctx(&accounts(0), one_yocto());
-    c.cancel(id);
-    assert_eq!(c.get_event(id).unwrap().status, EventStatus::Cancelled);
-    assert_eq!(c.balance_of(accounts(2)).0, 10 * USDC);
-    assert_eq!(c.balance_of(accounts(4)).0, 5 * USDC);
-    assert_eq!(c.balance_of(accounts(0)).0, 0);
-    assert_eq!(c.get_event(id).unwrap().bonus_pool.0, 0);
 }
 
 #[test]
@@ -437,7 +423,6 @@ fn contract_account_can_host_and_a_cohost_checks_in() {
 
     register(&mut c, id, &accounts(2));
     register(&mut c, id, &accounts(3));
-    pay(&mut c, &dao, 5 * USDC, &format!(r#"{{"action":"sponsor","event_id":{id}}}"#));
 
     ctx(&accounts(1), one_yocto());
     c.check_in(id, vec![accounts(2)]);
@@ -445,8 +430,8 @@ fn contract_account_can_host_and_a_cohost_checks_in() {
     c.finalize(id);
 
     assert_eq!(c.get_event(id).unwrap().status, EventStatus::Finalized);
-    assert_eq!(c.get_event(id).unwrap().payout_per_attendee.0, 25 * USDC);
-    assert_eq!(c.balance_of(accounts(2)).0, 25 * USDC);
+    assert_eq!(c.get_event(id).unwrap().payout_per_attendee.0, 20 * USDC);
+    assert_eq!(c.balance_of(accounts(2)).0, 20 * USDC);
     assert_eq!(c.balance_of(accounts(3)).0, 0);
     assert_eq!(c.balance_of(dao).0, 0);
 }
@@ -525,40 +510,6 @@ fn rejects_garbage_transfer_msg() {
 }
 
 #[test]
-fn nobody_attended_returns_the_sponsor_bonus_too() {
-    let (mut c, id) = setup(10);
-    register(&mut c, id, &accounts(2));
-    register(&mut c, id, &accounts(3));
-    pay(&mut c, &accounts(4), 5 * USDC, &format!(r#"{{"action":"sponsor","event_id":{id}}}"#));
-    ctx(&accounts(0), one_yocto());
-    c.finalize(id);
-    let event = c.get_event(id).unwrap();
-    assert_eq!(event.status, EventStatus::Finalized);
-    assert_eq!(event.bonus_pool.0, 0);
-    assert_eq!(event.payout_per_attendee.0, 0);
-    assert_eq!(c.balance_of(accounts(2)).0, 10 * USDC);
-    assert_eq!(c.balance_of(accounts(3)).0, 10 * USDC);
-    assert_eq!(c.balance_of(accounts(4)).0, 5 * USDC);
-    assert_eq!(c.balance_of(accounts(0)).0, 0);
-}
-
-#[test]
-fn all_attendees_split_bonus_with_no_remainder() {
-    let (mut c, id) = setup(10);
-    for g in [accounts(2), accounts(3), accounts(4)] {
-        register(&mut c, id, &g);
-    }
-    pay(&mut c, &accounts(5), 3 * USDC, &format!(r#"{{"action":"sponsor","event_id":{id}}}"#));
-    ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2), accounts(3), accounts(4)]);
-    c.finalize(id);
-    assert_eq!(c.balance_of(accounts(2)).0, 11 * USDC);
-    assert_eq!(c.balance_of(accounts(3)).0, 11 * USDC);
-    assert_eq!(c.balance_of(accounts(4)).0, 11 * USDC);
-    assert_eq!(c.balance_of(accounts(0)).0, 0);
-}
-
-#[test]
 fn refunds_check_ins_and_dust_still_add_up_to_the_pool() {
     let (mut c, id) = setup(10);
     for g in [accounts(2), accounts(3), accounts(4), accounts(5)] {
@@ -567,13 +518,10 @@ fn refunds_check_ins_and_dust_still_add_up_to_the_pool() {
     ctx(&accounts(0), one_yocto());
     c.refund_guest(id, accounts(3));
     c.check_in(id, vec![accounts(2), accounts(4)]);
-    let sponsor: AccountId = "sponsor.testnet".parse().unwrap();
-    pay(&mut c, &sponsor, 1, &format!(r#"{{"action":"sponsor","event_id":{id}}}"#));
-    ctx(&accounts(0), one_yocto());
     c.finalize(id);
 
-    // 3 seats left × 10 USDC + 1 unit, split by 2 attendees.
-    let pool = 30 * USDC + 1;
+    // 3 seats left × 10 USDC, split by 2 attendees.
+    let pool = 30 * USDC;
     let share = pool / 2;
     assert_eq!(c.balance_of(accounts(2)).0, share);
     assert_eq!(c.balance_of(accounts(4)).0, share);
@@ -584,7 +532,7 @@ fn refunds_check_ins_and_dust_still_add_up_to_the_pool() {
         + c.balance_of(accounts(4)).0
         + c.balance_of(accounts(0)).0
         + c.balance_of(accounts(3)).0;
-    assert_eq!(paid_out, 40 * USDC + 1);
+    assert_eq!(paid_out, 40 * USDC);
 }
 
 #[test]
@@ -612,36 +560,6 @@ fn cannot_abandon_a_finalized_event() {
     ctx(&accounts(0), one_yocto());
     c.finalize(id);
     c.refund_if_abandoned(id);
-}
-
-#[test]
-#[should_panic(expected = "Event is closed")]
-fn cannot_sponsor_a_closed_event() {
-    let (mut c, id) = setup(10);
-    ctx(&accounts(0), one_yocto());
-    c.cancel(id);
-    pay(&mut c, &accounts(2), USDC, &format!(r#"{{"action":"sponsor","event_id":{id}}}"#));
-}
-
-#[test]
-fn repeated_sponsor_is_one_refund() {
-    let (mut c, id) = setup(10);
-    pay(&mut c, &accounts(4), 3 * USDC, &format!(r#"{{"action":"sponsor","event_id":{id}}}"#));
-    pay(&mut c, &accounts(4), 4 * USDC, &format!(r#"{{"action":"sponsor","event_id":{id}}}"#));
-    ctx(&accounts(0), one_yocto());
-    c.cancel(id);
-    assert_eq!(c.balance_of(accounts(4)).0, 7 * USDC);
-    assert_eq!(c.balance_of(accounts(0)).0, 0);
-}
-
-#[test]
-#[should_panic(expected = "Too many sponsors")]
-fn fifty_first_sponsor_is_rejected() {
-    let (mut c, id) = setup(10);
-    for i in 0..=MAX_SPONSORS {
-        let sponsor: AccountId = format!("sponsor{i}.testnet").parse().unwrap();
-        pay(&mut c, &sponsor, 1, &format!(r#"{{"action":"sponsor","event_id":{id}}}"#));
-    }
 }
 
 #[test]
@@ -681,13 +599,11 @@ fn check_in_after_the_end_does_not_open_the_abandon_refund() {
 fn abandon_refund_opens_one_millisecond_after_the_grace_period() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
-    pay(&mut c, &accounts(4), 2 * USDC, &format!(r#"{{"action":"sponsor","event_id":{id}}}"#));
     let boundary_ms = meta().ends_at + ABANDON_GRACE_MS;
     ctx_at(&accounts(5), NearToken::from_yoctonear(0), (boundary_ms + 1) * 1_000_000);
     c.refund_if_abandoned(id);
     assert_eq!(c.get_event(id).unwrap().status, EventStatus::Cancelled);
     assert_eq!(c.balance_of(accounts(2)).0, 10 * USDC);
-    assert_eq!(c.balance_of(accounts(4)).0, 2 * USDC);
 }
 
 #[test]
@@ -718,7 +634,7 @@ fn event_created_already_past_the_grace_period_can_be_refunded_immediately() {
 }
 
 #[test]
-fn sponsor_and_added_cohost_draw_from_that_events_storage_budget() {
+fn added_cohost_draws_from_that_events_storage_budget() {
     let (mut c, id) = setup(10);
     let before = c.event(id).storage_budget;
     let extra: AccountId = "door.testnet".parse().unwrap();
@@ -729,13 +645,9 @@ fn sponsor_and_added_cohost_draw_from_that_events_storage_budget() {
     ctx(&accounts(0), one_yocto());
     c.add_cohost(id, extra.clone());
     assert_eq!(c.event(id).storage_budget, after_cohost, "adding the same co-host twice is free");
-    let sponsor: AccountId = "sponsor.testnet".parse().unwrap();
-    pay(&mut c, &sponsor, USDC, &format!(r#"{{"action":"sponsor","event_id":{id}}}"#));
-    let after_sponsor = c.event(id).storage_budget;
-    assert!(after_sponsor < after_cohost, "a new sponsor record has to be paid for by this event");
     ctx(&accounts(0), one_yocto());
     c.remove_cohost(id, extra);
-    assert!(c.event(id).storage_budget > after_sponsor);
+    assert!(c.event(id).storage_budget > after_cohost);
 }
 
 #[test]
@@ -968,11 +880,10 @@ fn large_but_safe_pool_splits_exactly() {
         let refund = pay(&mut c, &guest, deposit, &format!(r#"{{"action":"register","event_id":{big}}}"#));
         assert_eq!(refund, 0);
     }
-    pay(&mut c, &accounts(5), 1, &format!(r#"{{"action":"sponsor","event_id":{big}}}"#));
     ctx(&accounts(0), one_yocto());
     c.check_in(big, vec![accounts(2), accounts(3)]);
     c.finalize(big);
-    let pool = deposit * 3 + 1;
+    let pool = deposit * 3;
     let share = pool / 2;
     assert_eq!(c.balance_of(accounts(2)).0, share);
     assert_eq!(c.balance_of(accounts(3)).0, share);
@@ -1114,4 +1025,11 @@ fn function_calls() -> Vec<(String, Vec<u8>, u64, u128)> {
             _ => None,
         })
         .collect()
+}
+
+#[test]
+#[should_panic(expected = "Invalid msg")]
+fn sponsor_action_is_no_longer_accepted() {
+    let (mut c, id) = setup(10);
+    pay(&mut c, &accounts(4), USDC, &format!(r#"{{"action":"sponsor","event_id":{id}}}"#));
 }

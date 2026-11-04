@@ -276,15 +276,17 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     .into_result()?;
     assert_eq!(token_balance(&other, friend.id()).await?, other_before, "wrong token must be refunded");
 
-    transfer_call(
+    // The old "sponsor" action is gone: the token sends the whole amount back.
+    let sponsor_before = token_balance(&usdc, sponsor.id()).await?;
+    let _ = transfer_call(
         &sponsor,
         usdc.id(),
         events.id(),
         5 * 1_000_000,
         json!({ "action": "sponsor", "event_id": event_id }),
     )
-    .await?
-    .into_result()?;
+    .await?;
+    assert_eq!(token_balance(&usdc, sponsor.id()).await?, sponsor_before, "unknown action must be refunded");
 
     let stranger_check = stranger
         .call(events.id(), "check_in")
@@ -319,13 +321,13 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
         .await?;
     expect_reject(&again, "Event is closed");
 
-    // 2 deposits + 5 bonus, one attendee.
-    assert_eq!(escrow_balance(&events, guest.id()).await?, 25 * 1_000_000);
+    // 2 deposits, one attendee.
+    assert_eq!(escrow_balance(&events, guest.id()).await?, 20 * 1_000_000);
     assert_eq!(escrow_balance(&events, noshow.id()).await?, 0);
 
     let event: Value = events.view("get_event").args_json(json!({ "event_id": event_id })).await?.json()?;
     assert_eq!(event["status"], "Finalized");
-    assert_eq!(event["payout_per_attendee"], "25000000");
+    assert_eq!(event["payout_per_attendee"], "20000000");
 
     // Sending the payout to an account the token does not know fails.
     // The callback has to put the balance back.
@@ -341,7 +343,7 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
         .transact()
         .await?
         .into_result()?;
-    assert_eq!(escrow_balance(&events, guest.id()).await?, 25 * 1_000_000, "failed transfer must restore the balance");
+    assert_eq!(escrow_balance(&events, guest.id()).await?, 20 * 1_000_000, "failed transfer must restore the balance");
 
     let forged = guest
         .call(events.id(), "on_withdraw")
@@ -364,9 +366,9 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
         .await?
         .into_result()?;
     assert_eq!(escrow_balance(&events, guest.id()).await?, 0);
-    assert_eq!(token_balance(&usdc, guest.id()).await?, guest_tokens_before + 25 * 1_000_000);
+    assert_eq!(token_balance(&usdc, guest.id()).await?, guest_tokens_before + 20 * 1_000_000);
 
-    // A second event: cancel returns the deposit and the sponsor bonus.
+    // A second event: cancel returns the deposit.
     let storage: String = events.view("storage_cost").args_json(json!({ "capacity": 4 })).await?.json()?;
     let cancel_id: u64 = host
         .call(events.id(), "create_event")
@@ -396,15 +398,6 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     )
     .await?
     .into_result()?;
-    transfer_call(
-        &sponsor,
-        usdc.id(),
-        events.id(),
-        2 * 1_000_000,
-        json!({ "action": "sponsor", "event_id": cancel_id }),
-    )
-    .await?
-    .into_result()?;
     host.call(events.id(), "cancel")
         .args_json(json!({ "event_id": cancel_id }))
         .deposit(yocto(1))
@@ -413,7 +406,6 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
         .await?
         .into_result()?;
     assert_eq!(escrow_balance(&events, noshow.id()).await?, deposit);
-    assert_eq!(escrow_balance(&events, sponsor.id()).await?, 2 * 1_000_000);
 
     // Past the end, check-in still works and the 30-day refund does not.
     let ended: u64 = host

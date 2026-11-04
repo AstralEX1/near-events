@@ -12,8 +12,7 @@ deposits. No platform fee.
   pays the gas.
 - Payouts to any chain: one button moves winnings into the guest's NEAR Intents
   balance, from where they swap or withdraw to any chain.
-- Host is a person (NEAR account) with optional co-hosts at the door. Anyone can
-  sponsor a bonus into the pool.
+- Host is a person (NEAR account) with optional co-hosts at the door.
 - Escrow: deposits sit in a Rust contract. The host cannot take the
   pool, only decide who showed up. If the host disappears, anyone can refund
   everyone after a grace period.
@@ -88,13 +87,12 @@ install it: [docs/AI_INSTALL.md](docs/AI_INSTALL.md).
 guest ──(any chain via 1Click | USDC | Google login)──► escrow contract (NEAR)
                                                            │  ft_on_transfer: register
 host / co-host ── create_event / check_in / finalize ─────► │
-anyone ────────── sponsor bonus ──────────────────────────► │
                                                            ▼
                          pool / attendees → internal balances → withdraw
                                                      (NEAR wallet or NEAR Intents)
 ```
 
-Contract: `contracts/events/src/lib.rs` (79 unit tests in `tests.rs`).
+Contract: `contracts/events/src/lib.rs` (74 unit tests in `tests.rs`).
 
 **EVM wallet flow (mainnet):** the guest signs an ERC-191 intent
 `ft_withdraw {token: USDC, receiver_id: escrow, msg: register}`; `/api/intents/execute`
@@ -104,10 +102,10 @@ checks it is only a Near Events registration and submits it to `intents.near`
 | Method | Who | What |
 |---|---|---|
 | `create_event(metadata, deposit, capacity, cohosts)` | anyone (caller = host) | attaches NEAR for storage; unused storage is refunded on close |
-| `ft_transfer_call` → `ft_on_transfer` | guest / friend / 1Click / intents.near | `{"action":"register","event_id":N,"guest":"..."}` or `{"action":"sponsor",...}` |
+| `ft_transfer_call` → `ft_on_transfer` | guest / friend / 1Click / intents.near | `{"action":"register","event_id":N,"guest":"..."}` or `{"action":"top_up",...}` |
 | `check_in`, `undo_check_in` | host, co-hosts (+1 yocto) | mark who showed up; check-in batch ≤ capacity |
 | `finalize` | host (+1 yocto) | pool ÷ attendees to balances; remainder to host; nobody came → full refund |
-| `cancel`, `refund_if_abandoned` | host (+1 yocto) / anyone after 30 days | refund guest deposits and sponsor bonuses |
+| `cancel`, `refund_if_abandoned` | host (+1 yocto) / anyone after 30 days | refund every guest deposit |
 | `register_with_balance` | guest (+1 yocto) | reuse a payout for the next event |
 | `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to any NEAR account, or into NEAR Intents |
 | `payout_to_intents(account_id)` | owner or configured relayer | moves that account's balance into *its own* Intents balance; how EVM-wallet guests get paid |
@@ -118,14 +116,14 @@ relayer account is set. Privileged mutators require exactly 1 yoctoNEAR.
 Safety notes: only the configured USDC is accepted; a payment made for someone
 else (friend, 1Click, intents.near) never bounces, because a refund might not
 reach the guest; it lands on the guest's balance instead. Capacity is capped at
-300 so payout fits in one transaction. On cancel/abandon, sponsor USDC returns
-to the sponsors who funded it (not the host).
+300 so payout fits in one transaction. The pool is only the guests' deposits;
+there is no sponsor or bonus top-up.
 
 ## Build and test
 
 ```bash
 cd contracts
-cargo test -p near-events                       # 79 unit tests
+cargo test -p near-events                       # 74 unit tests
 cargo test -p test-usdc                         # faucet guards
 cargo test -p near-events-sandbox               # local NEAR sandbox
 cd events && cargo near build non-reproducible-wasm
