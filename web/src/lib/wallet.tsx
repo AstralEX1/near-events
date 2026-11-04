@@ -61,6 +61,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [kind, setKind] = useState<Kind | null>(null);
   const [ready, setReady] = useState(false);
+  /** True only while the user is picking a wallet, so a restored old wallet session can't replace a Google/email sign-in. */
+  const connecting = useRef(false);
 
   const remember = (k: Kind | null, id: string | null) => {
     setKind(k);
@@ -79,9 +81,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const { NearConnector } = await import("@hot-labs/near-connect");
       // "Ethereum Wallets" maps an EVM wallet to a different NEAR account and has no
       // testnet; EVM wallets sign in through our own NEAR Intents path instead.
-      const c = new NearConnector({ network: NETWORK, footerBranding: null, excludedWallets: ["ethereum-wallets"] });
+      const c = new NearConnector({
+        network: NETWORK,
+        footerBranding: null,
+        excludedWallets: ["ethereum-wallets"],
+      });
       connector.current = c;
-      c.on("wallet:signIn", (t) => remember("wallet", t.accounts[0]?.accountId ?? null));
+      c.on("wallet:signIn", (t) => {
+        let saved: string | null = null;
+        try {
+          saved = localStorage.getItem(KIND_KEY);
+        } catch {}
+        if (saved === "email" && !connecting.current) return;
+        connecting.current = false;
+        fastAuthLogout().catch(() => {});
+        remember("wallet", t.accounts[0]?.accountId ?? null);
+      });
       c.on("wallet:signOut", () => remember(null, null));
       let saved: string | null = null;
       try {
@@ -118,10 +133,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = useCallback(async () => {
-    await connector.current?.connect();
+    connecting.current = true;
+    await connector.current?.connect().catch((e) => {
+      connecting.current = false;
+      throw e;
+    });
   }, []);
 
   const signInWithEmail = useCallback(async () => {
+    // Drop any old wallet session so its account can't take over this one.
+    await connector.current?.disconnect().catch(() => {});
     const id = await fastAuthLogin();
     remember("email", id);
   }, []);
@@ -136,49 +157,79 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     remember(null, null);
   }, [kind]);
 
-  const send = useCallback(async (calls: Call[]) => {
-    if (!accountId) throw new Error("Sign in first.");
+  const send = useCallback(
+    async (calls: Call[]) => {
+      if (!accountId) throw new Error("Sign in first.");
 
-    // Google/email (or a stale session that still shows an implicit account id).
-    const useEmail = kind === "email" || (kind == null && isImplicit(accountId));
-    if (useEmail) {
-      await fastAuthEnsure();
-      for (const call of calls) await fastAuthSend(call);
-      return;
-    }
-    if (kind === "evm") throw new Error("EVM wallets act through NEAR Intents; this action needs a NEAR account.");
+      // Google/email (or a stale session that still shows an implicit account id).
+      const useEmail = kind === "email" || (kind == null && isImplicit(accountId));
+      if (useEmail) {
+        await fastAuthEnsure();
+        for (const call of calls) await fastAuthSend(call);
+        return;
+      }
+      if (kind === "evm") throw new Error("EVM wallets act through NEAR Intents; this action needs a NEAR account.");
 
-    const c = connector.current;
-    if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");
-    const wallet = await c.wallet();
-    const accounts = await wallet.getAccounts().catch(() => []);
-    const signerId = accounts[0]?.accountId ?? accountId;
-    if (!signerId) throw new Error("Wallet session expired. Sign in again.");
-    if (wrongNetwork(signerId)) throw new Error(wrongNetworkMessage(signerId));
+      const c = connector.current;
+      if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");
+      const wallet = await c.wallet();
+      const accounts = await wallet.getAccounts().catch(() => []);
+      const signerId = accounts[0]?.accountId;
+      if (!signerId) {
+        // No live wallet session. A Google/email account id means that login is the real one.
+        if (isImplicit(accountId)) {
+          remember("email", accountId);
+          await fastAuthEnsure();
+          for (const call of calls) await fastAuthSend(call);
+          return;
+        }
+        throw new Error("Wallet session expired. Sign out and connect your wallet again.");
+      }
+      if (wrongNetwork(signerId)) throw new Error(wrongNetworkMessage(signerId));
 
-    // Wallets that build the NEAR tx client-side need signerId; without it
-    // near-api-js throws "Expected string not undefined at value.signerId".
-    await wallet.signAndSendTransactions({
-      transactions: calls.map((call) => ({
-        signerId,
-        receiverId: call.receiverId,
-        actions: [
-          {
-            type: "FunctionCall" as const,
-            params: {
-              methodName: call.methodName,
-              args: call.args as Record<string, unknown>,
-              gas: (call.gas ?? 100n * TGAS).toString(),
-              deposit: (call.deposit ?? 0n).toString(),
-            },
-          },
-        ],
-      })),
-    });
-  }, [kind, accountId]);
+      // Wallets that build the NEAR tx client-side need signerId; without it
+      // near-api-js throws "Expected string not undefined at value.signerId".
+      await wallet
+        .signAndSendTransactions({
+          transactions: calls.map((call) => ({
+            signerId,
+            receiverId: call.receiverId,
+            actions: [
+              {
+                type: "FunctionCall" as const,
+                params: {
+                  methodName: call.methodName,
+                  args: call.args as Record<string, unknown>,
+                  gas: (call.gas ?? 100n * TGAS).toString(),
+                  deposit: (call.deposit ?? 0n).toString(),
+                },
+              },
+            ],
+          })),
+        })
+        .catch((e: unknown) => {
+          if (/signerId/.test(String(e))) throw new Error("Wallet session expired. Sign out and connect your wallet again.");
+          throw e;
+        });
+    },
+    [kind, accountId],
+  );
 
   return (
-    <WalletContext.Provider value={{ accountId, kind, ready, signIn, signInWithEmail, signInWithEvm, signOut, send }}>{children}</WalletContext.Provider>
+    <WalletContext.Provider
+      value={{
+        accountId,
+        kind,
+        ready,
+        signIn,
+        signInWithEmail,
+        signInWithEvm,
+        signOut,
+        send,
+      }}
+    >
+      {children}
+    </WalletContext.Provider>
   );
 }
 
