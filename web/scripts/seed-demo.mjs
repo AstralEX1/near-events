@@ -11,7 +11,6 @@ const account = (id) =>
   new Account(id, provider, JSON.parse(readFileSync(`${homedir()}/.near-credentials/testnet/${id}.json`, "utf8")).private_key);
 const gas = 100_000_000_000_000n;
 
-const storage = await provider.callFunction({ contractId: EVENTS, method: "storage_cost", args: { capacity: 40 } });
 const start = new Date(Date.now() + 3 * 24 * 3600_000);
 start.setHours(18, 30, 0, 0);
 const id = await account(HOST).callFunction({
@@ -21,7 +20,7 @@ const id = await account(HOST).callFunction({
     metadata: {
       title: "NEAR Builders Night Belgrade",
       description:
-        "Demos, pizza and honest feedback from builders shipping on NEAR.\n\nEveryone puts down 5 USDC. Show up and you get it back plus a share of the no-shows. Hosted by our community DAO; a co-host checks you in at the door.",
+        "Demos, pizza and honest feedback from builders shipping on NEAR.\n\nEveryone puts down 5 USDC. Show up and you get it back plus a share of the no-shows. A co-host checks you in at the door.",
       location: "Startit Centar, Savska 5, Belgrade",
       cover_url: null,
       starts_at: start.getTime(),
@@ -31,7 +30,6 @@ const id = await account(HOST).callFunction({
     capacity: 40,
     cohosts: [GUEST],
   },
-  deposit: BigInt(storage),
   gas,
 });
 const guest = account(GUEST);

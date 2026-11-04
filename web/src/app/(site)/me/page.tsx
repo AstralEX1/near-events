@@ -6,7 +6,7 @@ import { events, formatUsdc, toUnits, usdc, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT, NETWORK } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { intentsUsdcBalance, pushPayoutToIntents } from "@/lib/intents";
-import { Avatar, Cover, StatusPill, shortAccount } from "@/components/ui";
+import { Avatar, Cover, shortAccount } from "@/components/ui";
 
 export default function Me() {
   const { accountId, kind, signIn, send } = useWallet();
@@ -15,6 +15,7 @@ export default function Me() {
   const [inIntents, setInIntents] = useState<bigint | null>(null);
   const [mine, setMine] = useState<EventView[]>([]);
   const [amount, setAmount] = useState("");
+  const [receiver, setReceiver] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,7 +30,7 @@ export default function Me() {
     setBalance(BigInt(b));
     if (NETWORK === "mainnet") intentsUsdcBalance(accountId).then(setInIntents).catch(() => {});
     setWallet(BigInt(w));
-    setMine(all.filter((e) => ids.includes(e.id) || e.host === accountId));
+    setMine(all.filter((e) => ids.includes(e.id) || e.host === accountId || e.cohosts.includes(accountId)));
   }, [accountId]);
 
   useEffect(() => {
@@ -66,12 +67,13 @@ export default function Me() {
         {
           receiverId: EVENTS_CONTRACT,
           methodName: "withdraw",
-          args: { amount: amount ? toUnits(amount) : null, receiver_id: null, to_intents: toIntents },
+          args: { amount: amount ? toUnits(amount) : null, receiver_id: receiver.trim() || null, to_intents: toIntents },
           deposit: 1n,
           gas: 200_000_000_000_000n,
         },
       ]);
       setAmount("");
+      setReceiver("");
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -102,9 +104,19 @@ export default function Me() {
         {balance > 0n && (
           <div className="space-y-3">
             <input className="input" type="number" min="0" step="0.01" placeholder={`Amount (all: ${formatUsdc(balance)})`} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            {kind !== "evm" && (
+              <input
+                className="input"
+                placeholder="Send to another NEAR account (optional, e.g. a friend or an exchange)"
+                value={receiver}
+                onChange={(e) => setReceiver(e.target.value)}
+              />
+            )}
             <div className="grid sm:grid-cols-2 gap-2">
               {kind !== "evm" && (
-                <button className="btn btn-primary" disabled={busy} onClick={() => withdraw(false)}>Withdraw to my NEAR wallet</button>
+                <button className="btn btn-primary" disabled={busy} onClick={() => withdraw(false)}>
+                  {receiver.trim() ? `Send to ${shortAccount(receiver.trim())}` : "Withdraw to my NEAR wallet"}
+                </button>
               )}
               <button
                 className="btn btn-ghost"
@@ -129,24 +141,35 @@ export default function Me() {
         {error && <p className="text-sm text-warn break-words">{error}</p>}
       </div>
 
-      <div>
-        <h2 className="text-xl font-semibold mb-3">Your events</h2>
-        {mine.length === 0 && <p className="text-muted">Nothing yet. <Link href="/" className="text-accent">Find an event</Link></p>}
-        <div className="grid gap-3 sm:grid-cols-2">
-          {mine.map((e) => (
-            <Link key={e.id} href={`/e/${e.id}`} className="card p-3 flex gap-3 items-center hover:border-accent/50">
-              <Cover event={e} className="w-16 h-16 rounded-lg shrink-0 [&>span]:hidden" />
-              <div className="min-w-0">
-                <div className="font-medium truncate">{e.metadata.title}</div>
-                <div className="text-sm text-muted">
-                  {new Date(e.metadata.starts_at).toLocaleDateString()} · {e.host === accountId ? "Hosting" : "Guest"}
+      {(
+        [
+          ["Going", mine.filter((e) => e.host !== accountId && !e.cohosts.includes(accountId)), "Nothing yet."],
+          ["Hosting", mine.filter((e) => e.host === accountId || e.cohosts.includes(accountId)), "You aren’t hosting anything."],
+        ] as [string, EventView[], string][]
+      ).map(([title, list, empty]) => (
+        <div key={title}>
+          <h2 className="text-xl font-semibold mb-3">{title}</h2>
+          {list.length === 0 && (
+            <p className="text-muted">
+              {empty} <Link href={title === "Going" ? "/events" : "/create"} className="text-accent">{title === "Going" ? "Find an event" : "Host one"}</Link>
+            </p>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {list.map((e) => (
+              <Link key={e.id} href={`/e/${e.id}`} className="flex gap-3 items-center rounded-xl p-2 -m-2 hover:bg-border/40">
+                <Cover event={e} className="w-16 h-16 rounded-lg shrink-0 [&>span]:hidden" />
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{e.metadata.title}</div>
+                  <div className="text-sm text-muted">
+                    {new Date(e.metadata.starts_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    {e.status !== "Open" && ` · ${e.status === "Finalized" ? "paid out" : "cancelled"}`}
+                  </div>
                 </div>
-                <StatusPill status={e.status} />
-              </div>
-            </Link>
-          ))}
+              </Link>
+            ))}
+          </div>
         </div>
-      </div>
+      ))}
     </div>
   );
 }

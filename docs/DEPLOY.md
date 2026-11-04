@@ -11,15 +11,15 @@ below has been run; deploying needs Alex's OK. (2026-11-03, Claude)
 | Name | Testnet value | Secret? |
 |---|---|---|
 | `NEXT_PUBLIC_NETWORK` | `testnet` | no |
-| `NEXT_PUBLIC_EVENTS_CONTRACT` | `nearevents-11022103.testnet` | no |
+| `NEXT_PUBLIC_EVENTS_CONTRACT` | `escrow-v3.nearevents-11022103.testnet` | no |
 | `NEXT_PUBLIC_USDC_CONTRACT` | `usdc-nearevents-11022103.testnet` | no |
 | `RELAYER_ACCOUNT_ID` | `relayer-nearevents-11022103.testnet` | no |
 | `RELAYER_PRIVATE_KEY` | from `web/.env.local` (paste in Vercel only) | **yes** |
 | `ONECLICK_API_KEY` | optional | **yes** |
 
-3. NEAR Auth (Google/email): the shared testnet Auth0 client only accepts
+3. FastAuth (Google/email): the shared testnet Auth0 client only accepts
    approved callback URLs. Localhost works; a Vercel domain may need its own
-   client from NEAR Auth (docs.auth.near.org → apply). Wallet and EVM login work
+   client (docs.auth.near.org → apply). Wallet and EVM login work
    anywhere.
 
 For mainnet, switch the three `NEXT_PUBLIC_*` values to the mainnet escrow,

@@ -116,10 +116,23 @@ export async function fastAuthLogout(): Promise<void> {
   await b?.client.logout({ openUrl: false } as never).catch(() => {});
 }
 
+/** Re-open the Auth0/MPC session after a reload, or throw a clear error. */
+export async function fastAuthEnsure(): Promise<string> {
+  if (session) {
+    const s = await session;
+    if (s.accountId) return s.accountId;
+  }
+  const id = await fastAuthRestore();
+  if (!id) throw new Error("Sign in with Google or email again.");
+  return id;
+}
+
 /** Signs one call with the MPC key (Auth0 popup) and sends it. */
 export async function fastAuthSend(call: Call): Promise<void> {
+  await fastAuthEnsure();
   if (!session) throw new Error("Sign in with Google or email first");
   const s = await session;
+  if (!s.accountId) throw new Error("Sign in with Google or email again.");
   const { transactions, utils } = await import("near-api-js-v5");
 
   const key = await rpcQuery<{ nonce: number; block_hash: string }>({

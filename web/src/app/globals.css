@@ -1,10 +1,11 @@
 @import "tailwindcss";
 
 :root {
+  /* Tokens aligned to docs/mockups-kickback (Claude boards). */
   --bg: #f6f5f2;
   --surface: #ffffff;
   --text: #16161a;
-  --muted: #6b6b76;
+  --muted: #5f5f6a;
   --border: #e7e5e0;
   --accent: #5b4bff;
   --accent-soft: #edeaff;
@@ -42,6 +43,7 @@
 
 body {
   background: var(--bg);
+  transition: background-color .2s;
   color: var(--text);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
@@ -66,7 +68,8 @@ body {
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary { background: var(--text); color: var(--bg); }
-.btn-accent { background: var(--accent); color: white; }
+.btn-accent { background: var(--accent); color: var(--on-accent, white); }
+.btn-good { background: var(--good); color: white; }
 .btn-ghost { border: 1px solid var(--border); background: var(--surface); }
 
 .input {
@@ -79,3 +82,30 @@ body {
 }
 .input:focus { border-color: var(--accent); }
 .label { font-size: 0.85rem; color: var(--muted); font-weight: 500; }
+
+/* Embeds sit on someone else's page: transparent body, host-picked font and corners. */
+body:has(.embed-root) { background: transparent; }
+.embed { font-family: var(--embed-font); color: var(--text); }
+.embed .card { border-radius: var(--embed-radius); }
+.embed .btn { border-radius: calc(var(--embed-radius) * 0.75); }
+.embed-title { font-family: var(--embed-display); }
+
+/* Event page themes (lib/theme.ts): the host's font for headings and body. */
+.themed { font-family: var(--theme-font); color: var(--text); }
+
+/* FallingEffect: one pass from above the top edge to below the bottom. */
+@keyframes fall {
+  to { transform: translateY(110vh) rotate(var(--rot)); opacity: 0.2; }
+}
+.fall { animation: fall linear forwards; }
+
+/* Event creator, laid out like Luma's: tinted fields instead of bordered cards, so they sit on any theme. */
+.lu-field { background: color-mix(in srgb, var(--text) 6%, transparent); border-radius: 0.75rem; }
+.lu-hover { transition: background-color 0.15s; cursor: pointer; }
+.lu-hover:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.lu-row { position: relative; display: flex; align-items: center; gap: 0.75rem; min-height: 2.5rem; padding: 0.5rem 0.75rem; width: 100%; background: color-mix(in srgb, var(--text) 6%, transparent); }
+/* Option stack: one block, hairline dividers that start after the icon. */
+.lu-rows > .lu-row + .lu-row::before { content: ""; position: absolute; top: 0; left: 2.5rem; right: 0; border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent); }
+.lu-pill { display: flex; align-items: center; justify-content: center; height: 2.25rem; padding: 0 0.75rem; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.lu-pill:hover { background: color-mix(in srgb, var(--text) 12%, transparent); }
+.lu-chip { display: inline-flex; white-space: nowrap; align-items: center; gap: 0.4rem; height: 1.875rem; padding: 0 0.7rem; border-radius: 999px; font-size: 0.875rem; color: var(--muted); background: color-mix(in srgb, var(--text) 6%, transparent); }

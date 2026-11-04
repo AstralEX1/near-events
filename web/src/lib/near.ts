@@ -22,10 +22,13 @@ export interface EventView {
   status: EventStatus;
   guest_count: number;
   attended_count: number;
-  bonus_pool: string;
   total_pool: string;
   payout_per_attendee: string;
   created_at: number;
+  /** When the event was finalized or cancelled; 0 while open. */
+  closed_at: number;
+  /** Guest records still on chain; 0 after the guest list was cleaned up (7+ days after close). */
+  stored_guests: number;
 }
 
 export interface GuestView {
@@ -70,7 +73,7 @@ export const events = {
     view<GuestStatus | null>("get_guest_status", { event_id: id, account_id: account }),
   guestEvents: (account: string) => view<number[]>("get_guest_events", { account_id: account }),
   balance: (account: string) => view<string>("balance_of", { account_id: account }),
-  storageCost: (capacity: number) => view<string>("storage_cost", { capacity }),
+  openEventsOf: (account: string) => view<number>("open_events_of", { account_id: account }),
 };
 
 export const usdc = {

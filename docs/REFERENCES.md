@@ -1,7 +1,7 @@
 # REFERENCES — all links for Near Events
 
 One place for every repo and doc we use. Add new links here with `(date, source)`.
-Take contract addresses (USDC, intents.near, DAO factory) only from official docs,
+Take contract addresses (USDC, intents.near) only from official docs,
 never from memory. (2026-11-02, Claude)
 
 ## Reference projects (GitHub, sent by Alex)
@@ -15,7 +15,8 @@ never from memory. (2026-11-02, Claude)
 - Rules: https://nearhackathon.com/HACKATHON.md
 - Track prompts and setup: https://github.com/nearai/near-hackathon-prompt-examples
   (tracks `12-social` = Social Money, `08-realworld` = Real-World Money, `00-setup`)
-- NEAR agent skills: `npx skills add near/agent-skills`
+- NEAR agent skills: https://github.com/near/agent-skills · `npx skills add near/agent-skills` (includes `near-contract-audit`)
+- Contract audit report: `docs/SECURITY-AUDIT.md` (2026-11-03, Cursor)
 
 ## NEAR docs
 - Docs home: https://docs.near.org · source: https://github.com/near/docs
@@ -28,7 +29,6 @@ never from memory. (2026-11-02, Claude)
 - Meta-transactions (NEP-366): https://docs.near.org/protocol/transactions/meta-tx
 - Gas keys: https://docs.near.org/protocol/accounts-contracts/gas-keys
 - NEAR Auth (Google/email login): https://docs.near.org/web3-apps/tutorials/near-auth
-- DAO primitives: https://docs.near.org/primitives/dao
 - Universal Accounts: https://docs.near.org/protocol/tutorials/creating-universal-accounts
 - near-api-js: https://github.com/near/near-api-js
 - Testnet faucet / explorer: https://testnet.nearblocks.io · mainnet explorer: https://nearblocks.io
@@ -47,7 +47,3 @@ never from memory. (2026-11-02, Claude)
 - Signing intents: https://docs.near-intents.org/integration/verifier-contract/signing-intents.md
 - Account abstraction: https://docs.near-intents.org/integration/verifier-contract/account-abstraction.md
 - Cross-pay use case: https://intents.near.org/use-cases/cross-pay
-
-## DAO
-- Sputnik DAO contract: https://github.com/near-daos/sputnik-dao-contract
-- Trezu (DAO treasury UI): https://trezu.app · docs: https://github.com/NEAR-DevHub/trezu-docs

@@ -1,0 +1,59 @@
+# Near Events
+
+> Deposit-backed event registration you can add to any website. Guests put down a small refundable USDC deposit; people who show up get it back plus an equal share of the no-shows' deposits. Funds sit in a NEAR smart contract, never with the organizer or with us. No platform fee.
+
+This file is for AI coding agents adding Near Events to a host's website. Everything loads from the Near Events host that serves this file; below it is written as `https://NEAR-EVENTS-HOST` (use the origin you fetched this file from).
+
+## Add the widget (any site)
+
+1. Load the script once per page:
+   `<script src="https://NEAR-EVENTS-HOST/embed.js" async></script>`
+2. Put the element where the event should appear:
+   `<near-event event="EVENT_ID"></near-event>`
+
+The element renders an event card with a "Register · N USDC" button. Sign-up and payment open in a small window on the Near Events domain (wallets and Google sign-in need a first-party page). Never copy or modify embed.js; always load it from the host. The widget needs no API keys or secrets.
+
+### Attributes
+- `mode="button"`: only the button (for sites with their own event cards)
+- `label="…"`: button text
+- `then="https://…"`: the site's existing registration form; guests pay the deposit first, then continue there. `{account}` and `{event}` in the URL are replaced (e.g. `?ref={account}`)
+- `theme="light|dark|auto"`, `accent="#hex"`, `font="geist|poppins|system"`, `display="serif"`, `radius="12"`: match the site's design
+
+### JavaScript
+- `NearEvents.open(EVENT_ID, { then, accent, theme })` opens sign-up from the site's own button
+- `window.addEventListener("near-events:registered", e => e.detail)` → `{ eventId, accountId }`
+- The element also fires `registered` (bubbles, composed)
+
+### No scripts allowed
+`<iframe src="https://NEAR-EVENTS-HOST/embed/e/EVENT_ID" title="Event registration" loading="lazy" style="width:100%;max-width:560px;height:260px;border:0"></iframe>`
+
+### Just a link
+`https://NEAR-EVENTS-HOST/p/EVENT_ID` is the payment page (add `?then=` the same way). Use it in a Luma event description, Instagram bio, WhatsApp, email or a QR code at the venue.
+
+## Where to paste, per platform
+- Plain HTML / static: both lines into the page
+- Next.js: `next/script` with `strategy="afterInteractive"`, render `<near-event>` in JSX; TypeScript: declare `"near-event"` in `React.JSX.IntrinsicElements`
+- React (Vite): script tag in index.html, element in a component
+- Vue / Nuxt: script in index.html or `app.head`; `compilerOptions.isCustomElement = (tag) => tag === "near-event"`
+- Svelte / Astro: script in the root layout
+- Angular: script in index.html, `CUSTOM_ELEMENTS_SCHEMA`
+- WordPress: a "Custom HTML" block
+- Webflow: an "Embed" element
+- Tilda: an "HTML code" block (T123)
+- Wix: "Embed code" → "Embed HTML"
+- Squarespace: a "Code" block
+- Framer: an "Embed" component (HTML)
+- Luma, Google Forms, Typeform, Eventbrite: they don't run scripts; put the payment link `https://NEAR-EVENTS-HOST/p/EVENT_ID?then=<the form or Luma URL>` in the description or first question
+
+## Content-Security-Policy
+If the site sets one, allow: `script-src`, `frame-src` and `connect-src` for `https://NEAR-EVENTS-HOST`.
+
+## Read-only API
+`GET https://NEAR-EVENTS-HOST/api/embed/EVENT_ID` → `{ id, title, starts_at, ends_at, location, status, deposit_usdc, going, capacity, full }` (CORS open).
+
+## For hosts
+- Create and manage events from the Telegram bot: /new, deposit notifications, guest list, check-in, payouts and refunds (each confirmed by the host).
+- On Luma Plus, the bot connects the Luma event: paid guests are added to Luma as Going and Luma check-ins count for the payout.
+
+## Verify
+Run the site, open the page, confirm the card or button renders and that clicking Register opens the Near Events window. Report which files changed.

@@ -27,6 +27,16 @@ pub struct Contract {
 impl Contract {
     #[init]
     pub fn new() -> Self {
+        // L-02: open faucet must never land on mainnet. Named mainnet accounts
+        // end in `.near`. Implicit accounts are 64 hex characters and have no
+        // suffix, so the suffix check alone does not stop a mainnet deploy.
+        let id = env::current_account_id();
+        let name = id.as_str();
+        let implicit = name.len() == 64 && name.bytes().all(|b| b.is_ascii_hexdigit());
+        require!(
+            !name.ends_with(".near") && !implicit,
+            "test-usdc is testnet-only; do not deploy to mainnet"
+        );
         Self { token: FungibleToken::new(b"t".to_vec()) }
     }
 
@@ -131,5 +141,66 @@ impl FungibleTokenMetadataProvider for Contract {
             reference_hash: None,
             decimals: 6,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use near_contract_standards::fungible_token::FungibleTokenCore;
+    use near_contract_standards::fungible_token::metadata::FungibleTokenMetadataProvider;
+    use near_sdk::test_utils::VMContextBuilder;
+    use near_sdk::testing_env;
+
+    fn ctx(contract: &str) {
+        testing_env!(VMContextBuilder::new()
+            .current_account_id(contract.parse().unwrap())
+            .predecessor_account_id("alice.testnet".parse().unwrap())
+            .build());
+    }
+
+    #[test]
+    #[should_panic(expected = "testnet-only")]
+    fn rejects_a_mainnet_account_name() {
+        ctx("usdc.alice.near");
+        let _ = Contract::new();
+    }
+
+    #[test]
+    #[should_panic(expected = "testnet-only")]
+    fn rejects_an_implicit_account() {
+        ctx(&"ab".repeat(32));
+        let _ = Contract::new();
+    }
+
+    #[test]
+    #[should_panic(expected = "testnet-only")]
+    fn rejects_a_sandbox_style_near_name() {
+        ctx("usdc.test.near");
+        let _ = Contract::new();
+    }
+
+    #[test]
+    fn mints_on_a_testnet_name_and_caps_each_call() {
+        ctx("usdc.demo.testnet");
+        let mut token = Contract::new();
+        assert_eq!(token.ft_metadata().decimals, 6);
+        assert_eq!(token.ft_metadata().symbol, "USDC");
+        token.mint(U128(1_000 * 1_000_000), None);
+        let alice: AccountId = "alice.testnet".parse().unwrap();
+        assert_eq!(token.ft_balance_of(alice.clone()).0, 1_000 * 1_000_000);
+        assert_eq!(token.ft_total_supply().0, 1_000 * 1_000_000);
+        let bob: AccountId = "bob.testnet".parse().unwrap();
+        token.mint(U128(5 * 1_000_000), Some(bob.clone()));
+        assert_eq!(token.ft_balance_of(bob).0, 5 * 1_000_000);
+        assert_eq!(token.ft_total_supply().0, 1_005 * 1_000_000);
+    }
+
+    #[test]
+    #[should_panic(expected = "Max 1000 USDC per call")]
+    fn mint_rejects_more_than_one_thousand() {
+        ctx("usdc.demo.testnet");
+        let mut token = Contract::new();
+        token.mint(U128(1_000 * 1_000_000 + 1), None);
     }
 }
