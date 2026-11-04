@@ -29,15 +29,18 @@ export default function TryPage() {
         Turn sign-ups into show-ups. Same small deposit — who comes gets it back, plus a share of the no-shows.
       </p>
 
-      <div className="flex items-center justify-center gap-3 text-sm w-full">
-        <div className="flex-1 rounded-2xl border border-border bg-border/20 px-3 py-4">
-          <div className="text-muted line-through text-xs mb-1">8 Going</div>
-          <div className="font-semibold text-warn">~4 empty</div>
+      <div className="w-full rounded-2xl border border-border bg-surface shadow-sm overflow-hidden text-left">
+        <div className="px-3 py-2 border-b border-border text-[11px] font-semibold text-muted">
+          Register → door QR → withdraw
         </div>
-        <div className="text-muted shrink-0">→</div>
-        <div className="flex-1 rounded-2xl border border-border bg-surface px-3 py-4 shadow-sm">
-          <div className="text-muted text-xs mb-1">7 checked in</div>
-          <div className="font-semibold text-good">+$ deposit share</div>
+        <div className="p-4 space-y-3">
+          <div className="font-semibold text-sm">NEAR Builders Breakfast</div>
+          <div className="h-10 rounded-xl bg-accent text-white text-sm font-bold flex items-center justify-center">
+            Register · 10 USDC
+          </div>
+          <p className="text-xs text-muted leading-snug">
+            Same deposit for every guest. Show up → get it back plus a share of the no-shows. Via NEAR Intents.
+          </p>
         </div>
       </div>
 

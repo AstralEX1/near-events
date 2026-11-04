@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { events, toUnits, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
@@ -10,31 +10,69 @@ import { Themed } from "@/components/Themed";
 import { COLORS, FONTS, THEMES, decodeTheme, defaultTheme, encodeTheme, shuffleTheme, themeCover, themeStyle, type FontKey, type Theme, type ThemeName } from "@/lib/theme";
 import { SignInOptions } from "@/components/SignIn";
 
-function localInput(d: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+// ---- Time zones: the host picks wall-clock time in a zone, we store UTC ms. ----
+
+const LOCAL_TZ = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC";
+
+/** Milliseconds the zone is ahead of UTC at instant `ts`. */
+function zoneOffset(tz: string, ts: number): number {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      .formatToParts(ts)
+      .map((x) => [x.type, x.value]),
+  );
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(ts / 1000) * 1000;
 }
 
-const TZ = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
+/** "2026-11-05" + "18:30" in `tz` → UTC ms. */
+function toEpoch(date: string, time: string, tz: string): number {
+  const [y, m, d] = date.split("-").map(Number);
+  const [h, mi] = time.split(":").map(Number);
+  const wall = Date.UTC(y, m - 1, d, h, mi);
+  const first = wall - zoneOffset(tz, wall);
+  return wall - zoneOffset(tz, first);
+}
+
+/** UTC ms → wall-clock date and time in `tz`. */
+function fromEpoch(ts: number, tz: string): { date: string; time: string } {
+  const s = new Date(ts + zoneOffset(tz, ts)).toISOString();
+  return { date: s.slice(0, 10), time: s.slice(11, 16) };
+}
+
+function gmtLabel(tz: string, ts = Date.now()): string {
+  const min = Math.round(zoneOffset(tz, ts) / 60000);
+  const a = Math.abs(min);
+  return `GMT${min < 0 ? "−" : "+"}${String(Math.floor(a / 60)).padStart(2, "0")}:${String(a % 60).padStart(2, "0")}`;
+}
+
+const city = (tz: string) => tz.split("/").pop()!.replace(/_/g, " ");
+
+function dayLabel(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+}
+
+const SLOTS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
+
+interface When {
+  start: number;
+  end: number;
+  tz: string;
+}
 
 /**
- * Create an event the way Luma does: one card, cover on the left, the name
- * typed big, then time, place, description and options. A Luma link fills it
+ * Create an event the way Luma lays it out: cover and theme on the left; on
+ * the right the name typed big, a Start/End block with its time zone, place,
+ * description, then the options as one stack of rows. A Luma link fills it
  * all in, so a host can move registration here in one paste.
  */
 export default function CreateEvent() {
   const { accountId, send } = useWallet();
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    location: "",
-    starts_at: "",
-    ends_at: "",
-    deposit: "10",
-    capacity: "50",
-    cohosts: "",
-  });
+  const [form, setForm] = useState({ title: "", description: "", location: "", deposit: "10", capacity: "50", cohosts: "" });
+  const [when, setWhen] = useState<When | null>(null);
   const [theme, setTheme] = useState<Theme>(defaultTheme("ambient"));
+  const [themeOpen, setThemeOpen] = useState(false);
+  const [lumaOpen, setLumaOpen] = useState(false);
   const [lumaUrl, setLumaUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState<string | null>(null);
@@ -66,10 +104,10 @@ export default function CreateEvent() {
   useEffect(() => {
     const start = new Date(Date.now() + 24 * 3600_000);
     start.setMinutes(0, 0, 0);
-    const end = new Date(start.getTime() + 2 * 3600_000);
-    setForm((f) => ({ ...f, starts_at: f.starts_at || localInput(start), ends_at: f.ends_at || localInput(end) }));
+    setWhen((w) => w ?? { start: start.getTime(), end: start.getTime() + 2 * 3600_000, tz: LOCAL_TZ });
   }, []);
-  const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const importLuma = async () => {
     setImporting(true);
@@ -78,16 +116,11 @@ export default function CreateEvent() {
       const r = await fetch(`/api/luma/import?url=${encodeURIComponent(lumaUrl)}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Import failed");
-      setForm((f) => ({
-        ...f,
-        title: j.title,
-        description: j.description,
-        location: j.location,
-        starts_at: localInput(new Date(j.starts_at)),
-        ends_at: localInput(new Date(j.ends_at)),
-      }));
+      setForm((f) => ({ ...f, title: j.title, description: j.description, location: j.location }));
+      setWhen((w) => ({ tz: w?.tz ?? LOCAL_TZ, start: new Date(j.starts_at).getTime(), end: new Date(j.ends_at).getTime() }));
       if (j.cover_url) setTheme((t) => ({ ...t, image: j.cover_url }));
       setImported(j.luma_url);
+      setLumaOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -97,6 +130,8 @@ export default function CreateEvent() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!when) return;
+    if (when.end <= when.start) return setError("The event has to end after it starts.");
     setBusy(true);
     setError(null);
     try {
@@ -113,8 +148,8 @@ export default function CreateEvent() {
               description: form.description.trim(),
               location: form.location.trim(),
               cover_url: encodeTheme(theme),
-              starts_at: new Date(form.starts_at).getTime(),
-              ends_at: new Date(form.ends_at).getTime(),
+              starts_at: when.start,
+              ends_at: when.end,
             },
             deposit: toUnits(form.deposit),
             capacity,
@@ -139,154 +174,408 @@ export default function CreateEvent() {
 
   return (
     <Themed theme={theme}>
-    <form onSubmit={submit} className="max-w-4xl mx-auto grid gap-8 md:grid-cols-[300px_1fr] items-start pb-40">
-      <div className="space-y-3">
-        <div className="relative">
-          <Cover event={preview} className="aspect-square w-full rounded-2xl [&>span]:hidden" />
-          <button
-            type="button"
-            onClick={() => setPicker(!picker)}
-            className="absolute bottom-3 right-3 h-9 px-3 rounded-full bg-black/60 text-white text-sm backdrop-blur"
-          >
-            {theme.image ? "Change image" : "Add image"}
-          </button>
-        </div>
-        {picker && (
-          <div className="card p-3 space-y-2">
-            <input
-              className="input text-sm"
-              type="url"
-              maxLength={200}
-              placeholder="Paste an image link (https://…)"
-              value={theme.image ?? ""}
-              onChange={(e) => setTheme((t) => ({ ...t, image: e.target.value.trim() || null }))}
-            />
-            <p className="text-xs text-muted">Leave empty to use the theme’s own cover.</p>
+      <form onSubmit={submit} className="max-w-[928px] mx-auto grid gap-8 md:grid-cols-[330px_1fr] items-start pb-40">
+        {/* Left: cover, then theme + shuffle. */}
+        <div className="space-y-4 md:sticky md:top-20">
+          <div className="relative">
+            <Cover event={preview} className="aspect-square w-full rounded-2xl [&>span]:hidden shadow-sm" />
+            <button
+              type="button"
+              aria-label={theme.image ? "Change image" : "Add image"}
+              onClick={() => setPicker(!picker)}
+              className="absolute bottom-3 right-3 w-9 h-9 rounded-full bg-black/70 text-white flex items-center justify-center backdrop-blur ring-2 ring-white/80"
+            >
+              <Icon d="M4 16l4.5-4.5 3 3L16 10l4 4M4 5h16v14H4z" />
+            </button>
           </div>
-        )}
-      </div>
-
-      <div className="space-y-5 min-w-0">
-        <div className="card p-3 flex flex-wrap items-center gap-2">
-          <span className="text-sm text-muted px-1">Already on Luma?</span>
-          <input
-            className="input !py-2 text-sm flex-1 min-w-48"
-            placeholder="Paste your Luma link to import it"
-            value={lumaUrl}
-            onChange={(e) => setLumaUrl(e.target.value)}
-          />
-          <button type="button" className="btn btn-ghost !py-2 text-sm" disabled={!lumaUrl.trim() || importing} onClick={importLuma}>
-            {importing ? "Importing…" : "Import"}
-          </button>
-          {imported && <p className="w-full text-xs text-good px-1">✓ Imported. Check the details, then set the deposit.</p>}
-        </div>
-
-        <textarea
-          required
-          maxLength={120}
-          rows={1}
-          value={form.title}
-          onChange={set("title")}
-          placeholder="Event Name"
-          aria-label="Event name"
-          className="w-full resize-none bg-transparent text-4xl font-semibold tracking-tight outline-none placeholder:text-muted/50 [field-sizing:content]"
-        />
-
-        <div className="card divide-y divide-border">
-          <Row label="Start">
-            <input className="bg-transparent outline-none" type="datetime-local" required value={form.starts_at} onChange={set("starts_at")} />
-          </Row>
-          <Row label="End">
-            <input className="bg-transparent outline-none" type="datetime-local" required value={form.ends_at} onChange={set("ends_at")} />
-          </Row>
-          <div className="px-4 py-2 text-xs text-muted">{TZ}</div>
-        </div>
-
-        <div className="card">
-          <input
-            className="w-full bg-transparent px-4 py-3.5 outline-none"
-            maxLength={300}
-            value={form.location}
-            onChange={set("location")}
-            placeholder="📍  Add event location (address or link)"
-          />
-        </div>
-
-        <div className="card">
-          <textarea
-            className="w-full bg-transparent px-4 py-3.5 outline-none min-h-24"
-            maxLength={2000}
-            value={form.description}
-            onChange={set("description")}
-            placeholder="Add description"
-          />
-        </div>
-
-        <div>
-          <div className="label mb-2">Event options</div>
-          <div className="card divide-y divide-border">
-            <Row label="Deposit" hint="Back to everyone who comes, plus a share of the no-shows">
-              <span className="flex items-center gap-1">
-                <input
-                  className="w-20 bg-transparent text-right outline-none font-medium"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  required
-                  value={form.deposit}
-                  onChange={set("deposit")}
-                />
-                <span className="text-muted">USDC</span>
+          {picker && (
+            <div className="lu-field p-3 space-y-2">
+              <input
+                autoFocus
+                className="w-full bg-transparent outline-none text-sm"
+                type="url"
+                maxLength={200}
+                placeholder="Paste an image link (https://…)"
+                value={theme.image ?? ""}
+                onChange={(e) => setTheme((t) => ({ ...t, image: e.target.value.trim() || null }))}
+              />
+              <p className="text-xs text-muted">Leave empty to use the theme’s own cover.</p>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setThemeOpen(!themeOpen)} className="lu-field lu-hover flex-1 flex items-center gap-3 p-2 text-left">
+              <span className="w-12 h-9 rounded-md overflow-hidden shrink-0" style={{ ...themeStyle(theme).vars, background: themeStyle(theme).background }}>
+                <span className="block w-5 h-3.5 m-1.5 rounded-sm" style={{ background: themeCover(theme) }} />
               </span>
-            </Row>
-            <Row label="Capacity">
-              <input
-                className="w-20 bg-transparent text-right outline-none font-medium"
-                type="number"
-                min="1"
-                max="300"
-                required
-                value={form.capacity}
-                onChange={set("capacity")}
-              />
-            </Row>
-            <Row label="Door team" hint="NEAR accounts that can check guests in">
-              <input
-                className="w-48 bg-transparent text-right outline-none"
-                value={form.cohosts}
-                onChange={set("cohosts")}
-                placeholder="alice.near, bob.near"
-              />
-            </Row>
+              <span className="flex-1 min-w-0">
+                <span className="block text-xs text-muted">Theme</span>
+                <span className="block font-medium truncate">{THEMES[theme.name].label}</span>
+              </span>
+              <Icon d="M8 9l4-4 4 4M8 15l4 4 4-4" className="text-muted" />
+            </button>
+            <button type="button" aria-label="Shuffle theme" onClick={() => setTheme(shuffleTheme(theme))} className="lu-field lu-hover w-[54px] flex items-center justify-center">
+              <Icon d="M4 7h3l10 10h3M4 17h3l3-3M14 10l3-3h3M18 4l3 3-3 3M18 14l3 3-3 3" />
+            </button>
           </div>
         </div>
 
-        {error && <p className="text-sm text-warn break-words">{error}</p>}
-        {accountId ? (
-          <button className="btn btn-primary w-full !py-3.5" disabled={busy}>{busy ? "Confirm in your wallet…" : "Create Event"}</button>
-        ) : (
-          <div className="card p-4 space-y-2">
-            <div className="text-sm font-medium">Sign in to create the event</div>
-            <SignInOptions />
+        {/* Right: the event itself. */}
+        <div className="min-w-0 space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="lu-chip">
+              <span className="w-4 h-4 rounded-full" style={{ background: theme.color }} />
+              {accountId ? <span className="truncate max-w-44">{accountId}</span> : "Your events"}
+            </span>
+            <div className="flex items-center gap-2">
+              <button type="button" className="lu-chip lu-hover" onClick={() => setLumaOpen(!lumaOpen)}>
+                {imported ? "✓ Imported from Luma" : "Import from Luma"}
+              </button>
+              <span className="lu-chip" title="Every event is public in v1">
+                <Icon d="M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18" size={14} />
+                Public
+              </span>
+            </div>
           </div>
-        )}
-        <p className="text-xs text-muted">
-          A little NEAR is attached for on-chain storage and comes back when the event closes. Hosting as a DAO? Create the
-          event through a DAO proposal (see the guide).
-        </p>
-      </div>
-      <ThemeBar theme={theme} onChange={setTheme} />
-    </form>
+          {lumaOpen && (
+            <div className="lu-field p-2 flex gap-2">
+              <input
+                autoFocus
+                className="flex-1 min-w-0 bg-transparent px-2 outline-none text-sm"
+                placeholder="Paste your lu.ma link"
+                value={lumaUrl}
+                onChange={(e) => setLumaUrl(e.target.value)}
+              />
+              <button type="button" className="btn btn-primary !py-1.5 text-sm" disabled={!lumaUrl.trim() || importing} onClick={importLuma}>
+                {importing ? "Importing…" : "Import"}
+              </button>
+            </div>
+          )}
+
+          <textarea
+            required
+            maxLength={120}
+            rows={1}
+            value={form.title}
+            onChange={(e) => set("title")(e.target.value)}
+            placeholder="Event Name"
+            aria-label="Event name"
+            className="w-full resize-none bg-transparent text-[40px] leading-[1.15] font-semibold tracking-tight outline-none placeholder:text-muted/50 [field-sizing:content]"
+          />
+
+          {when && <WhenBlock when={when} onChange={setWhen} />}
+
+          <ExpandRow
+            icon="M12 21s-7-6.2-7-11.5A7 7 0 0119 9.5C19 14.8 12 21 12 21zM12 12a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"
+            title="Add Event Location"
+            hint="Offline location or virtual link"
+            value={form.location}
+          >
+            {(close) => (
+              <input
+                autoFocus
+                className="w-full bg-transparent outline-none"
+                maxLength={300}
+                value={form.location}
+                onChange={(e) => set("location")(e.target.value)}
+                onBlur={close}
+                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), close())}
+                placeholder="Address, venue or link"
+              />
+            )}
+          </ExpandRow>
+
+          <ExpandRow icon="M5 6h14M5 10h14M5 14h9M5 18h6" title="Add Description" value={form.description} multiline>
+            {(close) => (
+              <textarea
+                autoFocus
+                className="w-full bg-transparent outline-none min-h-28 resize-y"
+                maxLength={2000}
+                value={form.description}
+                onChange={(e) => set("description")(e.target.value)}
+                onBlur={close}
+                placeholder="Who should come, what happens, what to bring"
+              />
+            )}
+          </ExpandRow>
+
+          <div className="space-y-2 pt-1">
+            <div className="text-sm font-medium text-muted">Event Options</div>
+            <div className="rounded-2xl overflow-hidden flex flex-col gap-px">
+              <OptionRow
+                icon="M4 8a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4zM14 6v12"
+                label="Deposit"
+                value={`${form.deposit} USDC`}
+                title="Deposit"
+                help="Each guest puts this down. People who come get it back plus a share of the no-shows."
+              >
+                <input className="input" type="number" min="0.01" step="0.01" required value={form.deposit} onChange={(e) => set("deposit")(e.target.value)} />
+              </OptionRow>
+              <div className="lu-row">
+                <Icon d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" className="text-muted" />
+                <span className="flex-1">Show-ups split no-shows</span>
+                <span className="text-muted text-sm">Always on</span>
+              </div>
+              <OptionRow
+                icon="M16 19v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9.5 10a3 3 0 100-6 3 3 0 000 6zM21 19v-1a4 4 0 00-3-3.9M16 4.1a3 3 0 010 5.8"
+                label="Capacity"
+                value={form.capacity}
+                title="Max capacity"
+                help="Up to 300 guests. Registration closes when it's full."
+              >
+                <input className="input" type="number" min="1" max="300" required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
+              </OptionRow>
+              <OptionRow
+                icon="M9 11l2 2 4-4M4 4h16v16H4z"
+                label="Door team"
+                value={form.cohosts.trim() ? `${form.cohosts.split(/[\s,]+/).filter(Boolean).length} people` : "Just you"}
+                title="Door team"
+                help="NEAR accounts that can check guests in, separated by commas."
+              >
+                <input className="input" value={form.cohosts} onChange={(e) => set("cohosts")(e.target.value)} placeholder="alice.near, bob.near" />
+              </OptionRow>
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-warn break-words">{error}</p>}
+          {accountId ? (
+            <button className="btn btn-primary w-full !py-3 text-lg font-medium" disabled={busy}>
+              {busy ? "Confirm in your wallet…" : "Create Event"}
+            </button>
+          ) : (
+            <div className="lu-field p-4 space-y-2">
+              <div className="text-sm font-medium">Sign in to create the event</div>
+              <SignInOptions />
+            </div>
+          )}
+          <p className="text-xs text-muted">
+            A little NEAR is attached for on-chain storage and comes back when the event closes. Hosting as a DAO? Create the event through a DAO
+            proposal (see the guide).
+          </p>
+        </div>
+        {themeOpen && <ThemeBar theme={theme} onChange={setTheme} onClose={() => setThemeOpen(false)} />}
+      </form>
     </Themed>
   );
 }
 
-/** Luma-style theme bar pinned to the bottom: themes, then color, font and light/dark. */
-function ThemeBar({ theme, onChange }: { theme: Theme; onChange: (t: Theme) => void }) {
+function Icon({ d, size = 16, className = "" }: { d: string; size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 ${className}`} aria-hidden>
+      <path d={d} />
+    </svg>
+  );
+}
+
+/** Closes when you click outside it or press Escape. */
+function Popover({ onClose, children, className = "" }: { onClose: () => void; children: ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const down = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && onClose();
+    const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("mousedown", down);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("mousedown", down);
+      document.removeEventListener("keydown", key);
+    };
+  }, [onClose]);
+  return (
+    <div ref={ref} className={`absolute z-40 mt-1 rounded-xl border border-border bg-surface text-text shadow-xl ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+/** Start/End with a little timeline on the left and the time zone box on the right. */
+function WhenBlock({ when, onChange }: { when: When; onChange: (w: When) => void }) {
+  const s = fromEpoch(when.start, when.tz);
+  const e = fromEpoch(when.end, when.tz);
+  // Moving the start keeps the length of the event, like Luma.
+  const setStart = (date: string, time: string) => {
+    const start = toEpoch(date, time, when.tz);
+    onChange({ ...when, start, end: start + (when.end - when.start) });
+  };
+  const setEnd = (date: string, time: string) => onChange({ ...when, end: toEpoch(date, time, when.tz) });
+  // Changing the zone keeps the wall-clock times the host typed.
+  const setTz = (tz: string) => onChange({ tz, start: toEpoch(s.date, s.time, tz), end: toEpoch(e.date, e.time, tz) });
+
+  return (
+    <div className="flex flex-col sm:flex-row gap-2">
+      <div className="lu-field relative flex-1 py-1.5 pl-3 pr-1.5">
+        <span aria-hidden className="absolute left-[17px] top-[26px] bottom-[26px] border-l border-dashed border-muted/50" />
+        <DTRow label="Start" dot="fill" date={s.date} time={s.time} onChange={setStart} />
+        <DTRow label="End" dot="ring" date={e.date} time={e.time} onChange={setEnd} invalid={when.end <= when.start} />
+      </div>
+      <TzBox tz={when.tz} at={when.start} onChange={setTz} />
+    </div>
+  );
+}
+
+function DTRow({ label, dot, date, time, onChange, invalid }: { label: string; dot: "fill" | "ring"; date: string; time: string; onChange: (d: string, t: string) => void; invalid?: boolean }) {
+  const dateRef = useRef<HTMLInputElement>(null);
+  const [slots, setSlots] = useState(false);
+  return (
+    <div className="flex items-center gap-3 py-1">
+      <span className={`relative z-10 w-2.5 h-2.5 rounded-full shrink-0 ${dot === "fill" ? "bg-muted" : "border border-muted bg-[var(--bg)]"}`} />
+      <span className="flex-1 text-muted">{label}</span>
+      <div className={`flex rounded-lg gap-px ${invalid ? "ring-1 ring-warn" : ""}`}>
+        <label className="lu-pill rounded-l-lg relative cursor-pointer w-[124px]">
+          {dayLabel(date)}
+          <input
+            ref={dateRef}
+            type="date"
+            aria-label={`${label} date`}
+            value={date}
+            onChange={(ev) => ev.target.value && onChange(ev.target.value, time)}
+            onClick={() => dateRef.current?.showPicker?.()}
+            className="absolute inset-0 opacity-0 cursor-pointer"
+          />
+        </label>
+        <div className="relative">
+          <button type="button" aria-label={`${label} time`} className="lu-pill rounded-r-lg w-[72px] tabular-nums" onClick={() => setSlots(!slots)}>
+            {time}
+          </button>
+          {slots && (
+            <Popover onClose={() => setSlots(false)} className="right-0 w-28 max-h-64 overflow-y-auto p-1">
+              <input
+                type="time"
+                aria-label={`${label} exact time`}
+                defaultValue={time}
+                onChange={(ev) => ev.target.value && onChange(date, ev.target.value)}
+                className="w-full px-2 py-1 mb-1 rounded-md bg-transparent border border-border text-sm"
+              />
+              {SLOTS.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  ref={(el) => {
+                    if (el && t === time && el.parentElement) el.parentElement.scrollTop = el.offsetTop - 96;
+                  }}
+                  onClick={() => {
+                    onChange(date, t);
+                    setSlots(false);
+                  }}
+                  className={`block w-full text-left px-3 py-1.5 rounded-md text-sm tabular-nums hover:bg-border/60 ${t === time ? "bg-border/60 font-medium" : ""}`}
+                >
+                  {t}
+                </button>
+              ))}
+            </Popover>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TzBox({ tz, at, onChange }: { tz: string; at: number; onChange: (tz: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const all = useMemo(() => {
+    try {
+      return (Intl as unknown as { supportedValuesOf(k: string): string[] }).supportedValuesOf("timeZone");
+    } catch {
+      return [LOCAL_TZ, "UTC"];
+    }
+  }, []);
+  const list = useMemo(() => {
+    const n = q.trim().toLowerCase();
+    return all.filter((z) => !n || z.toLowerCase().replace(/_/g, " ").includes(n) || gmtLabel(z, at).toLowerCase().includes(n)).slice(0, 60);
+  }, [all, q, at]);
+  return (
+    <div className="relative sm:w-[140px]">
+      <button type="button" onClick={() => setOpen(!open)} className="lu-field lu-hover w-full h-full p-3 text-left flex sm:flex-col sm:justify-between gap-2" aria-label="Time zone">
+        <Icon d="M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18" className="text-muted" />
+        <span>
+          <span className="block text-sm font-medium">{gmtLabel(tz, at)}</span>
+          <span className="block text-xs text-muted truncate">{city(tz)}</span>
+        </span>
+      </button>
+      {open && (
+        <Popover onClose={() => setOpen(false)} className="right-0 w-72 p-1">
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search for a time zone" className="w-full px-3 py-2 mb-1 bg-transparent outline-none border-b border-border text-sm" />
+          <div className="max-h-64 overflow-y-auto">
+            {list.map((z) => (
+              <button
+                key={z}
+                type="button"
+                onClick={() => {
+                  onChange(z);
+                  setOpen(false);
+                }}
+                className={`flex w-full gap-3 px-3 py-1.5 rounded-md text-sm text-left hover:bg-border/60 ${z === tz ? "font-medium bg-border/60" : ""}`}
+              >
+                <span className="text-muted tabular-nums w-20 shrink-0">{gmtLabel(z, at)}</span>
+                <span className="truncate">{z.replace(/_/g, " ")}</span>
+              </button>
+            ))}
+          </div>
+        </Popover>
+      )}
+    </div>
+  );
+}
+
+/** A quiet row ("Add Event Location") that turns into a field when you click it. */
+function ExpandRow({ icon, title, hint, value, multiline, children }: { icon: string; title: string; hint?: string; value: string; multiline?: boolean; children: (close: () => void) => ReactNode }) {
+  const [editing, setEditing] = useState(false);
+  if (editing)
+    return (
+      <div className="lu-field flex gap-3 px-3 py-2.5 items-start">
+        <Icon d={icon} className="text-muted mt-1" />
+        <div className="flex-1 min-w-0">{children(() => setEditing(false))}</div>
+      </div>
+    );
+  return (
+    <button type="button" onClick={() => setEditing(true)} className="lu-field lu-hover w-full flex gap-3 px-3 py-2 text-left items-start">
+      <Icon d={icon} className="text-muted mt-1" />
+      <span className="flex-1 min-w-0">
+        {value ? (
+          <span className={`block ${multiline ? "whitespace-pre-line line-clamp-4" : "truncate"}`}>{value}</span>
+        ) : (
+          <>
+            <span className="block text-muted">{title}</span>
+            {hint && <span className="block text-xs text-muted/80">{hint}</span>}
+          </>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/** An option row with its value and a pencil; the editor opens in a small dialog. */
+function OptionRow({ icon, label, value, title, help, children }: { icon: string; label: string; value: string; title: string; help: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" className="lu-row lu-hover text-left" onClick={() => setOpen(true)}>
+        <Icon d={icon} className="text-muted" />
+        <span className="flex-1">{label}</span>
+        <span className="text-muted">{value}</span>
+        <Icon d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4" size={14} className="text-muted" />
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-surface text-text border border-border shadow-2xl p-5 space-y-3" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), setOpen(false))}>
+            <div className="text-lg font-semibold">{title}</div>
+            <p className="text-sm text-muted">{help}</p>
+            {children}
+            <button type="button" className="btn btn-primary w-full" onClick={() => setOpen(false)}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Opens from the Theme button, like Luma: themes, then color, font, light/dark, effect and shuffle. */
+function ThemeBar({ theme, onChange, onClose }: { theme: Theme; onChange: (t: Theme) => void; onClose: () => void }) {
   const [open, setOpen] = useState<"color" | "font" | null>(null);
   const pick = (name: ThemeName) => onChange({ ...defaultTheme(name), image: theme.image, emoji: theme.emoji });
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/90 backdrop-blur">
+    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/90 backdrop-blur shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
       <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-4 overflow-x-auto">
         <div className="flex gap-3 shrink-0" role="group" aria-label="Theme">
           {(Object.keys(THEMES) as ThemeName[]).map((name) => {
@@ -387,20 +676,11 @@ function ThemeBar({ theme, onChange }: { theme: Theme; onChange: (t: Theme) => v
             <span className="text-[11px] text-muted">Emoji</span>
           </label>
         )}
+        <button type="button" onClick={onClose} className="btn btn-primary !py-2 text-sm ml-auto shrink-0 sticky right-0 shadow-[-12px_0_12px_var(--surface)]">
+          Done
+        </button>
       </div>
     </div>
-  );
-}
-
-function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex items-center justify-between gap-4 px-4 py-3">
-      <span>
-        <span className="block">{label}</span>
-        {hint && <span className="block text-xs text-muted">{hint}</span>}
-      </span>
-      {children}
-    </label>
   );
 }
 

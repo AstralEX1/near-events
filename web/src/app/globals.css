@@ -1,11 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #ffffff;
+  /* Tokens aligned to docs/mockups-kickback (Claude boards). */
+  --bg: #f6f5f2;
   --surface: #ffffff;
   --text: #16161a;
-  --muted: #6b6b76;
-  --border: #ebebef;
+  --muted: #5f5f6a;
+  --border: #e7e5e0;
   --accent: #5b4bff;
   --accent-soft: #edeaff;
   --good: #0f9d6b;
@@ -97,3 +98,12 @@ body:has(.embed-root) { background: transparent; }
   to { transform: translateY(110vh) rotate(var(--rot)); opacity: 0.2; }
 }
 .fall { animation: fall linear forwards; }
+
+/* Event creator, laid out like Luma's: tinted fields instead of bordered cards, so they sit on any theme. */
+.lu-field { background: color-mix(in srgb, var(--text) 6%, transparent); border-radius: 0.75rem; }
+.lu-hover { transition: background-color 0.15s; cursor: pointer; }
+.lu-hover:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.lu-row { display: flex; align-items: center; gap: 0.75rem; min-height: 2.5rem; padding: 0.5rem 0.75rem; width: 100%; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.lu-pill { display: flex; align-items: center; justify-content: center; height: 2.25rem; padding: 0 0.75rem; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.lu-pill:hover { background: color-mix(in srgb, var(--text) 12%, transparent); }
+.lu-chip { display: inline-flex; align-items: center; gap: 0.4rem; height: 1.875rem; padding: 0 0.7rem; border-radius: 999px; font-size: 0.875rem; color: var(--muted); background: color-mix(in srgb, var(--text) 6%, transparent); }

@@ -20,7 +20,9 @@ export function Header() {
     <header className="sticky top-0 z-10 backdrop-blur bg-bg/90 border-b border-border">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-4">
         <Link href="/" className="font-semibold tracking-tight flex items-center gap-2">
-          <span className="inline-block w-6 h-6 rounded-lg bg-gradient-to-br from-accent to-pink-400" />
+          <span className="inline-flex w-7 h-7 rounded-lg bg-accent text-white text-[13px] font-bold items-center justify-center">
+            N
+          </span>
           Near Events
         </Link>
         {NETWORK === "testnet" && (
