@@ -691,7 +691,7 @@ function Created({ event }: { event: EventView }) {
           Open event page
         </Link>
         <Link href={`/e/${event.id}/manage`} className="btn btn-ghost">
-          Check-in page
+          Manage event
         </Link>
         <Link href={widget} className="btn btn-ghost">
           Integrate widget
