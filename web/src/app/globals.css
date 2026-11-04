@@ -42,6 +42,7 @@
 
 body {
   background: var(--bg);
+  transition: background-color .2s;
   color: var(--text);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
@@ -66,7 +67,7 @@ body {
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary { background: var(--text); color: var(--bg); }
-.btn-accent { background: var(--accent); color: white; }
+.btn-accent { background: var(--accent); color: var(--on-accent, white); }
 .btn-good { background: var(--good); color: white; }
 .btn-ghost { border: 1px solid var(--border); background: var(--surface); }
 
@@ -87,3 +88,6 @@ body:has(.embed-root) { background: transparent; }
 .embed .card { border-radius: var(--embed-radius); }
 .embed .btn { border-radius: calc(var(--embed-radius) * 0.75); }
 .embed-title { font-family: var(--embed-display); }
+
+/* Event page themes (lib/theme.ts): the host's font for headings and body. */
+.themed { font-family: var(--theme-font); color: var(--text); }

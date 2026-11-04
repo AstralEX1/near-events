@@ -5,11 +5,13 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, type EventView, type GuestView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
-import { Avatar, AvatarStack, Cover, DateBadge, StatusPill, eventHue, formatWhen, shortAccount } from "@/components/ui";
+import { Avatar, AvatarStack, Cover, DateBadge, StatusPill, formatWhen, shortAccount } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
 import { GuestGrid } from "@/components/EventParts";
 import { SponsorButton } from "@/components/Sponsor";
 import { EVENTS_CONTRACT, EXPLORER_URL } from "@/lib/config";
+import { Themed } from "@/components/Themed";
+import { decodeTheme } from "@/lib/theme";
 
 /**
  * The hosted event page, laid out like Luma so hosts and guests feel at home.
@@ -39,21 +41,12 @@ export default function EventPage() {
   const me = guests.find((g) => g.account_id === accountId);
   const isStaff = !!accountId && (accountId === event.host || event.cohosts.includes(accountId));
 
-  const hue = eventHue(event);
   const going = guests.map((g) => g.account_id);
 
-  // Luma's layout in our colors: cover, hosts and who's going on the left;
-  // title, time, place, the registration card and the description on the right.
+  // Luma's layout in the host's chosen theme: cover, hosts and who's going on
+  // the left; title, time, place, the registration card and the description on the right.
   return (
-    <div className="relative">
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 opacity-60"
-        style={{
-          background: `radial-gradient(60% 50% at 15% 0%, hsl(${hue} 90% 85% / 0.55), transparent 70%),
-            radial-gradient(50% 40% at 90% 10%, hsl(${(hue + 60) % 360} 90% 85% / 0.45), transparent 70%)`,
-        }}
-      />
+    <Themed theme={decodeTheme(event.metadata.cover_url)}>
       <div className="grid gap-8 lg:gap-10 md:grid-cols-[300px_1fr] items-start max-w-4xl mx-auto">
         <aside className="space-y-6">
           <Cover event={event} className="aspect-square w-full rounded-2xl shadow-sm [&>span]:hidden" />
@@ -126,7 +119,7 @@ export default function EventPage() {
           {event.status !== "Open" && <GuestGrid event={event} guests={guests} me={accountId} />}
         </section>
       </div>
-    </div>
+    </Themed>
   );
 }
 

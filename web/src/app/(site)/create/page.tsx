@@ -5,7 +5,9 @@ import { useEffect, useState } from "react";
 import { events, toUnits, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
-import { COVER_PRESETS, Cover } from "@/components/ui";
+import { Cover } from "@/components/ui";
+import { Themed } from "@/components/Themed";
+import { COLORS, FONTS, THEMES, defaultTheme, encodeTheme, themeCover, themeStyle, type FontKey, type Theme, type ThemeName } from "@/lib/theme";
 import { SignInOptions } from "@/components/SignIn";
 
 function localInput(d: Date) {
@@ -26,13 +28,13 @@ export default function CreateEvent() {
     title: "",
     description: "",
     location: "",
-    cover: "preset:violet",
     starts_at: "",
     ends_at: "",
     deposit: "10",
     capacity: "50",
     cohosts: "",
   });
+  const [theme, setTheme] = useState<Theme>(defaultTheme("ambient"));
   const [lumaUrl, setLumaUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState<string | null>(null);
@@ -62,10 +64,10 @@ export default function CreateEvent() {
         title: j.title,
         description: j.description,
         location: j.location,
-        cover: j.cover_url ?? f.cover,
         starts_at: localInput(new Date(j.starts_at)),
         ends_at: localInput(new Date(j.ends_at)),
       }));
+      if (j.cover_url) setTheme((t) => ({ ...t, image: j.cover_url }));
       setImported(j.luma_url);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -91,7 +93,7 @@ export default function CreateEvent() {
               title,
               description: form.description.trim(),
               location: form.location.trim(),
-              cover_url: form.cover.trim() || null,
+              cover_url: encodeTheme(theme),
               starts_at: new Date(form.starts_at).getTime(),
               ends_at: new Date(form.ends_at).getTime(),
             },
@@ -114,10 +116,11 @@ export default function CreateEvent() {
 
   if (created) return <Created event={created} lumaUrl={imported} />;
 
-  const preview = { id: 0, metadata: { title: form.title || "Event", cover_url: form.cover || null } } as EventView;
+  const preview = { id: 0, metadata: { title: form.title || "Event", cover_url: encodeTheme(theme) } } as EventView;
 
   return (
-    <form onSubmit={submit} className="max-w-4xl mx-auto grid gap-8 md:grid-cols-[300px_1fr] items-start">
+    <Themed theme={theme}>
+    <form onSubmit={submit} className="max-w-4xl mx-auto grid gap-8 md:grid-cols-[300px_1fr] items-start pb-40">
       <div className="space-y-3">
         <div className="relative">
           <Cover event={preview} className="aspect-square w-full rounded-2xl [&>span]:hidden" />
@@ -126,31 +129,20 @@ export default function CreateEvent() {
             onClick={() => setPicker(!picker)}
             className="absolute bottom-3 right-3 h-9 px-3 rounded-full bg-black/60 text-white text-sm backdrop-blur"
           >
-            Change cover
+            {theme.image ? "Change image" : "Add image"}
           </button>
         </div>
         {picker && (
-          <div className="card p-3 space-y-3">
-            <div className="grid grid-cols-3 gap-2">
-              {Object.entries(COVER_PRESETS).map(([name, bg]) => (
-                <button
-                  key={name}
-                  type="button"
-                  aria-label={`Cover ${name}`}
-                  onClick={() => setForm((f) => ({ ...f, cover: `preset:${name}` }))}
-                  className={`aspect-square rounded-xl ${form.cover === `preset:${name}` ? "ring-2 ring-accent ring-offset-2 ring-offset-surface" : ""}`}
-                  style={{ background: bg }}
-                />
-              ))}
-            </div>
+          <div className="card p-3 space-y-2">
             <input
               className="input text-sm"
               type="url"
-              maxLength={300}
-              placeholder="Or paste an image link"
-              value={form.cover.startsWith("preset:") ? "" : form.cover}
-              onChange={set("cover")}
+              maxLength={200}
+              placeholder="Paste an image link (https://…)"
+              value={theme.image ?? ""}
+              onChange={(e) => setTheme((t) => ({ ...t, image: e.target.value.trim() || null }))}
             />
+            <p className="text-xs text-muted">Leave empty to use the theme’s own cover.</p>
           </div>
         )}
       </div>
@@ -264,7 +256,107 @@ export default function CreateEvent() {
           event through a DAO proposal (see the guide).
         </p>
       </div>
+      <ThemeBar theme={theme} onChange={setTheme} />
     </form>
+    </Themed>
+  );
+}
+
+/** Luma-style theme bar pinned to the bottom: themes, then color, font and light/dark. */
+function ThemeBar({ theme, onChange }: { theme: Theme; onChange: (t: Theme) => void }) {
+  const [open, setOpen] = useState<"color" | "font" | null>(null);
+  const pick = (name: ThemeName) => onChange({ ...defaultTheme(name), image: theme.image, emoji: theme.emoji });
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/90 backdrop-blur">
+      <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-4 overflow-x-auto">
+        <div className="flex gap-3 shrink-0" role="group" aria-label="Theme">
+          {(Object.keys(THEMES) as ThemeName[]).map((name) => {
+            const t = { ...defaultTheme(name), emoji: theme.emoji };
+            const { background, vars } = themeStyle(t);
+            const active = theme.name === name;
+            return (
+              <button key={name} type="button" onClick={() => pick(name)} className="flex flex-col items-center gap-1 shrink-0">
+                <span
+                  className={`block w-14 h-10 rounded-lg border overflow-hidden ${active ? "ring-2 ring-accent ring-offset-2 ring-offset-surface" : "border-border"}`}
+                  style={{ ...vars, background }}
+                >
+                  <span className="block w-6 h-4 m-1.5 rounded" style={{ background: themeCover(t) }} />
+                </span>
+                <span className={`text-[11px] ${active ? "font-semibold" : "text-muted"}`}>{THEMES[name].label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="h-10 w-px bg-border shrink-0" />
+        <div className="relative shrink-0">
+          <button type="button" onClick={() => setOpen(open === "color" ? null : "color")} className="flex flex-col items-center gap-1">
+            <span className="w-8 h-8 rounded-full border border-border" style={{ background: theme.color }} />
+            <span className="text-[11px] text-muted">Color</span>
+          </button>
+          {open === "color" && (
+            <div className="absolute bottom-14 left-1/2 -translate-x-1/2 card p-2 flex gap-1.5 shadow-xl">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-label={`Color ${c}`}
+                  onClick={() => onChange({ ...theme, color: c })}
+                  className={`w-7 h-7 rounded-full ${theme.color === c ? "ring-2 ring-offset-2 ring-offset-surface ring-text" : ""}`}
+                  style={{ background: c }}
+                />
+              ))}
+              <input type="color" aria-label="Custom color" value={theme.color} onChange={(e) => onChange({ ...theme, color: e.target.value })} className="w-7 h-7" />
+            </div>
+          )}
+        </div>
+        <div className="relative shrink-0">
+          <button type="button" onClick={() => setOpen(open === "font" ? null : "font")} className="flex flex-col items-center gap-1">
+            <span className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-sm" style={{ fontFamily: FONTS[theme.font].css }}>
+              Ag
+            </span>
+            <span className="text-[11px] text-muted">Font</span>
+          </button>
+          {open === "font" && (
+            <div className="absolute bottom-14 left-1/2 -translate-x-1/2 card p-1 w-40 shadow-xl">
+              {(Object.keys(FONTS) as FontKey[]).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => {
+                    onChange({ ...theme, font: f });
+                    setOpen(null);
+                  }}
+                  className={`block w-full text-left px-3 py-1.5 rounded-lg hover:bg-border/50 ${theme.font === f ? "font-semibold" : ""}`}
+                  style={{ fontFamily: FONTS[f].css }}
+                >
+                  {FONTS[f].label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange({ ...theme, display: theme.display === "dark" ? "light" : "dark" })}
+          className="flex flex-col items-center gap-1 shrink-0"
+        >
+          <span className="w-8 h-8 rounded-full border border-border flex items-center justify-center">{theme.display === "dark" ? "☾" : "☀"}</span>
+          <span className="text-[11px] text-muted">Display</span>
+        </button>
+        {theme.name === "emoji" && (
+          <label className="flex flex-col items-center gap-1 shrink-0">
+            <input
+              className="w-10 h-8 rounded-full border border-border bg-transparent text-center"
+              value={theme.emoji}
+              maxLength={4}
+              onChange={(e) => onChange({ ...theme, emoji: [...e.target.value].slice(-1).join("") || "🎉" })}
+              aria-label="Emoji"
+            />
+            <span className="text-[11px] text-muted">Emoji</span>
+          </label>
+        )}
+      </div>
+    </div>
   );
 }
 

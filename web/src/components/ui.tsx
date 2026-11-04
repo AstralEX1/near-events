@@ -1,3 +1,4 @@
+import { decodeTheme, themeCover } from "@/lib/theme";
 import type { EventStatus, EventView } from "@/lib/near";
 
 /** Implicit accounts (Google/email users) and EVM addresses (Intents accounts) are shortened for display. */
@@ -53,6 +54,12 @@ export function Cover({ event, className = "" }: { event: EventView; className?:
   const a = h % 360;
   const preset = event.metadata.cover_url?.startsWith("preset:") ? COVER_PRESETS[event.metadata.cover_url.slice(7)] : null;
   if (preset) return <div className={`relative overflow-hidden ${className}`} style={{ background: preset }} />;
+  if (event.metadata.cover_url?.startsWith("theme:")) {
+    const t = decodeTheme(event.metadata.cover_url);
+    // eslint-disable-next-line @next/next/no-img-element
+    if (t.image) return <img src={t.image} alt="" className={`object-cover ${className}`} />;
+    return <div className={`relative overflow-hidden ${className}`} style={{ background: themeCover(t) }} />;
+  }
   if (event.metadata.cover_url) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={event.metadata.cover_url} alt="" className={`object-cover ${className}`} />;
