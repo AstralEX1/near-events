@@ -22,7 +22,7 @@ interface Look {
 
 const PRESETS: { name: string; page: string; look: Omit<Look, "mode" | "label" | "then"> }[] = [
   { name: "Near Events", page: "#ffffff", look: { theme: "light", accent: "#5b4bff", font: "geist", display: "sans", radius: "16" } },
-  { name: "Bali Squad", page: "#fbf7f2", look: { theme: "light", accent: "#ff401f", font: "poppins", display: "serif", radius: "12" } },
+  { name: "Warm", page: "#fbf7f2", look: { theme: "light", accent: "#ff401f", font: "poppins", display: "serif", radius: "12" } },
   { name: "Dark", page: "#0e0e10", look: { theme: "dark", accent: "#8b7fff", font: "system", display: "sans", radius: "14" } },
 ];
 
@@ -238,18 +238,14 @@ export default function WidgetBuilder() {
               onCopy={() => copy("agent")}
             />
             <Snippet title="Or paste this code yourself" note="Sign-up opens in a small window on our domain." code={snippets.script} copied={copied === "script"} onCopy={() => copy("script")} />
+            <Snippet
+              title="Bare payment link"
+              note="Paste into Luma, Instagram, WhatsApp, or any CTA. Opens deposit → optional redirect."
+              code={snippets.link}
+              copied={copied === "link"}
+              onCopy={() => copy("link")}
+            />
             <Snippet title="Iframe fallback" note="If your site blocks scripts." code={snippets.iframe} copied={copied === "iframe"} onCopy={() => copy("iframe")} collapsed />
-            <p className="text-sm text-muted">
-              Or a bare link:{" "}
-              <button type="button" className="text-accent" onClick={() => copy("link")}>
-                {copied === "link" ? "Copied" : "copy /p/…"}
-              </button>
-              . Demo:{" "}
-              <a href="/demo/balisquad.html" className="text-accent" target="_blank" rel="noreferrer">
-                Bali Squad
-              </a>
-              .
-            </p>
           </div>
         </div>
       )}

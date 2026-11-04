@@ -78,8 +78,9 @@ Any business can take deposit-backed registrations on its own site with two line
 ```
 
 Hosts get a code builder with live preview at `/widget`; there is an iframe
-fallback and a `NearEvents.open(id)` call for custom buttons. Demo page in a
-client's brand: `/demo/balisquad.html`. Details: [docs/EMBED.md](docs/EMBED.md). Have an AI agent install it: [docs/AI_INSTALL.md](docs/AI_INSTALL.md).
+fallback, a bare `/p/{id}` payment link, and a `NearEvents.open(id)` call for
+custom buttons. Details: [docs/EMBED.md](docs/EMBED.md). Have an AI agent
+install it: [docs/AI_INSTALL.md](docs/AI_INSTALL.md).
 
 ## How it works
 
