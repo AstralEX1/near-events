@@ -205,6 +205,22 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .integrate .more { font-size: 15px; font-weight: 650; color: var(--accent-ink); text-decoration: none; }
 .integrate .more:hover { text-decoration: underline; }
 
+/* ---------- WHY NEAR ---------- */
+.near-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 860px) { .near-grid { grid-template-columns: minmax(0, 1fr); } }
+.near-item { border-top: 2px solid var(--ink); padding-top: 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.near-vis { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 40px; }
+.near-vis .tk { width: 32px; height: 32px; border-radius: 50%; }
+.near-vis .tk + .tk { margin-left: -12px; box-shadow: 0 0 0 3px var(--bg); }
+.near-vis .arrow { color: var(--muted); font-size: 20px; margin: 0 6px; }
+.near-vis .chip { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px 0 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; font-weight: 600; }
+.near-vis .chip.good { color: var(--good-ink); background: var(--good-wash); border-color: transparent; padding: 0 14px; }
+.near-vis .mono { width: 18px; height: 18px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .near-vis .mono { filter: invert(1); } }
+:root[data-theme="dark"] .near-vis .mono { filter: invert(1); }
+.near-item h3 { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+.near-item p { color: var(--muted); font-size: 16px; }
+
 /* ---------- FINAL ---------- */
 .final { text-align: center; border-top: 1px solid var(--line); }
 .final .wrap { display: flex; flex-direction: column; align-items: center; gap: 22px; }
@@ -380,6 +396,32 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     </div>
   </section>
 
+  <section class="near" id="near">
+    <div class="wrap">
+      <div class="head reveal">
+        <span class="eyebrow">Why NEAR</span>
+        <h2 class="h2">NEAR handles the money.</h2>
+      </div>
+      <div class="near-grid">
+        <div class="near-item reveal">
+          <div class="near-vis"><img class="tk" src="/landing/icons/eth.svg" alt="ETH" width="32" height="32" /><img class="tk" src="/landing/icons/sol.svg" alt="SOL" width="32" height="32" /><img class="tk" src="/landing/icons/usdt.svg" alt="USDT" width="32" height="32" /><img class="tk" src="/landing/icons/btc.svg" alt="BTC" width="32" height="32" /><span class="arrow">→</span><img class="tk" src="/landing/icons/usdc.svg" alt="USDC" width="32" height="32" /></div>
+          <h3>Any coin, any chain</h3>
+          <p>Guests pay with what they already hold, like ETH on Base, SOL or USDT on Tron. NEAR Intents turns it into USDC on the way in, and pays winners out to whatever chain they want.</p>
+        </div>
+        <div class="near-item reveal">
+          <div class="near-vis"><span class="chip"><img class="mono" src="/landing/icons/near.svg" alt="NEAR" width="32" height="32" />escrow contract</span></div>
+          <h3>A contract holds the pool</h3>
+          <p>Deposits sit in an escrow contract on NEAR, not in our bank account. It pays back only the people who checked in and splits the rest between them. Anyone can read the rules.</p>
+        </div>
+        <div class="near-item reveal">
+          <div class="near-vis"><span class="chip"><img class="mono" src="/landing/icons/google.svg" alt="Google" width="32" height="32" />Sign in with Google</span><span class="chip good">$0 gas</span></div>
+          <h3>No wallet, no gas</h3>
+          <p>Guests sign in with Google or email and get a NEAR account behind the scenes. We cover the network fee, so the deposit is the only thing they pay.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="final" id="start">
     <div class="wrap reveal">
       <h2>Your next event <em>starts here.</em></h2>
@@ -392,7 +434,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 </main>
 
 <footer><div class="wrap">
-  <span>Powered by <a href="https://near.org/intents" target="_blank" rel="noopener">NEAR Intents</a></span>
+  <span>Escrow contract on <a href="https://near.org" target="_blank" rel="noopener">NEAR</a> · cross-chain deposits via <a href="https://near.org/intents" target="_blank" rel="noopener">NEAR Intents</a></span>
   <a href="https://github.com/AstralEX1/near-events" target="_blank" rel="noopener">GitHub ↗</a>
 </div></footer>
 

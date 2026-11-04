@@ -30,7 +30,7 @@ export default function CreateEvent() {
   const { accountId, send } = useWallet();
   const [form, setForm] = useState({ title: "", description: "", location: "", deposit: "10", capacity: "50", cohosts: "" });
   const [when, setWhen] = useState<When | null>(null);
-  const [theme, setTheme] = useState<Theme>(defaultTheme("ambient"));
+  const [theme, setTheme] = useState<Theme>(defaultTheme("minimal"));
   const [themeOpen, setThemeOpen] = useState(false);
   const [lumaOpen, setLumaOpen] = useState(false);
   const [lumaUrl, setLumaUrl] = useState("");
@@ -40,6 +40,11 @@ export default function CreateEvent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<EventView | null>(null);
+  // Like Luma, the form is open to everyone; signing in is asked for on "Create Event".
+  const [askSignIn, setAskSignIn] = useState(false);
+  useEffect(() => {
+    if (accountId) setAskSignIn(false);
+  }, [accountId]);
 
   // "Duplicate event" (Luma, Hi.Events): /create?from=<id> copies everything but the date.
   useEffect(() => {
@@ -91,6 +96,7 @@ export default function CreateEvent() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!when) return;
+    if (!accountId) return setAskSignIn(true);
     if (when.end <= when.start) return setError("The event has to end after it starts.");
     setBusy(true);
     setError(null);
@@ -136,12 +142,12 @@ export default function CreateEvent() {
         {/* Left: cover, then theme + shuffle. */}
         <div className="space-y-4 md:sticky md:top-20">
           <div className="relative">
-            <Cover event={preview} className="aspect-square w-full rounded-2xl [&>span]:hidden shadow-sm" />
+            <Cover event={preview} className="aspect-square w-full rounded-2xl [&>span]:hidden ring-[0.5px] ring-black/10" />
             <button
               type="button"
               aria-label={theme.image ? "Change image" : "Add image"}
               onClick={() => setPicker(!picker)}
-              className="absolute bottom-3 right-3 w-9 h-9 rounded-full bg-black/70 text-white flex items-center justify-center backdrop-blur ring-2 ring-white/80"
+              className="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-[var(--text)] text-[var(--bg)] flex items-center justify-center ring-2 ring-[var(--bg)] hover:scale-105 transition-transform"
             >
               <Icon d="M4 16l4.5-4.5 3 3L16 10l4 4M4 5h16v14H4z" />
             </button>
@@ -258,7 +264,7 @@ export default function CreateEvent() {
 
           <div className="space-y-2 pt-1">
             <div className="text-sm font-medium text-muted">Event Options</div>
-            <div className="rounded-2xl overflow-hidden flex flex-col gap-px">
+            <div className="rounded-xl overflow-hidden flex flex-col lu-rows">
               <OptionRow
                 icon="M4 8a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4zM14 6v12"
                 label="Deposit"
@@ -295,29 +301,39 @@ export default function CreateEvent() {
           </div>
 
           {error && <p className="text-sm text-warn break-words">{error}</p>}
-          {accountId ? (
-            <button className="btn btn-primary w-full !py-3 text-lg font-medium" disabled={busy}>
-              {busy ? "Confirm in your wallet…" : "Create Event"}
-            </button>
-          ) : (
-            <div className="lu-field p-4 space-y-2">
-              <div className="text-sm font-medium">Sign in to create the event</div>
-              <SignInOptions />
-            </div>
-          )}
-          <p className="text-xs text-muted">
-            After create you get your event page, plus an embed for your own site.{" "}
-            <Link href="/widget" className="text-accent hover:underline">
-              Want to integrate on your website?
+          <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy}>
+            {busy ? "Confirm in your wallet…" : "Create Event"}
+          </button>
+          <p className="text-xs text-muted/80">
+            You get an event page and a widget for your own site.{" "}
+            <Link href="/widget" className="underline underline-offset-2 hover:text-text">
+              How the widget works
             </Link>
-          </p>
-          <p className="text-xs text-muted">
-            Creating an event is free. You can have up to 5 open events at a time.
           </p>
         </div>
         {themeOpen && <ThemeBar theme={theme} onChange={setTheme} onClose={() => setThemeOpen(false)} />}
       </form>
+      {askSignIn && <SignInDialog onClose={() => setAskSignIn(false)} />}
     </Themed>
+  );
+}
+
+/** Shown when a guest presses "Create Event": the form stays filled in behind it. */
+function SignInDialog({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-[2px] flex items-center justify-center p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-label="Sign in" className="w-full max-w-[360px] rounded-2xl bg-surface text-text border border-border shadow-2xl p-5 space-y-4">
+        <div className="space-y-1">
+          <div className="w-11 h-11 !rounded-full lu-field flex items-center justify-center mb-3">
+            <Icon d="M10 17l5-5-5-5M15 12H3M14 3h5a2 2 0 012 2v14a2 2 0 01-2 2h-5" size={18} />
+          </div>
+          <div className="text-lg font-semibold">Sign in to create</div>
+          <p className="text-sm text-muted">Your event stays filled in. A NEAR wallet or Google/email both work.</p>
+        </div>
+        <SignInOptions />
+        <p className="text-[11px] text-muted/80">A little NEAR is held for on-chain storage and comes back when the event closes.</p>
+      </div>
+    </div>
   );
 }
 
@@ -514,7 +530,7 @@ function OptionRow({ icon, label, value, title, help, children }: { icon: string
       <button type="button" className="lu-row lu-hover text-left" onClick={() => setOpen(true)}>
         <Icon d={icon} className="text-muted" />
         <span className="flex-1">{label}</span>
-        <span className="text-muted">{value}</span>
+        <span className="text-muted font-medium">{value}</span>
         <Icon d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4" size={14} className="text-muted" />
       </button>
       {open && (

@@ -38,7 +38,7 @@ interface Preset {
 }
 
 export const THEMES: Record<ThemeName, Preset> = {
-  minimal: { label: "Minimal", color: "#5b4bff", font: "sans", display: "light" },
+  minimal: { label: "Minimal", color: "#1f5f52", font: "sans", display: "light" },
   quantum: { label: "Quantum", color: "#7c6cff", font: "grotesk", display: "dark" },
   ambient: { label: "Ambient", color: "#ff7a59", font: "sans", display: "light" },
   texture: { label: "Texture", color: "#2f6f4f", font: "serif", display: "light" },
@@ -51,7 +51,7 @@ export const THEMES: Record<ThemeName, Preset> = {
   near: { label: "NEAR", color: "#00ec97", font: "grotesk", display: "dark" },
 };
 
-export const COLORS = ["#5b4bff", "#ec4899", "#ef4444", "#f59e0b", "#16a34a", "#0ea5e9", "#00ec97", "#16161a"];
+export const COLORS = ["#1f5f52", "#5b4bff", "#ec4899", "#ef4444", "#f59e0b", "#16a34a", "#0ea5e9", "#00ec97", "#16161a"];
 
 export const FONTS: Record<FontKey, { label: string; css: string }> = {
   sans: { label: "Geist", css: "var(--font-geist-sans), system-ui, sans-serif" },
@@ -117,6 +117,10 @@ export function themeStyle(t: Theme): { vars: CSSProperties; background: string 
   let background = "var(--bg)";
 
   switch (t.name) {
+    case "minimal":
+      // Quiet stone paper with soft ink; the color only shows on the button and accents.
+      if (!dark) Object.assign(base, { "--bg": "#f3f2ee", "--surface": "#fbfaf8", "--text": "#1c1b19", "--muted": "#77736b", "--border": "#e4e1da" });
+      break;
     case "quantum":
       background = `radial-gradient(40% 35% at 20% 10%, ${c}55, transparent 70%), radial-gradient(35% 30% at 85% 30%, ${c}33, transparent 70%),
         linear-gradient(${dark ? "#ffffff0a" : "#0000000a"} 1px, transparent 1px) 0 0 / 32px 32px,
@@ -195,6 +199,8 @@ export function themeCover(t: Theme): string {
       radial-gradient(circle at 68% 62%, transparent 0 22%, ${c}cc 22.5% 25%, transparent 25.5%),
       repeating-linear-gradient(0deg, #58544a14 0 1px, transparent 1px 14px), #efe4ca`;
   if (t.name === "near") return `radial-gradient(circle at 70% 30%, ${c}, transparent 55%), #000`;
+  if (t.name === "minimal")
+    return `radial-gradient(120% 90% at 100% 100%, ${c}40, transparent 60%), linear-gradient(160deg, ${t.display === "dark" ? "#1b1a18" : "#fbfaf8"}, ${t.display === "dark" ? "#24221f" : "#e9e6df"})`;
   if (t.name === "emoji") return `${svg(`<text x='30' y='80' font-size='60'>${t.emoji}</text>`)} center/60% no-repeat, ${c}33`;
   return `radial-gradient(circle at 25% 25%, ${c}, transparent 60%), radial-gradient(circle at 80% 75%, ${c}99, transparent 55%), ${t.display === "dark" ? "#14121f" : `${c}26`}`;
 }

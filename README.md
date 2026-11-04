@@ -23,7 +23,7 @@ Hackathon track focus: Real-World Money (USDC, 1Click, gasless onboarding).
 
 | What | Account |
 |---|---|
-| Event escrow | [`nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/nearevents-11022103.testnet) |
+| Event escrow | [`escrow-v3.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-v3.nearevents-11022103.testnet) |
 | Test USDC (open faucet) | [`usdc-nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/usdc-nearevents-11022103.testnet) |
 
 NEAR Intents has no testnet, so the full event cycle runs on testnet with test
@@ -60,7 +60,7 @@ accounts from `~/.near-credentials`):
 
 ```bash
 cd web
-EVENTS_CONTRACT=nearevents-11022103.testnet USDC_CONTRACT=usdc-nearevents-11022103.testnet \
+EVENTS_CONTRACT=escrow-v3.nearevents-11022103.testnet USDC_CONTRACT=usdc-nearevents-11022103.testnet \
 HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet node scripts/smoke-testnet.mjs
 ```
 
