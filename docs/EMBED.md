@@ -103,7 +103,7 @@ your page ── embed.js ──► <iframe /embed/e/:id>  (card, read-only)
 ```
 
 - Sign-up happens in a small window on the Near Events domain, not inside the
-  iframe. Wallet pop-ups, Google/email sign-in (NEAR Auth) and 1Click payment
+  iframe. Wallet pop-ups, Google/email sign-in (FastAuth) and 1Click payment
   all need a normal top-level page; inside a third-party iframe browsers block
   their storage and pop-ups. On phones the window opens as a new tab.
 - Only the card (`/embed/e/:id`) may be framed by other sites
