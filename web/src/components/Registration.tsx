@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, usdc, type EventView, type GuestStatus } from "@/lib/near";
-import { EVENTS_CONTRACT, HAS_FAUCET, USDC_CONTRACT } from "@/lib/config";
+import { EVENTS_CONTRACT, HAS_FAUCET, HAS_INTENTS, USDC_CONTRACT } from "@/lib/config";
 import { useWallet, type Call } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
 import { intentsUsdcBalance, pushPayoutToIntents, registerFromIntents } from "@/lib/intents";
 import { NextSteps, RulesBox } from "@/components/EventParts";
+import { payDepositAddress, registerQuote, USDC_ASSET, waitForSwap } from "@/lib/oneclickClient";
 
 /** Sign in, then put down the deposit. Used on the event page and in the embed popup. */
 export function RegistrationCard({
@@ -27,6 +28,7 @@ export function RegistrationCard({
   const [choosing, setChoosing] = useState(false);
   const [more, setMore] = useState(false);
   const [rules, setRules] = useState(false);
+  const [stage, setStage] = useState<string | null>(null);
 
   const loadBalance = useCallback(async () => {
     if (accountId) setBalance(BigInt(await events.balance(accountId).catch(() => "0")));
@@ -46,11 +48,32 @@ export function RegistrationCard({
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+      setStage(null);
     }
+  };
+
+  // Mainnet: the deposit goes through NEAR Intents (1Click). The wallet pays a
+  // 1Click address in USDC; 1Click delivers exactly the deposit to the escrow
+  // with a register message, so the swap itself registers the guest.
+  const registerViaOneClick = async () => {
+    const deposit = BigInt(event.deposit);
+    setStage("Getting a NEAR Intents quote…");
+    const quote = await registerQuote({ originAsset: USDC_ASSET, eventId: event.id, deposit: event.deposit, guest: accountId!, refundTo: accountId! });
+    if (!quote.depositAddress) throw new Error("NEAR Intents returned no deposit address. Try again.");
+    const have = BigInt(await usdc.balance(accountId!).catch(() => "0"));
+    if (have < BigInt(quote.amountIn))
+      throw new Error(`You need ${formatUsdc(quote.amountIn)} USDC on NEAR (${formatUsdc(deposit)} deposit + NEAR Intents fee). Use “Pay with any token, any chain”.`);
+    setStage("Confirm in your wallet…");
+    await send(payDepositAddress(USDC_CONTRACT, quote.depositAddress, quote.amountIn));
+    setStage("NEAR Intents is delivering your deposit…");
+    await waitForSwap(quote.depositAddress, (s) => setStage(`NEAR Intents: ${s.toLowerCase().replaceAll("_", " ")}…`));
   };
 
   const register = () =>
     run(async () => {
+      if (HAS_INTENTS) return registerViaOneClick();
+      // Testnet only: NEAR Intents doesn't exist there, so the deposit goes
+      // straight to the escrow.
       const deposit = BigInt(event.deposit);
       const calls: Call[] = [];
       const have = BigInt(await usdc.balance(accountId!));
@@ -82,8 +105,9 @@ export function RegistrationCard({
 
   const registerViaIntents = () => run(() => registerFromIntents(accountId!, event.id, event.deposit));
 
-  // Payouts land in the contract balance; this sends all of it out. EVM sign-ins
-  // can't call the contract, so the relayer pushes theirs to NEAR Intents.
+  // Payouts land in the contract balance; this sends all of it out. On mainnet
+  // it goes to the guest's NEAR Intents balance (cash out to any chain from
+  // /me). EVM sign-ins can't call the contract, so the relayer pushes theirs.
   const withdrawAll = () =>
     run(async () => {
       if (kind === "evm") await pushPayoutToIntents(accountId!);
@@ -92,7 +116,7 @@ export function RegistrationCard({
           {
             receiverId: EVENTS_CONTRACT,
             methodName: "withdraw",
-            args: { amount: null, receiver_id: null, to_intents: false },
+            args: { amount: null, receiver_id: null, to_intents: HAS_INTENTS },
             deposit: 1n,
             gas: 200_000_000_000_000n,
           },
@@ -116,11 +140,11 @@ export function RegistrationCard({
         balance > 0n ? (
           <div className="space-y-2">
             <button className="btn btn-good w-full !py-3.5" disabled={busy} onClick={withdrawAll}>
-              {busy ? "Confirm in your wallet…" : `Withdraw ${formatUsdc(balance)} USDC`}
+              {busy ? "Confirm in your wallet…" : HAS_INTENTS ? `Withdraw ${formatUsdc(balance)} USDC to NEAR Intents` : `Withdraw ${formatUsdc(balance)} USDC`}
             </button>
             <p className="text-sm text-muted">
               You showed up. {event.attended_count} of {event.guest_count} came.{" "}
-              <Link href="/me" className="text-accent">Other ways to withdraw</Link>
+              <Link href="/me" className="text-accent">{HAS_INTENTS ? "Cash out to any chain" : "Other ways to withdraw"}</Link>
             </p>
           </div>
         ) : (
@@ -167,8 +191,9 @@ export function RegistrationCard({
     body = (
       <div className="space-y-2">
         <button className="btn btn-accent w-full !py-3.5" disabled={busy} onClick={register}>
-          {busy ? "Confirm in your wallet…" : `Register · ${price}`}
+          {busy ? stage ?? "Confirm in your wallet…" : `Register · ${price}`}
         </button>
+        {HAS_INTENTS && <p className="text-xs text-muted text-center">Paid in USDC through NEAR Intents</p>}
         {more ? (
           <div className="space-y-2">
             {balance >= BigInt(event.deposit) && (

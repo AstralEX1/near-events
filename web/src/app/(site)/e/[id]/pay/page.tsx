@@ -7,6 +7,7 @@ import { events, formatUsdc, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT, NETWORK } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import type { OneClickToken } from "@/lib/oneclick";
+import { nep141Contract, payDepositAddress } from "@/lib/oneclickClient";
 
 
 interface Quote {
@@ -22,7 +23,7 @@ interface Quote {
 
 export default function PayFromAnyChain() {
   const id = Number(useParams<{ id: string }>().id);
-  const { accountId, signIn } = useWallet();
+  const { accountId, kind, signIn, send } = useWallet();
   const [event, setEvent] = useState<EventView | null>(null);
   const [tokens, setTokens] = useState<OneClickToken[]>([]);
   // USDC on NEAR, taken from the 1Click token list rather than hard-coded.
@@ -52,6 +53,8 @@ export default function PayFromAnyChain() {
   }, [id]);
 
   const token = useMemo(() => tokens.find((t) => t.assetId === assetId), [tokens, assetId]);
+  // A NEP-141 token on NEAR can be paid from the signed-in NEAR wallet in one confirmation.
+  const fromWallet = !!accountId && kind !== "evm" && token?.blockchain === "near" && !!nep141Contract(assetId);
 
   // Poll swap status once a real deposit address exists.
   useEffect(() => {
@@ -80,7 +83,7 @@ export default function PayFromAnyChain() {
         depositType: "ORIGIN_CHAIN",
         destinationAsset: usdcAsset,
         amount: event.deposit,
-        refundTo: refundTo || "0x0000000000000000000000000000000000000000",
+        refundTo: fromWallet ? accountId : refundTo || "0x0000000000000000000000000000000000000000",
         refundType: "ORIGIN_CHAIN",
         // 1Click calls ft_transfer_call on the escrow with this msg: the swap itself registers the guest.
         recipient: EVENTS_CONTRACT,
@@ -127,13 +130,13 @@ export default function PayFromAnyChain() {
             ))}
           </select>
         </label>
-        {live && (
+        {live && !fromWallet && (
           <label className="block space-y-1.5">
             <span className="label">Your {token?.blockchain} address for refunds</span>
             <input className="input font-mono text-sm" value={refundTo} onChange={(e) => setRefundTo(e.target.value)} placeholder="0x…" />
           </label>
         )}
-        <button className="btn btn-primary w-full" disabled={busy || !assetId || !usdcAsset || (live && !refundTo)} onClick={getQuote}>
+        <button className="btn btn-primary w-full" disabled={busy || !assetId || !usdcAsset || (live && !fromWallet && !refundTo)} onClick={getQuote}>
           {!accountId ? "Sign in first" : busy ? "Getting quote…" : live ? "Get deposit address" : "Preview price"}
         </button>
 
@@ -148,6 +151,25 @@ export default function PayFromAnyChain() {
                 <div className="text-muted">Send exactly {quote.amountInFormatted} {token?.symbol} on {token?.blockchain} to:</div>
                 <div className="font-mono break-all text-text">{quote.depositAddress}</div>
                 {quote.depositMemo && <div className="text-muted">Memo: <span className="font-mono">{quote.depositMemo}</span></div>}
+                {fromWallet && (
+                  <button
+                    className="btn btn-accent w-full my-2"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      setError(null);
+                      try {
+                        await send(payDepositAddress(nep141Contract(assetId)!, quote.depositAddress!, quote.amountIn));
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : String(e));
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    Send from my NEAR wallet
+                  </button>
+                )}
                 <div className="text-muted">Status: <b className="text-text">{status ?? "waiting for your deposit"}</b></div>
               </div>
             )}

@@ -3,27 +3,41 @@ import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "@/lib/config";
 import { relayer } from "@/lib/relayer";
 
 // Submits a guest's signed intent to intents.near; the relayer pays the gas.
-// Only Near Events registrations are relayed: one `ft_withdraw` of USDC to the
-// escrow with a register message. The signature itself is checked on-chain.
+// Only two shapes are relayed: a registration (one `ft_withdraw` of USDC to the
+// escrow with a register message) and a cash-out (one USDC `transfer` to a
+// 1Click deposit address). The signature itself is checked on-chain.
 export async function POST(req: Request) {
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
   if (!INTENTS_CONTRACT) return Response.json({ error: "NEAR Intents is mainnet only" }, { status: 403 });
   const signed = await req.json();
-  let payload: { intents?: { intent: string; token: string; receiver_id: string; msg?: string }[] };
+  type Intent = { intent: string; token?: string; receiver_id?: string; msg?: string; tokens?: Record<string, string> };
+  let payload: { intents?: Intent[] };
   try {
     payload = JSON.parse(signed.payload);
   } catch {
     return Response.json({ error: "Bad payload" }, { status: 400 });
   }
   const intents = payload.intents ?? [];
-  const ok =
-    signed.standard === "erc191" &&
-    intents.length === 1 &&
-    intents[0].intent === "ft_withdraw" &&
-    intents[0].token === USDC_CONTRACT &&
-    intents[0].receiver_id === EVENTS_CONTRACT &&
-    JSON.parse(intents[0].msg ?? "{}").action === "register";
-  if (!ok) return Response.json({ error: "Only Near Events registrations are relayed" }, { status: 400 });
+  const [one] = intents;
+  const isRegister = (i: Intent) => {
+    try {
+      return (
+        i.intent === "ft_withdraw" &&
+        i.token === USDC_CONTRACT &&
+        i.receiver_id === EVENTS_CONTRACT &&
+        JSON.parse(i.msg ?? "{}").action === "register"
+      );
+    } catch {
+      return false;
+    }
+  };
+  // Cash-out: USDC only, to a 1Click deposit address (a 64-hex implicit account).
+  const isCashOut = (i: Intent) =>
+    i.intent === "transfer" &&
+    /^[0-9a-f]{64}$/.test(i.receiver_id ?? "") &&
+    Object.keys(i.tokens ?? {}).join() === `nep141:${USDC_CONTRACT}`;
+  const ok = signed.standard === "erc191" && intents.length === 1 && (isRegister(one) || isCashOut(one));
+  if (!ok) return Response.json({ error: "Only Near Events registrations and cash-outs are relayed" }, { status: 400 });
 
   try {
     const outcome = await relayer().callFunctionRaw({
