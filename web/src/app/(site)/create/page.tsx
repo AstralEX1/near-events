@@ -221,7 +221,7 @@ export default function CreateEvent() {
 
         {/* Right: the event itself. */}
         <div className="min-w-0 space-y-4">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="lu-chip">
               <span className="w-4 h-4 rounded-full" style={{ background: theme.color }} />
               {accountId ? <span className="truncate max-w-44">{accountId}</span> : "Your events"}
