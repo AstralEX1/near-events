@@ -22,7 +22,6 @@ export interface EventView {
   status: EventStatus;
   guest_count: number;
   attended_count: number;
-  bonus_pool: string;
   total_pool: string;
   payout_per_attendee: string;
   created_at: number;

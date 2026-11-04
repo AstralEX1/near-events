@@ -109,7 +109,7 @@ export function RegistrationCard({
   // One primary button per state; alternatives stay folded away.
   let body;
   if (event.status === "Cancelled") {
-    body = <p className="text-sm">This event was cancelled. Deposits and sponsor bonuses went back to their owners.</p>;
+    body = <p className="text-sm">This event was cancelled. Every deposit went back to its guest.</p>;
   } else if (event.status === "Finalized") {
     body =
       myStatus === "Attended" ? (

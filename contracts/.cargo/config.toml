@@ -1,0 +1,5 @@
+# `env::panic_str` only calls the NEAR host when this cfg is set. `cargo near build`
+# sets it. A plain `cargo build --target wasm32-unknown-unknown` does not, and then
+# a failed `require!` is a bare unreachable trap with no error text.
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg", "near"]

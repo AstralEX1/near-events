@@ -1,0 +1,537 @@
+//! Real NEAR runtime tests. Unit tests never move a token or run a callback;
+//! these do. Testnet-only contracts, local sandbox, no mainnet.
+
+use std::path::PathBuf;
+use std::process::Command;
+use std::sync::OnceLock;
+
+use anyhow::Context;
+use near_workspaces::network::Sandbox;
+use near_workspaces::types::{Gas, NearToken};
+use near_workspaces::{Account, AccountId, Contract, Worker};
+use serde_json::{json, Value};
+
+fn wasm(package: &str) -> &'static [u8] {
+    static EVENTS: OnceLock<Vec<u8>> = OnceLock::new();
+    static USDC: OnceLock<Vec<u8>> = OnceLock::new();
+    let slot = if package == "near-events" { &EVENTS } else { &USDC };
+    slot.get_or_init(|| build_wasm(package))
+}
+
+fn build_wasm(package: &str) -> Vec<u8> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+    // Release uses `panic = "abort"`, which turns a contract panic into a bare
+    // unreachable trap in this sandbox. Unwind keeps the panic text so the
+    // tests can tell a refused init from a broken call. The published profile
+    // is unchanged.
+    let status = Command::new("cargo")
+        .args(["build", "-p", package, "--release", "--target", "wasm32-unknown-unknown"])
+        .env("CARGO_PROFILE_RELEASE_PANIC", "unwind")
+        .current_dir(&root)
+        .status()
+        .expect("cargo build");
+    assert!(status.success(), "wasm build failed for {package}");
+    let file = package.replace('-', "_");
+    std::fs::read(root.join(format!("target/wasm32-unknown-unknown/release/{file}.wasm")))
+        .expect("wasm output")
+}
+
+fn yocto(amount: u128) -> NearToken {
+    NearToken::from_yoctonear(amount)
+}
+
+async fn token_balance(token: &Contract, account: &AccountId) -> anyhow::Result<u128> {
+    let value: String = token
+        .view("ft_balance_of")
+        .args_json(json!({ "account_id": account }))
+        .await?
+        .json()?;
+    value.parse().context("token balance")
+}
+
+async fn escrow_balance(events: &Contract, account: &AccountId) -> anyhow::Result<u128> {
+    let value: String = events
+        .view("balance_of")
+        .args_json(json!({ "account_id": account }))
+        .await?
+        .json()?;
+    value.parse().context("escrow balance")
+}
+
+async fn mint(token: &Contract, caller: &Account, account: &AccountId, amount: u128) -> anyhow::Result<()> {
+    caller
+        .call(token.id(), "mint")
+        .args_json(json!({ "amount": amount.to_string(), "account_id": account }))
+        .transact()
+        .await?
+        .into_result()?;
+    Ok(())
+}
+
+async fn storage_deposit(token: &Contract, payer: &Account, account: &AccountId) -> anyhow::Result<()> {
+    let bounds: Value = token.view("storage_balance_bounds").await?.json()?;
+    let min: u128 = bounds["min"].as_str().context("storage min")?.parse()?;
+    payer
+        .call(token.id(), "storage_deposit")
+        .args_json(json!({ "account_id": account, "registration_only": true }))
+        .deposit(yocto(min))
+        .transact()
+        .await?
+        .into_result()?;
+    Ok(())
+}
+
+fn panic_text(result: &near_workspaces::result::ExecutionFinalResult) -> String {
+    format!("{result:?}")
+}
+
+/// A contract built without `--cfg near` turns `require!` into a bare
+/// unreachable trap. `contracts/.cargo/config.toml` sets that cfg. Unit tests
+/// lock the text; here either form counts as the expected refusal.
+fn expect_reject(result: &near_workspaces::result::ExecutionFinalResult, needle: &str) {
+    let text = panic_text(result);
+    assert!(result.is_failure(), "expected {needle}, call succeeded: {text}");
+    assert!(
+        text.contains(needle) || text.contains("unreachable"),
+        "expected {needle}, got {text}"
+    );
+}
+
+async fn transfer_call(
+    payer: &Account,
+    token: &AccountId,
+    receiver: &AccountId,
+    amount: u128,
+    msg: Value,
+) -> anyhow::Result<near_workspaces::result::ExecutionFinalResult> {
+    Ok(payer
+        .call(token, "ft_transfer_call")
+        .args_json(json!({
+            "receiver_id": receiver,
+            "amount": amount.to_string(),
+            "memo": null,
+            "msg": msg.to_string(),
+        }))
+        .deposit(yocto(1))
+        .gas(Gas::from_tgas(200))
+        .transact()
+        .await?)
+}
+
+#[tokio::test]
+async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
+    let worker = near_workspaces::sandbox().await?;
+    let usdc_wasm = wasm("test-usdc");
+    let events_wasm = wasm("near-events");
+
+    // A `*.test.near` name and an implicit account are mainnet-shaped. The
+    // faucet must refuse to initialize on either.
+    let named = worker.dev_deploy(usdc_wasm).await?;
+    let refused = named.call("new").transact().await?;
+    expect_reject(&refused, "testnet-only");
+    // An implicit account cannot be created with CreateAccount; the unit test
+    // covers that init refusal. Sandbox subaccounts are `*.test.near`.
+
+    let usdc = worker.dev_deploy_tla(usdc_wasm).await?;
+    usdc.call("new").transact().await?.into_result()?;
+    let too_much = usdc
+        .call("mint")
+        .args_json(json!({ "amount": (1_000 * 1_000_000 + 1).to_string(), "account_id": null }))
+        .transact()
+        .await?;
+    expect_reject(&too_much, "Max 1000");
+
+    let events = worker.dev_deploy(events_wasm).await?;
+    events
+        .call("new")
+        .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    let host = worker.dev_create_account().await?;
+    let cohost = worker.dev_create_account().await?;
+    let guest = worker.dev_create_account().await?;
+    let noshow = worker.dev_create_account().await?;
+    let friend = worker.dev_create_account().await?;
+    let stranger = worker.dev_create_account().await?;
+    let sponsor = worker.dev_create_account().await?;
+    let fresh = worker.dev_create_account().await?;
+
+    storage_deposit(&usdc, &host, events.id()).await?;
+    let minted = 50 * 1_000_000;
+    for account in [guest.id(), noshow.id(), friend.id(), sponsor.id()] {
+        mint(&usdc, &guest, account, minted).await?;
+    }
+
+    let now_ms = worker.view_block().await?.timestamp() / 1_000_000;
+    let storage: String = events.view("storage_cost").args_json(json!({ "capacity": 10 })).await?.json()?;
+    let event_id: u64 = host
+        .call(events.id(), "create_event")
+        .args_json(json!({
+            "metadata": {
+                "title": "QA meetup",
+                "description": "sandbox cycle",
+                "location": "local",
+                "cover_url": null,
+                "starts_at": now_ms + 3_600_000,
+                "ends_at": now_ms + 7_200_000
+            },
+            "deposit": "10000000",
+            "capacity": 10,
+            "cohosts": [cohost.id()]
+        }))
+        .deposit(yocto(storage.parse()?))
+        .transact()
+        .await?
+        .json()?;
+
+    let stranger_finalize = stranger
+        .call(events.id(), "finalize")
+        .args_json(json!({ "event_id": event_id }))
+        .deposit(yocto(1))
+        .transact()
+        .await?;
+    expect_reject(&stranger_finalize, "Only the host");
+
+    let cohost_finalize = cohost
+        .call(events.id(), "finalize")
+        .args_json(json!({ "event_id": event_id }))
+        .deposit(yocto(1))
+        .transact()
+        .await?;
+    expect_reject(&cohost_finalize, "Only the host");
+
+    // Exact self payment, then a second one. The second must come back.
+    let deposit = 10 * 1_000_000;
+    let first = transfer_call(
+        &guest,
+        usdc.id(),
+        events.id(),
+        deposit,
+        json!({ "action": "register", "event_id": event_id }),
+    )
+    .await?;
+    first.into_result()?;
+    assert_eq!(token_balance(&usdc, guest.id()).await?, minted - deposit);
+
+    let second = transfer_call(
+        &guest,
+        usdc.id(),
+        events.id(),
+        deposit,
+        json!({ "action": "register", "event_id": event_id }),
+    )
+    .await?;
+    second.into_result()?;
+    assert_eq!(token_balance(&usdc, guest.id()).await?, minted - deposit, "double RSVP must refund");
+
+    transfer_call(
+        &noshow,
+        usdc.id(),
+        events.id(),
+        deposit,
+        json!({ "action": "register", "event_id": event_id }),
+    )
+    .await?
+    .into_result()?;
+
+    // A friend sends less than the deposit for someone else. The token must
+    // not bounce that USDC back to the friend; it sits on the guest's balance.
+    let late: AccountId = "late.testnet".parse().unwrap();
+    let short = 4 * 1_000_000;
+    let friend_before = token_balance(&usdc, friend.id()).await?;
+    transfer_call(
+        &friend,
+        usdc.id(),
+        events.id(),
+        short,
+        json!({ "action": "register", "event_id": event_id, "guest": late }),
+    )
+    .await?
+    .into_result()?;
+    assert_eq!(token_balance(&usdc, friend.id()).await?, friend_before - short);
+    assert_eq!(escrow_balance(&events, &late).await?, short);
+    let late_status: Option<String> = events
+        .view("get_guest_status")
+        .args_json(json!({ "event_id": event_id, "account_id": late }))
+        .await?
+        .json()?;
+    assert!(late_status.is_none(), "a short payment must not take a seat");
+
+    // Some other NEP-141. The escrow panics, and that token refunds the sender.
+    let other = worker.dev_deploy_tla(usdc_wasm).await?;
+    other.call("new").transact().await?.into_result()?;
+    mint(&other, &friend, friend.id(), minted).await?;
+    storage_deposit(&other, &host, events.id()).await?;
+    let other_before = token_balance(&other, friend.id()).await?;
+    transfer_call(
+        &friend,
+        other.id(),
+        events.id(),
+        deposit,
+        json!({ "action": "register", "event_id": event_id }),
+    )
+    .await?
+    .into_result()?;
+    assert_eq!(token_balance(&other, friend.id()).await?, other_before, "wrong token must be refunded");
+
+    // The old "sponsor" action is gone: the token sends the whole amount back.
+    let sponsor_before = token_balance(&usdc, sponsor.id()).await?;
+    let _ = transfer_call(
+        &sponsor,
+        usdc.id(),
+        events.id(),
+        5 * 1_000_000,
+        json!({ "action": "sponsor", "event_id": event_id }),
+    )
+    .await?;
+    assert_eq!(token_balance(&usdc, sponsor.id()).await?, sponsor_before, "unknown action must be refunded");
+
+    let stranger_check = stranger
+        .call(events.id(), "check_in")
+        .args_json(json!({ "event_id": event_id, "accounts": [guest.id()] }))
+        .deposit(yocto(1))
+        .transact()
+        .await?;
+    expect_reject(&stranger_check, "Only the host or a co-host");
+
+    cohost
+        .call(events.id(), "check_in")
+        .args_json(json!({ "event_id": event_id, "accounts": [guest.id()] }))
+        .deposit(yocto(1))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // The event has not started. Finalize is still the host's call today.
+    host.call(events.id(), "finalize")
+        .args_json(json!({ "event_id": event_id }))
+        .deposit(yocto(1))
+        .gas(Gas::from_tgas(200))
+        .transact()
+        .await?
+        .into_result()?;
+
+    let again = host
+        .call(events.id(), "finalize")
+        .args_json(json!({ "event_id": event_id }))
+        .deposit(yocto(1))
+        .transact()
+        .await?;
+    expect_reject(&again, "Event is closed");
+
+    // 2 deposits, one attendee.
+    assert_eq!(escrow_balance(&events, guest.id()).await?, 20 * 1_000_000);
+    assert_eq!(escrow_balance(&events, noshow.id()).await?, 0);
+
+    let event: Value = events.view("get_event").args_json(json!({ "event_id": event_id })).await?.json()?;
+    assert_eq!(event["status"], "Finalized");
+    assert_eq!(event["payout_per_attendee"], "20000000");
+
+    // Sending the payout to an account the token does not know fails.
+    // The callback has to put the balance back.
+    guest
+        .call(events.id(), "withdraw")
+        .args_json(json!({
+            "amount": null,
+            "receiver_id": fresh.id(),
+            "to_intents": false
+        }))
+        .deposit(yocto(1))
+        .gas(Gas::from_tgas(200))
+        .transact()
+        .await?
+        .into_result()?;
+    assert_eq!(escrow_balance(&events, guest.id()).await?, 20 * 1_000_000, "failed transfer must restore the balance");
+
+    let forged = guest
+        .call(events.id(), "on_withdraw")
+        .args_json(json!({
+            "owner": guest.id(),
+            "amount": "1",
+            "to_intents": false
+        }))
+        .transact()
+        .await?;
+    expect_reject(&forged, "private");
+
+    let guest_tokens_before = token_balance(&usdc, guest.id()).await?;
+    guest
+        .call(events.id(), "withdraw")
+        .args_json(json!({ "amount": null, "receiver_id": guest.id(), "to_intents": false }))
+        .deposit(yocto(1))
+        .gas(Gas::from_tgas(200))
+        .transact()
+        .await?
+        .into_result()?;
+    assert_eq!(escrow_balance(&events, guest.id()).await?, 0);
+    assert_eq!(token_balance(&usdc, guest.id()).await?, guest_tokens_before + 20 * 1_000_000);
+
+    // A second event: cancel returns the deposit.
+    let storage: String = events.view("storage_cost").args_json(json!({ "capacity": 4 })).await?.json()?;
+    let cancel_id: u64 = host
+        .call(events.id(), "create_event")
+        .args_json(json!({
+            "metadata": {
+                "title": "Cancel me",
+                "description": "",
+                "location": "",
+                "cover_url": null,
+                "starts_at": now_ms,
+                "ends_at": now_ms + 60_000
+            },
+            "deposit": "10000000",
+            "capacity": 4,
+            "cohosts": null
+        }))
+        .deposit(yocto(storage.parse()?))
+        .transact()
+        .await?
+        .json()?;
+    transfer_call(
+        &noshow,
+        usdc.id(),
+        events.id(),
+        deposit,
+        json!({ "action": "register", "event_id": cancel_id }),
+    )
+    .await?
+    .into_result()?;
+    host.call(events.id(), "cancel")
+        .args_json(json!({ "event_id": cancel_id }))
+        .deposit(yocto(1))
+        .gas(Gas::from_tgas(100))
+        .transact()
+        .await?
+        .into_result()?;
+    assert_eq!(escrow_balance(&events, noshow.id()).await?, deposit);
+
+    // Past the end, check-in still works and the 30-day refund does not.
+    let ended: u64 = host
+        .call(events.id(), "create_event")
+        .args_json(json!({
+            "metadata": {
+                "title": "Ends soon",
+                "description": "",
+                "location": "",
+                "cover_url": null,
+                "starts_at": now_ms,
+                "ends_at": now_ms + 1_000
+            },
+            "deposit": "10000000",
+            "capacity": 4,
+            "cohosts": [cohost.id()]
+        }))
+        .deposit(yocto(storage.parse()?))
+        .transact()
+        .await?
+        .json()?;
+    transfer_call(
+        &guest,
+        usdc.id(),
+        events.id(),
+        deposit,
+        json!({ "action": "register", "event_id": ended }),
+    )
+    .await?
+    .into_result()?;
+    worker.fast_forward(400).await?;
+    let later = worker.view_block().await?.timestamp() / 1_000_000;
+    assert!(later > now_ms + 1_000, "clock did not pass the event end: {later} vs {now_ms}");
+    cohost
+        .call(events.id(), "check_in")
+        .args_json(json!({ "event_id": ended, "accounts": [guest.id()] }))
+        .deposit(yocto(1))
+        .transact()
+        .await?
+        .into_result()?;
+    let too_soon = stranger
+        .call(events.id(), "refund_if_abandoned")
+        .args_json(json!({ "event_id": ended }))
+        .transact()
+        .await?;
+    expect_reject(&too_soon, "Grace period");
+
+    // Direct callback forgery was already checked. Gas for a wider event is
+    // measured below so a full room cannot brick finalize.
+    measure_finalize_gas(&worker, &usdc, &events, &host).await?;
+
+    Ok(())
+}
+
+async fn measure_finalize_gas(
+    worker: &Worker<Sandbox>,
+    usdc: &Contract,
+    events: &Contract,
+    host: &Account,
+) -> anyhow::Result<()> {
+    let guests = 20u64;
+    let now_ms = worker.view_block().await?.timestamp() / 1_000_000;
+    let storage: String = events
+        .view("storage_cost")
+        .args_json(json!({ "capacity": guests }))
+        .await?
+        .json()?;
+    let event_id: u64 = host
+        .call(events.id(), "create_event")
+        .args_json(json!({
+            "metadata": {
+                "title": "Gas",
+                "description": "",
+                "location": "",
+                "cover_url": null,
+                "starts_at": now_ms,
+                "ends_at": now_ms + 60_000
+            },
+            "deposit": "1000000",
+            "capacity": guests,
+            "cohosts": null
+        }))
+        .deposit(yocto(storage.parse()?))
+        .transact()
+        .await?
+        .json()?;
+
+    let mut accounts = Vec::new();
+    for i in 0..guests {
+        let account = worker.dev_create_account().await?;
+        mint(usdc, host, account.id(), 1_000_000).await?;
+        transfer_call(
+            &account,
+            usdc.id(),
+            events.id(),
+            1_000_000,
+            json!({ "action": "register", "event_id": event_id }),
+        )
+        .await?
+        .into_result()?;
+        accounts.push(account.id().clone());
+        let _ = i;
+    }
+    host.call(events.id(), "check_in")
+        .args_json(json!({ "event_id": event_id, "accounts": accounts }))
+        .deposit(yocto(1))
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?
+        .into_result()?;
+    let finalized = host
+        .call(events.id(), "finalize")
+        .args_json(json!({ "event_id": event_id }))
+        .deposit(yocto(1))
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?
+        .into_result()?;
+    let burned = finalized.total_gas_burnt.as_gas();
+    let per_guest = burned / guests;
+    // A function call can spend 300 TGas. Leave headroom for the host
+    // transaction itself. 300 seats at this per-guest cost must fit.
+    let projected = per_guest.saturating_mul(300);
+    assert!(
+        projected < 250_000_000_000_000,
+        "finalize used {burned} gas for {guests} guests ({per_guest} each); 300 seats would need {projected}"
+    );
+    Ok(())
+}
