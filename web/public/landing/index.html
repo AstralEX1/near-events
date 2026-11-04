@@ -67,7 +67,11 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .hero header { position: absolute; top: 0; left: 0; right: 0; padding-top: env(safe-area-inset-top, 0px); }
 .hero header .wrap { display: flex; justify-content: space-between; align-items: center; padding-block: 20px; }
 .brand { font-weight: 750; font-size: 18px; text-decoration: none; letter-spacing: -0.01em; }
+.nav { display: flex; align-items: center; gap: 18px; }
+.nav a { font-size: 15px; font-weight: 600; text-decoration: none; opacity: .85; }
+.nav a:hover { opacity: 1; }
 .signin { font-size: 15px; font-weight: 600; text-decoration: none; opacity: .85; }
+.final .btn-ghost:hover { background: rgba(22,22,26,.06); }
 .hero h1 { font-size: clamp(46px, 8.4vw, 112px); font-weight: 750; letter-spacing: -0.05em; line-height: .96; max-width: 11em; }
 .hero h1 em { font-style: normal; background: linear-gradient(90deg, #b9b2ff, #7ef0c4); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .hero .lead { color: rgba(255,255,255,.86); }
@@ -186,13 +190,18 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
   <div class="hero-bg" style="background-image:url(/landing/hero.jpg)" aria-hidden="true"></div>
   <header><div class="wrap">
     <a class="brand" href="/">Near Events</a>
-    <a class="signin" href="/me">Sign in</a>
+    <nav class="nav">
+      <a href="/create">Create</a>
+      <a href="/widget">Integrate</a>
+      <a class="signin" href="/me">Sign in</a>
+    </nav>
   </div></header>
   <div class="wrap">
     <h1><span class="line">Free events people</span><span class="line"><em>actually show up to.</em></span></h1>
     <p class="lead">Guests leave a small deposit when they sign up. Come, and you get it back with a share of what the no-shows left behind.</p>
     <div class="ctas">
-      <a class="btn btn-light" href="/create">Create your first event</a>
+      <a class="btn btn-light" href="/create">Create event</a>
+      <a class="btn btn-ghost" href="/widget">Integrate widget</a>
     </div>
   </div>
 </div>
@@ -268,18 +277,17 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
           <span class="num">3</span>
           <div class="txt">
             <h3>The money waits in a contract</h3>
-            <p>Deposits sit in a NEAR smart contract, not with the host and not with us. When a DAO hosts, its members approve the payout.</p>
+            <p>Deposits sit in a NEAR smart contract — not with the host and not with us. After the event, the host closes it and pays out.</p>
           </div>
           <div class="shot">
             <div class="ui">
-              <div class="ui-title">Pay out</div>
-              <div class="amount">170 USDC</div>
-              <div class="votes">
-                <div class="vote"><span class="av" style="background:#5b4bff">A</span>alexey.near<span class="st yes">Approved</span></div>
-                <div class="vote"><span class="av" style="background:#0f9d6b">M</span>maria.near<span class="st yes">Approved</span></div>
-                <div class="vote"><span class="av" style="background:#c2410c">K</span>kenji.near<span class="st yes">Approved</span></div>
+              <div class="ui-title">Close event</div>
+              <div class="amount">170 USDC in escrow</div>
+              <div class="payrows" style="margin:12px 0">
+                <div class="payrow"><span>Checked in</span><span class="amt" style="color:var(--ink)">9 / 12</span></div>
+                <div class="payrow"><span>Each attendee</span><span class="amt">~18.89</span></div>
               </div>
-              <div class="big-btn dark">Approve</div>
+              <div class="big-btn dark">Close event &amp; pay out</div>
             </div>
           </div>
         </div>
@@ -329,8 +337,11 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
   <section class="final" id="start">
     <div class="wrap reveal">
       <h2>Your next event <em>starts here.</em></h2>
-      <p class="lead">Keep your Luma page and add one button. Check guests in from Telegram.</p>
-      <a class="btn btn-dark" href="/create">Create your first event</a>
+      <p class="lead">Host on Near Events, or keep Luma / your site and add the deposit widget.</p>
+      <div class="ctas" style="justify-content:center">
+        <a class="btn btn-dark" href="/create">Create event</a>
+        <a class="btn btn-ghost" href="/widget" style="border-color:rgba(22,22,26,.25);color:var(--ink)">Integrate widget</a>
+      </div>
     </div>
   </section>
 </main>
