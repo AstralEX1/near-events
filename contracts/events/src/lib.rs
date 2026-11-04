@@ -15,6 +15,12 @@
 //! Such transfers lose the token's refund protection, so when someone other
 //! than the guest pays, a failed or partial registration is credited to the
 //! guest's internal balance instead of bouncing.
+//!
+//! Creating an event is free for the host. The contract pays for storage from
+//! its own NEAR balance, which the operator keeps topped up. To keep that pool
+//! from being drained: a host can have at most `MAX_OPEN_EVENTS_PER_HOST` open
+//! events, capacity is capped, the deposit has a floor, and guest records of a
+//! closed event can be deleted (`cleanup_event`) so their NEAR goes back.
 
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use near_sdk::json_types::U128;
@@ -25,14 +31,21 @@ use near_sdk::{
     Promise, PromiseOrValue,
 };
 
-/// Storage the host pre-pays for each guest seat (guest record, index entry,
-/// guest's event list, payout balance entry). Unused storage is refunded.
+/// Upper bound for one guest seat (guest record, index entry, guest's event
+/// list, payout balance entry). Used to check the storage pool has room.
 pub const STORAGE_BYTES_PER_GUEST: u64 = 500;
-/// Upper bound for one event record: max-length text, 10 co-hosts, and the
-/// vector slot. `storage_cost` uses this so a long description cannot fail
-/// `create_event` after the host attached the quoted amount. Extra NEAR is
-/// refunded when the event closes.
+/// Upper bound for one event record: max-length text, 10 co-hosts, the vector
+/// slot and the host's open-event counter.
 const EVENT_RECORD_BYTES: u64 = 16_384;
+/// Open (not finalized or cancelled) events one host may have at a time.
+pub const MAX_OPEN_EVENTS_PER_HOST: u32 = 5;
+/// Smallest deposit: 0.1 USDC (6 decimals). Stops events with a dust deposit
+/// where seats cost us storage but cost guests nothing.
+pub const MIN_DEPOSIT: u128 = 100_000;
+/// Guest records of a closed event stay readable this long, then anyone can
+/// delete them with `cleanup_event`.
+pub const CLEANUP_DELAY_MS: u64 = 7 * 24 * 60 * 60 * 1000;
+const MAX_CLEANUP_BATCH: u32 = 100;
 /// Upper bound so `finalize` / `cancel` stay well within the gas limit.
 pub const MAX_CAPACITY: u32 = 300;
 /// After `ends_at` + this grace period, anyone can refund an unfinalized event.
@@ -58,6 +71,7 @@ enum StorageKey {
     GuestIndex,
     GuestEvents,
     Balances,
+    OpenEvents,
 }
 
 #[near(serializers = [borsh, json])]
@@ -98,9 +112,12 @@ pub struct Event {
     pub guest_count: u32,
     pub attended_count: u32,
     pub payout_per_attendee: u128,
-    /// NEAR (yocto) left from the host's storage pre-payment.
-    pub storage_budget: u128,
     pub created_at: u64,
+    /// When the event was finalized or cancelled; 0 while open.
+    pub closed_at: u64,
+    /// Guest records still in storage. Equals `guest_count` until
+    /// `cleanup_event` deletes them after the event closed.
+    pub stored_guests: u32,
 }
 
 #[near(serializers = [json])]
@@ -117,6 +134,9 @@ pub struct EventView {
     pub total_pool: U128,
     pub payout_per_attendee: U128,
     pub created_at: u64,
+    pub closed_at: u64,
+    /// How many guests `get_guests` can still return (0 after cleanup).
+    pub stored_guests: u32,
 }
 
 #[near(serializers = [json])]
@@ -164,6 +184,8 @@ pub struct Contract {
     guest_index: LookupMap<(u64, u32), AccountId>,
     guest_events: LookupMap<AccountId, Vec<u64>>,
     balances: LookupMap<AccountId, u128>,
+    /// Open events per host (entry removed at 0).
+    open_events: LookupMap<AccountId, u32>,
     /// Optional account allowed to call `payout_to_intents` for other users (web relayer).
     relayer: Option<AccountId>,
 }
@@ -180,6 +202,7 @@ impl Contract {
             guest_index: LookupMap::new(StorageKey::GuestIndex),
             guest_events: LookupMap::new(StorageKey::GuestEvents),
             balances: LookupMap::new(StorageKey::Balances),
+            open_events: LookupMap::new(StorageKey::OpenEvents),
             relayer,
         }
     }
@@ -187,8 +210,7 @@ impl Contract {
     // ---------------------------------------------------------------- host
 
     /// Creates an event hosted by the caller. Name co-hosts for door check-in.
-    /// Attach NEAR for storage: see `storage_cost`.
-    #[payable]
+    /// Free: the contract pays for storage from its own balance.
     pub fn create_event(
         &mut self,
         metadata: EventMetadata,
@@ -199,11 +221,17 @@ impl Contract {
         let host = env::predecessor_account_id();
         let cohosts = cohosts.unwrap_or_default();
         validate_metadata(&metadata);
-        require!(deposit.0 > 0, "Deposit must be positive");
+        require!(deposit.0 >= MIN_DEPOSIT, "Deposit must be at least 0.1 USDC");
         require!(capacity > 0 && capacity <= MAX_CAPACITY, "Capacity out of range");
         require!(cohosts.len() <= MAX_COHOSTS, "Too many co-hosts");
+        let open = self.open_events.get(&host).copied().unwrap_or(0);
+        require!(
+            open < MAX_OPEN_EVENTS_PER_HOST,
+            format!("A host can have at most {} open events. Finalize or cancel one first", MAX_OPEN_EVENTS_PER_HOST)
+        );
+        // The whole event, full house included, must fit in the storage pool.
+        self.require_storage_pool(EVENT_RECORD_BYTES + STORAGE_BYTES_PER_GUEST * capacity as u64);
 
-        let initial_storage = env::storage_usage();
         let id = self.events.len() as u64;
         self.events.push(Event {
             host: host.clone(),
@@ -215,18 +243,11 @@ impl Contract {
             guest_count: 0,
             attended_count: 0,
             payout_per_attendee: 0,
-            storage_budget: 0,
             created_at: env::block_timestamp_ms(),
+            closed_at: 0,
+            stored_guests: 0,
         });
-        self.events.flush();
-        let event_cost = bytes_cost(env::storage_usage().saturating_sub(initial_storage));
-        let seats_cost = bytes_cost(STORAGE_BYTES_PER_GUEST * capacity as u64);
-        let attached = env::attached_deposit().as_yoctonear();
-        require!(
-            attached >= event_cost + seats_cost,
-            format!("Attach at least {} yoctoNEAR for storage", event_cost + seats_cost)
-        );
-        self.event_mut(id).storage_budget = attached - event_cost;
+        self.open_events.insert(host.clone(), open + 1);
 
         emit("event_created", json!({ "event_id": id, "host": host, "deposit": deposit }));
         id
@@ -235,34 +256,23 @@ impl Contract {
     #[payable]
     pub fn add_cohost(&mut self, event_id: u64, account_id: AccountId) {
         near_sdk::assert_one_yocto();
-        let before = env::storage_usage();
-        {
-            let event = self.event_mut(event_id);
-            require!(env::predecessor_account_id() == event.host, "Only the host");
-            require!(event.status == EventStatus::Open, "Event is closed");
-            require!(event.cohosts.len() < MAX_COHOSTS, "Too many co-hosts");
-            if !event.cohosts.contains(&account_id) {
-                event.cohosts.push(account_id.clone());
-            }
+        let event = self.event_mut(event_id);
+        require!(env::predecessor_account_id() == event.host, "Only the host");
+        require!(event.status == EventStatus::Open, "Event is closed");
+        require!(event.cohosts.len() < MAX_COHOSTS, "Too many co-hosts");
+        if !event.cohosts.contains(&account_id) {
+            event.cohosts.push(account_id.clone());
         }
-        // The extra account id is stored on this event, so this event's prepaid
-        // NEAR pays for it. Otherwise closing the event refunds NEAR that is
-        // still locked, and that refund can come out of another event's deposit.
-        self.account_for_storage(event_id, before);
         emit("cohost_added", json!({ "event_id": event_id, "account_id": account_id }));
     }
 
     #[payable]
     pub fn remove_cohost(&mut self, event_id: u64, account_id: AccountId) {
         near_sdk::assert_one_yocto();
-        let before = env::storage_usage();
-        {
-            let event = self.event_mut(event_id);
-            require!(env::predecessor_account_id() == event.host, "Only the host");
-            require!(event.status == EventStatus::Open, "Event is closed");
-            event.cohosts.retain(|a| a != &account_id);
-        }
-        self.account_for_storage(event_id, before);
+        let event = self.event_mut(event_id);
+        require!(env::predecessor_account_id() == event.host, "Only the host");
+        require!(event.status == EventStatus::Open, "Event is closed");
+        event.cohosts.retain(|a| a != &account_id);
         emit("cohost_removed", json!({ "event_id": event_id, "account_id": account_id }));
     }
 
@@ -309,7 +319,6 @@ impl Contract {
     #[payable]
     pub fn refund_guest(&mut self, event_id: u64, account_id: AccountId) {
         near_sdk::assert_one_yocto();
-        let initial_storage = env::storage_usage();
         let event = self.event(event_id);
         require!(env::predecessor_account_id() == event.host, "Only the host");
         require!(event.status == EventStatus::Open, "Event is closed");
@@ -329,29 +338,12 @@ impl Contract {
             self.guests.get_mut(&(event_id, moved)).unwrap().index = record.index;
         }
         self.guest_index.remove(&(event_id, last));
-        if let Some(list) = self.guest_events.get_mut(&account_id) {
-            list.retain(|e| *e != event_id);
-            if list.is_empty() {
-                self.guest_events.remove(&account_id);
-            }
-        }
-        self.event_mut(event_id).guest_count -= 1;
+        self.forget_guest_event(&account_id, event_id);
+        let event = self.event_mut(event_id);
+        event.guest_count -= 1;
+        event.stored_guests -= 1;
         self.credit(&account_id, deposit);
 
-        // Freed seat storage goes back into the event's budget (a new balance entry may cost a little).
-        self.guests.flush();
-        self.guest_index.flush();
-        self.guest_events.flush();
-        self.balances.flush();
-        let now = env::storage_usage();
-        let event = self.event_mut(event_id);
-        if now < initial_storage {
-            event.storage_budget += bytes_cost(initial_storage - now);
-        } else {
-            let used = bytes_cost(now - initial_storage);
-            require!(event.storage_budget >= used, "Event has no storage budget left");
-            event.storage_budget -= used;
-        }
         emit("guest_refunded", json!({ "event_id": event_id, "account_id": account_id, "amount": U128(deposit) }));
     }
 
@@ -367,7 +359,6 @@ impl Contract {
             return self.close_with_refunds(event_id, EventStatus::Finalized);
         }
 
-        let initial_storage = env::storage_usage();
         let (host, deposit, guest_count, attended) =
             (event.host.clone(), event.deposit, event.guest_count, event.attended_count);
         let pool = deposit * guest_count as u128;
@@ -384,10 +375,8 @@ impl Contract {
             self.credit(&host, remainder);
         }
 
-        let event = self.event_mut(event_id);
-        event.status = EventStatus::Finalized;
-        event.payout_per_attendee = share;
-        self.settle_storage(event_id, initial_storage);
+        self.event_mut(event_id).payout_per_attendee = share;
+        self.mark_closed(event_id, EventStatus::Finalized);
         emit(
             "finalized",
             json!({ "event_id": event_id, "attended": attended, "payout_per_attendee": U128(share) }),
@@ -414,6 +403,34 @@ impl Contract {
             "Grace period has not passed"
         );
         self.close_with_refunds(event_id, EventStatus::Cancelled);
+    }
+
+    /// Deletes up to `limit` guest records of a closed event, once
+    /// `CLEANUP_DELAY_MS` has passed since it closed. Anyone can call it; the
+    /// freed NEAR goes back to the contract's storage pool. Payouts are already
+    /// on guests' balances, so nothing of value is lost, only the guest list.
+    /// Returns how many records are left.
+    pub fn cleanup_event(&mut self, event_id: u64, limit: Option<u32>) -> u32 {
+        let event = self.event(event_id);
+        require!(event.status != EventStatus::Open, "Event is still open");
+        require!(
+            env::block_timestamp_ms() >= event.closed_at + CLEANUP_DELAY_MS,
+            "Guest list is kept for 7 days after the event closes"
+        );
+        let stored = event.stored_guests;
+        let batch = limit.unwrap_or(MAX_CLEANUP_BATCH).min(MAX_CLEANUP_BATCH).min(stored);
+        for i in (stored - batch..stored).rev() {
+            let account = self
+                .guest_index
+                .remove(&(event_id, i))
+                .unwrap_or_else(|| env::panic_str("Missing guest index"));
+            self.guests.remove(&(event_id, account.clone()));
+            self.forget_guest_event(&account, event_id);
+        }
+        let left = stored - batch;
+        self.event_mut(event_id).stored_guests = left;
+        emit("cleaned_up", json!({ "event_id": event_id, "removed": batch, "left": left }));
+        left
     }
 
     // --------------------------------------------------------------- guest
@@ -495,9 +512,14 @@ impl Contract {
         self.relayer.clone()
     }
 
-    /// NEAR (yocto) to attach to `create_event` for a given capacity.
-    pub fn storage_cost(&self, capacity: u32) -> U128 {
-        U128(bytes_cost(EVENT_RECORD_BYTES + STORAGE_BYTES_PER_GUEST * capacity as u64))
+    /// NEAR (yocto) the contract can still spend on storage.
+    pub fn storage_pool(&self) -> U128 {
+        U128(free_storage_balance())
+    }
+
+    /// Open events of a host, against `MAX_OPEN_EVENTS_PER_HOST`.
+    pub fn open_events_of(&self, account_id: AccountId) -> u32 {
+        self.open_events.get(&account_id).copied().unwrap_or(0)
     }
 
     pub fn get_event(&self, event_id: u64) -> Option<EventView> {
@@ -517,7 +539,7 @@ impl Contract {
     }
 
     pub fn get_guests(&self, event_id: u64, from_index: Option<u32>, limit: Option<u32>) -> Vec<GuestView> {
-        let count = self.event(event_id).guest_count;
+        let count = self.event(event_id).stored_guests;
         let from = from_index.unwrap_or(0);
         let limit = limit.unwrap_or(100).min(MAX_CAPACITY);
         (from..(from.saturating_add(limit)).min(count))
@@ -601,6 +623,7 @@ impl FungibleTokenReceiver for Contract {
             }
             TransferMsg::TopUp { account_id } => {
                 let account = account_id.unwrap_or(sender_id);
+                self.balances.flush();
                 let initial_storage = env::storage_usage();
                 self.credit(&account, amount.0);
                 // The balance map keeps the write in a cache until flush, so the
@@ -634,18 +657,35 @@ impl Contract {
         PromiseOrValue::Value(U128(0))
     }
 
-    /// Moves storage that appeared or disappeared since `before` into this
-    /// event's prepaid budget. Callers must have dropped any `event_mut` borrow.
-    fn account_for_storage(&mut self, event_id: u64, before: u64) {
-        self.events.flush();
-        let now = env::storage_usage();
+    /// Panics with a clear message when the contract cannot pay for `bytes`
+    /// more storage. Without this the call fails later with a NEAR runtime
+    /// error that says nothing to the user.
+    fn require_storage_pool(&self, bytes: u64) {
+        require!(
+            free_storage_balance() >= bytes_cost(bytes),
+            "Near Events storage pool is empty, please try again later"
+        );
+    }
+
+    fn forget_guest_event(&mut self, account: &AccountId, event_id: u64) {
+        if let Some(list) = self.guest_events.get_mut(account) {
+            list.retain(|e| *e != event_id);
+            if list.is_empty() {
+                self.guest_events.remove(account);
+            }
+        }
+    }
+
+    fn mark_closed(&mut self, event_id: u64, status: EventStatus) {
         let event = self.event_mut(event_id);
-        if now > before {
-            let used = bytes_cost(now - before);
-            require!(event.storage_budget >= used, "Event has no storage budget left");
-            event.storage_budget -= used;
-        } else if now < before {
-            event.storage_budget += bytes_cost(before - now);
+        event.status = status;
+        event.closed_at = env::block_timestamp_ms();
+        let host = event.host.clone();
+        let open = self.open_events.get(&host).copied().unwrap_or(1);
+        if open <= 1 {
+            self.open_events.remove(&host);
+        } else {
+            self.open_events.insert(host, open - 1);
         }
     }
 
@@ -702,16 +742,16 @@ impl Contract {
         let event = self.event(event_id);
         event.status == EventStatus::Open
             && event.guest_count < event.capacity
-            && event.storage_budget >= bytes_cost(STORAGE_BYTES_PER_GUEST)
+            && free_storage_balance() >= bytes_cost(STORAGE_BYTES_PER_GUEST)
             && !self.guests.contains_key(&(event_id, guest.clone()))
     }
 
     fn register(&mut self, event_id: u64, guest: AccountId, paid_by: AccountId) {
-        let initial_storage = env::storage_usage();
         let event = self.event(event_id);
         require!(event.status == EventStatus::Open, "Event is closed");
         require!(event.guest_count < event.capacity, "Event is full");
         require!(!self.guests.contains_key(&(event_id, guest.clone())), "Already registered");
+        self.require_storage_pool(STORAGE_BYTES_PER_GUEST);
 
         let index = event.guest_count;
         self.guests.insert(
@@ -725,45 +765,22 @@ impl Contract {
         );
         self.guest_index.insert((event_id, index), guest.clone());
         self.guest_events.entry(guest.clone()).or_default().push(event_id);
-        self.event_mut(event_id).guest_count += 1;
-
-        self.guests.flush();
-        self.guest_index.flush();
-        self.guest_events.flush();
-        let used = bytes_cost(env::storage_usage().saturating_sub(initial_storage));
         let event = self.event_mut(event_id);
-        require!(event.storage_budget >= used, "Event has no storage budget left");
-        event.storage_budget -= used;
+        event.guest_count += 1;
+        event.stored_guests += 1;
 
         emit("register", json!({ "event_id": event_id, "guest": guest, "paid_by": paid_by }));
     }
 
     fn close_with_refunds(&mut self, event_id: u64, status: EventStatus) {
-        let initial_storage = env::storage_usage();
         let event = self.event(event_id);
         let (deposit, guest_count) = (event.deposit, event.guest_count);
         for i in 0..guest_count {
             let account = self.guest_index[&(event_id, i)].clone();
             self.credit(&account, deposit);
         }
-        let event = self.event_mut(event_id);
-        event.status = status;
-        self.settle_storage(event_id, initial_storage);
+        self.mark_closed(event_id, status);
         emit("closed", json!({ "event_id": event_id, "status": status }));
-    }
-
-    /// Charges storage used since `initial_storage` to the event's budget and
-    /// returns what is left to the host. Called once when an event closes.
-    fn settle_storage(&mut self, event_id: u64, initial_storage: u64) {
-        self.balances.flush();
-        let used = bytes_cost(env::storage_usage().saturating_sub(initial_storage));
-        let event = self.event_mut(event_id);
-        let refund = event.storage_budget.saturating_sub(used);
-        event.storage_budget = 0;
-        let host = event.host.clone();
-        if refund > 0 {
-            let _ = Promise::new(host).transfer(NearToken::from_yoctonear(refund));
-        }
     }
 
     fn balance(&self, account: &AccountId) -> u128 {
@@ -786,6 +803,11 @@ impl Contract {
 
 fn bytes_cost(bytes: u64) -> u128 {
     env::storage_byte_cost().as_yoctonear() * bytes as u128
+}
+
+/// Contract NEAR not locked for storage already in use.
+fn free_storage_balance() -> u128 {
+    env::account_balance().as_yoctonear().saturating_sub(bytes_cost(env::storage_usage()))
 }
 
 fn validate_metadata(m: &EventMetadata) {
@@ -814,6 +836,8 @@ fn view_event(id: u64, e: &Event) -> EventView {
         total_pool: U128(e.deposit * e.guest_count as u128),
         payout_per_attendee: U128(e.payout_per_attendee),
         created_at: e.created_at,
+        closed_at: e.closed_at,
+        stored_guests: e.stored_guests,
     }
 }
 

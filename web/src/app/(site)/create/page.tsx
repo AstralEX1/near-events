@@ -96,7 +96,6 @@ export default function CreateEvent() {
     setError(null);
     try {
       const capacity = Number(form.capacity);
-      const storage = BigInt(await events.storageCost(capacity));
       const title = form.title.trim();
       await send([
         {
@@ -115,7 +114,6 @@ export default function CreateEvent() {
             capacity,
             cohosts: form.cohosts.split(/[\s,]+/).filter(Boolean),
           },
-          deposit: storage,
         },
       ]);
       // The new event is the latest one this account created with this title.
@@ -268,7 +266,7 @@ export default function CreateEvent() {
                 title="Deposit"
                 help="Each guest puts this down. People who come get it back plus a share of the no-shows."
               >
-                <input className="input" type="number" min="0.01" step="0.01" required value={form.deposit} onChange={(e) => set("deposit")(e.target.value)} />
+                <input className="input" type="number" min="0.1" step="0.01" required value={form.deposit} onChange={(e) => set("deposit")(e.target.value)} />
               </OptionRow>
               <div className="lu-row">
                 <Icon d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" className="text-muted" />
@@ -314,7 +312,7 @@ export default function CreateEvent() {
             </Link>
           </p>
           <p className="text-xs text-muted">
-            A little NEAR is attached for on-chain storage and comes back when the event closes.
+            Creating an event is free. You can have up to 5 open events at a time.
           </p>
         </div>
         {themeOpen && <ThemeBar theme={theme} onChange={setTheme} onClose={() => setThemeOpen(false)} />}
