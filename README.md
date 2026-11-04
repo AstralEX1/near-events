@@ -24,8 +24,9 @@ Hackathon track focus: Real-World Money (USDC, NEAR Intents, gasless onboarding)
 
 | What | Account |
 |---|---|
-| Event escrow | [`escrow-v3.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-v3.nearevents-11022103.testnet) |
-| Test USDC (open faucet) | [`usdc-nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/usdc-nearevents-11022103.testnet) |
+| Event escrow (the web app's default) | [`escrow-tp.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-tp.nearevents-11022103.testnet) |
+| Test USDC (Tidepool faucet) | [`usdc.tidepool-sandbox.testnet`](https://testnet.nearblocks.io/address/usdc.tidepool-sandbox.testnet) |
+| Same escrow code on our own test USDC (used by the script below) | [`escrow-v3.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-v3.nearevents-11022103.testnet) + [`usdc-nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/usdc-nearevents-11022103.testnet) |
 
 NEAR Intents itself has no testnet. On testnet the Intents paths run on
 [Tidepool](https://www.usetidepool.tech/docs), a 1Click sandbox with the official
@@ -58,7 +59,8 @@ npm run dev                     # http://localhost:3000
    Intents to any chain (via 1Click) or to any NEAR Intents account.
 
 Without a browser, the whole cycle runs from a script (uses your own testnet
-accounts from `~/.near-credentials`):
+accounts from `~/.near-credentials`). It mints from our own test USDC, so it runs
+against escrow-v3, which has the same code as the app's escrow:
 
 ```bash
 cd web

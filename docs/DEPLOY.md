@@ -11,8 +11,8 @@ below has been run; deploying needs Alex's OK. (2026-11-03, Claude)
 | Name | Testnet value | Secret? |
 |---|---|---|
 | `NEXT_PUBLIC_NETWORK` | `testnet` | no |
-| `NEXT_PUBLIC_EVENTS_CONTRACT` | `escrow-v3.nearevents-11022103.testnet` | no |
-| `NEXT_PUBLIC_USDC_CONTRACT` | `usdc-nearevents-11022103.testnet` | no |
+| `NEXT_PUBLIC_EVENTS_CONTRACT` | `escrow-tp.nearevents-11022103.testnet` | no |
+| `NEXT_PUBLIC_USDC_CONTRACT` | `usdc.tidepool-sandbox.testnet` | no |
 | `RELAYER_ACCOUNT_ID` | `relayer-nearevents-11022103.testnet` | no |
 | `RELAYER_PRIVATE_KEY` | from `web/.env.local` (paste in Vercel only) | **yes** |
 | `ONECLICK_API_KEY` | optional | **yes** |
