@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [{ source: "/p/:id", destination: "/embed/e/:id/join", permanent: false }];
   },
+  // Landing page (approved artifact) is a static file in public/landing.
+  async rewrites() {
+    return { beforeFiles: [{ source: "/", destination: "/landing/index.html" }] };
+  },
   async headers() {
     return [
       { source: "/:path*", headers: [{ key: "Content-Security-Policy", value: "frame-ancestors 'self'" }] },
