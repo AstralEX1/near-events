@@ -28,6 +28,11 @@ use near_sdk::{
 /// Storage the host pre-pays for each guest seat (guest record, index entry,
 /// guest's event list, payout balance entry). Unused storage is refunded.
 pub const STORAGE_BYTES_PER_GUEST: u64 = 500;
+/// Upper bound for one event record: max-length text, 10 co-hosts, and the
+/// vector slot. `storage_cost` uses this so a long description cannot fail
+/// `create_event` after the host attached the quoted amount. Extra NEAR is
+/// refunded when the event closes.
+const EVENT_RECORD_BYTES: u64 = 16_384;
 /// Upper bound so `finalize` / `cancel` stay well within the gas limit.
 pub const MAX_CAPACITY: u32 = 300;
 /// After `ends_at` + this grace period, anyone can refund an unfinalized event.
@@ -239,23 +244,34 @@ impl Contract {
     #[payable]
     pub fn add_cohost(&mut self, event_id: u64, account_id: AccountId) {
         near_sdk::assert_one_yocto();
-        let event = self.event_mut(event_id);
-        require!(env::predecessor_account_id() == event.host, "Only the host");
-        require!(event.status == EventStatus::Open, "Event is closed");
-        require!(event.cohosts.len() < MAX_COHOSTS, "Too many co-hosts");
-        if !event.cohosts.contains(&account_id) {
-            event.cohosts.push(account_id.clone());
+        let before = env::storage_usage();
+        {
+            let event = self.event_mut(event_id);
+            require!(env::predecessor_account_id() == event.host, "Only the host");
+            require!(event.status == EventStatus::Open, "Event is closed");
+            require!(event.cohosts.len() < MAX_COHOSTS, "Too many co-hosts");
+            if !event.cohosts.contains(&account_id) {
+                event.cohosts.push(account_id.clone());
+            }
         }
+        // The extra account id is stored on this event, so this event's prepaid
+        // NEAR pays for it. Otherwise closing the event refunds NEAR that is
+        // still locked, and that refund can come out of another event's deposit.
+        self.account_for_storage(event_id, before);
         emit("cohost_added", json!({ "event_id": event_id, "account_id": account_id }));
     }
 
     #[payable]
     pub fn remove_cohost(&mut self, event_id: u64, account_id: AccountId) {
         near_sdk::assert_one_yocto();
-        let event = self.event_mut(event_id);
-        require!(env::predecessor_account_id() == event.host, "Only the host");
-        require!(event.status == EventStatus::Open, "Event is closed");
-        event.cohosts.retain(|a| a != &account_id);
+        let before = env::storage_usage();
+        {
+            let event = self.event_mut(event_id);
+            require!(env::predecessor_account_id() == event.host, "Only the host");
+            require!(event.status == EventStatus::Open, "Event is closed");
+            event.cohosts.retain(|a| a != &account_id);
+        }
+        self.account_for_storage(event_id, before);
         emit("cohost_removed", json!({ "event_id": event_id, "account_id": account_id }));
     }
 
@@ -306,12 +322,15 @@ impl Contract {
         let event = self.event(event_id);
         require!(env::predecessor_account_id() == event.host, "Only the host");
         require!(event.status == EventStatus::Open, "Event is closed");
-        let (deposit, last) = (event.deposit, event.guest_count - 1);
+        let deposit = event.deposit;
+        // Look the guest up before `guest_count - 1`. An empty event has no
+        // guest, and the subtraction would panic as an overflow instead.
         let record = self
             .guests
             .remove(&(event_id, account_id.clone()))
             .unwrap_or_else(|| env::panic_str("Not registered"));
         require!(record.status == GuestStatus::Registered, "Guest is already checked in");
+        let last = self.event(event_id).guest_count - 1;
 
         if record.index != last {
             let moved = self.guest_index[&(event_id, last)].clone();
@@ -487,8 +506,7 @@ impl Contract {
 
     /// NEAR (yocto) to attach to `create_event` for a given capacity.
     pub fn storage_cost(&self, capacity: u32) -> U128 {
-        // ~1 KB for the event record itself plus each seat.
-        U128(bytes_cost(1024 + STORAGE_BYTES_PER_GUEST * capacity as u64))
+        U128(bytes_cost(EVENT_RECORD_BYTES + STORAGE_BYTES_PER_GUEST * capacity as u64))
     }
 
     pub fn get_event(&self, event_id: u64) -> Option<EventView> {
@@ -547,20 +565,37 @@ impl FungibleTokenReceiver for Contract {
             serde_json::from_str(&msg).unwrap_or_else(|_| env::panic_str("Invalid msg"));
         match msg {
             TransferMsg::Register { event_id, guest } => {
-                let deposit = self.event(event_id).deposit;
-                require!(amount.0 >= deposit, "Amount is less than the deposit");
                 // A relayed payment (intents.near, 1Click) must name the guest,
                 // otherwise the relay itself would take the seat.
                 if Some(&sender_id) == self.intents.as_ref() {
                     require!(guest.is_some(), "Payments via NEAR Intents must name the guest");
                 }
                 let guest = guest.unwrap_or_else(|| sender_id.clone());
-                if guest == sender_id {
+                let third_party = guest != sender_id;
+                // Missing event and a short payment used to panic. A panic makes
+                // the token send the USDC back to `sender_id`. When that sender
+                // is intents.near or 1Click, the refund often never reaches the
+                // guest. Keep it on the guest's balance instead.
+                let Some(deposit) = self
+                    .events
+                    .get(u32::try_from(event_id).unwrap_or(u32::MAX))
+                    .map(|event| event.deposit)
+                else {
+                    return self.keep_for_guest_or_reject(third_party, event_id, &guest, amount, "Event not found");
+                };
+                if amount.0 < deposit {
+                    return self.keep_for_guest_or_reject(
+                        third_party,
+                        event_id,
+                        &guest,
+                        amount,
+                        "Amount is less than the deposit",
+                    );
+                }
+                if !third_party {
                     self.register(event_id, guest, sender_id);
                     return PromiseOrValue::Value(U128(amount.0 - deposit));
                 }
-                // Paid by someone else (a friend, 1Click or intents.near): never
-                // bounce, because a refund may not reach the guest.
                 let leftover = if self.can_register(event_id, &guest) {
                     self.register(event_id, guest.clone(), sender_id);
                     amount.0 - deposit
@@ -574,15 +609,19 @@ impl FungibleTokenReceiver for Contract {
                 PromiseOrValue::Value(U128(0))
             }
             TransferMsg::Sponsor { event_id } => {
-                let event = self.event_mut(event_id);
-                require!(event.status == EventStatus::Open, "Event is closed");
-                event.bonus_pool += amount.0;
-                if let Some((_, funded)) = event.sponsors.iter_mut().find(|(a, _)| a == &sender_id) {
-                    *funded += amount.0;
-                } else {
-                    require!(event.sponsors.len() < MAX_SPONSORS, "Too many sponsors");
-                    event.sponsors.push((sender_id.clone(), amount.0));
+                let before = env::storage_usage();
+                {
+                    let event = self.event_mut(event_id);
+                    require!(event.status == EventStatus::Open, "Event is closed");
+                    event.bonus_pool += amount.0;
+                    if let Some((_, funded)) = event.sponsors.iter_mut().find(|(a, _)| a == &sender_id) {
+                        *funded += amount.0;
+                    } else {
+                        require!(event.sponsors.len() < MAX_SPONSORS, "Too many sponsors");
+                        event.sponsors.push((sender_id.clone(), amount.0));
+                    }
                 }
+                self.account_for_storage(event_id, before);
                 emit("sponsored", json!({ "event_id": event_id, "sponsor": sender_id, "amount": amount }));
                 PromiseOrValue::Value(U128(0))
             }
@@ -590,8 +629,10 @@ impl FungibleTokenReceiver for Contract {
                 let account = account_id.unwrap_or(sender_id);
                 let initial_storage = env::storage_usage();
                 self.credit(&account, amount.0);
-                // A new balance entry is tiny; require the account to exist already
-                // so strangers cannot grow storage for free.
+                // The balance map keeps the write in a cache until flush, so the
+                // byte check has to happen after the flush. A new key would let
+                // anyone grow the contract's storage with a 1-unit transfer.
+                self.balances.flush();
                 require!(env::storage_usage() == initial_storage, "Top-up needs an existing balance");
                 PromiseOrValue::Value(U128(0))
             }
@@ -600,6 +641,40 @@ impl FungibleTokenReceiver for Contract {
 }
 
 impl Contract {
+    /// A payment made for someone else never bounces: the USDC stays on that
+    /// guest's balance. The guest pays for their own seat, so a bad payment
+    /// still refunds through the token.
+    fn keep_for_guest_or_reject(
+        &mut self,
+        third_party: bool,
+        event_id: u64,
+        guest: &AccountId,
+        amount: U128,
+        reason: &str,
+    ) -> PromiseOrValue<U128> {
+        if !third_party {
+            env::panic_str(reason);
+        }
+        self.credit(guest, amount.0);
+        emit("register_failed", json!({ "event_id": event_id, "guest": guest, "amount": amount }));
+        PromiseOrValue::Value(U128(0))
+    }
+
+    /// Moves storage that appeared or disappeared since `before` into this
+    /// event's prepaid budget. Callers must have dropped any `event_mut` borrow.
+    fn account_for_storage(&mut self, event_id: u64, before: u64) {
+        self.events.flush();
+        let now = env::storage_usage();
+        let event = self.event_mut(event_id);
+        if now > before {
+            let used = bytes_cost(now - before);
+            require!(event.storage_budget >= used, "Event has no storage budget left");
+            event.storage_budget -= used;
+        } else if now < before {
+            event.storage_budget += bytes_cost(before - now);
+        }
+    }
+
     fn event(&self, event_id: u64) -> &Event {
         self.events
             .get(u32::try_from(event_id).unwrap_or(u32::MAX))

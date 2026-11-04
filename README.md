@@ -93,7 +93,7 @@ anyone ────────── sponsor bonus ─────────�
                                                      (NEAR wallet or NEAR Intents)
 ```
 
-Contract: `contracts/events/src/lib.rs` (21 unit tests in `tests.rs`).
+Contract: `contracts/events/src/lib.rs` (79 unit tests in `tests.rs`).
 
 **EVM wallet flow (mainnet):** the guest signs an ERC-191 intent
 `ft_withdraw {token: USDC, receiver_id: escrow, msg: register}`; `/api/intents/execute`
@@ -124,7 +124,9 @@ to the sponsors who funded it (not the host).
 
 ```bash
 cd contracts
-cargo test -p near-events                       # 27 unit tests
+cargo test -p near-events                       # 79 unit tests
+cargo test -p test-usdc                         # faucet guards
+cargo test -p near-events-sandbox               # local NEAR sandbox
 cd events && cargo near build non-reproducible-wasm
 ```
 
