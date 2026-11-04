@@ -71,7 +71,6 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .nav a { font-size: 15px; font-weight: 600; text-decoration: none; opacity: .85; }
 .nav a:hover { opacity: 1; }
 .signin { font-size: 15px; font-weight: 600; text-decoration: none; opacity: .85; }
-.final .btn-ghost:hover { background: rgba(22,22,26,.06); }
 .hero h1 { font-size: clamp(46px, 8.4vw, 112px); font-weight: 750; letter-spacing: -0.05em; line-height: .96; max-width: 11em; }
 .hero h1 em { font-style: normal; background: linear-gradient(90deg, #b9b2ff, #7ef0c4); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .hero .lead { color: rgba(255,255,255,.86); }
@@ -177,6 +176,26 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .quote blockquote { margin: 0; text-align: left; font-size: clamp(28px, 3.6vw, 44px); font-weight: 650; letter-spacing: -0.035em; line-height: 1.08; max-width: 15em; }
 
 
+/* ---------- INTEGRATE ---------- */
+.integrate { background: var(--soft); border-top: 1px solid var(--line); }
+.integrate .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: clamp(32px, 6vw, 72px); align-items: center; }
+@media (max-width: 860px) { .integrate .wrap { grid-template-columns: minmax(0, 1fr); } }
+.integrate .txt { display: flex; flex-direction: column; gap: 14px; }
+.integrate .txt .lead { max-width: 28em; }
+.snippet { background: #16161a; color: #ededf0; border-radius: 18px; overflow: hidden; box-shadow: 0 30px 60px -36px rgba(22,22,26,.45); }
+.snippet-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.snippet-bar span { font-size: 13px; font-weight: 600; color: rgba(255,255,255,.55); font-family: var(--mono); }
+.copy-btn { appearance: none; border: 0; cursor: pointer; height: 34px; padding: 0 14px; border-radius: 999px; background: rgba(255,255,255,.1); color: #fff; font: 650 13px var(--font); transition: background .15s ease; }
+.copy-btn:hover { background: rgba(255,255,255,.18); }
+.copy-btn.ok { background: var(--good); color: #fff; }
+.snippet pre { margin: 0; padding: 22px 20px; overflow-x: auto; font: 500 14px/1.55 var(--mono); white-space: pre; color: #d6d4ff; }
+.snippet code { font: inherit; }
+.snippet .tok-tag { color: #7ef0c4; }
+.snippet .tok-attr { color: #b9b2ff; }
+.snippet .tok-val { color: #ffd6a5; }
+.integrate .more { font-size: 15px; font-weight: 650; color: var(--accent-ink); text-decoration: none; }
+.integrate .more:hover { text-decoration: underline; }
+
 /* ---------- FINAL ---------- */
 .final { text-align: center; border-top: 1px solid var(--line); }
 .final .wrap { display: flex; flex-direction: column; align-items: center; gap: 22px; }
@@ -192,16 +211,15 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     <a class="brand" href="/">Near Events</a>
     <nav class="nav">
       <a href="/create">Create</a>
-      <a href="/widget">Integrate</a>
+      <a href="#integrate">Integrate</a>
       <a class="signin" href="/me">Sign in</a>
     </nav>
   </div></header>
   <div class="wrap">
-    <h1><span class="line">Free events people</span><span class="line"><em>actually show up to.</em></span></h1>
+    <h1><span class="line">Events people</span><span class="line"><em>actually show up to.</em></span></h1>
     <p class="lead">Guests leave a small deposit when they sign up. Come, and you get it back with a share of what the no-shows left behind.</p>
     <div class="ctas">
       <a class="btn btn-light" href="/create">Create event</a>
-      <a class="btn btn-ghost" href="/widget">Integrate widget</a>
     </div>
   </div>
 </div>
@@ -334,13 +352,31 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     </div>
   </section>
 
+  <section class="integrate" id="integrate">
+    <div class="wrap">
+      <div class="txt reveal">
+        <span class="eyebrow">Integrate</span>
+        <h2 class="h2">Already on Luma or your own site?</h2>
+        <p class="lead">Paste two lines. Guests leave the deposit with us; you keep your page as the front door.</p>
+        <a class="more" href="/widget">Customize for Luma or your landing →</a>
+      </div>
+      <div class="snippet reveal" id="embed-snippet">
+        <div class="snippet-bar">
+          <span>embed.html</span>
+          <button type="button" class="copy-btn" id="copy-embed">Copy</button>
+        </div>
+        <pre><code id="embed-code"><span class="tok-tag">&lt;script</span> <span class="tok-attr">src</span>=<span class="tok-val">"<span data-origin></span>/embed.js"</span> <span class="tok-attr">async</span><span class="tok-tag">&gt;&lt;/script&gt;</span>
+<span class="tok-tag">&lt;near-event</span> <span class="tok-attr">event</span>=<span class="tok-val">"YOUR_EVENT_ID"</span><span class="tok-tag">&gt;&lt;/near-event&gt;</span></code></pre>
+      </div>
+    </div>
+  </section>
+
   <section class="final" id="start">
     <div class="wrap reveal">
       <h2>Your next event <em>starts here.</em></h2>
-      <p class="lead">Host on Near Events, or keep Luma / your site and add the deposit widget.</p>
+      <p class="lead">Pick a deposit, share the link, get people who mean it.</p>
       <div class="ctas" style="justify-content:center">
         <a class="btn btn-dark" href="/create">Create event</a>
-        <a class="btn btn-ghost" href="/widget" style="border-color:rgba(22,22,26,.25);color:var(--ink)">Integrate widget</a>
       </div>
     </div>
   </section>
@@ -353,6 +389,24 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 
 <script>
 (function () {
+  // Fill embed snippet with the current host (localhost or production).
+  var origin = window.location.origin;
+  document.querySelectorAll('[data-origin]').forEach(function (el) { el.textContent = origin; });
+  var copyBtn = document.getElementById('copy-embed');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', function () {
+      var text = '<script src="' + origin + '/embed.js" async></' + 'script>\n' +
+        '<near-event event="YOUR_EVENT_ID"></near-event>';
+      var done = function () {
+        copyBtn.classList.add('ok');
+        copyBtn.textContent = 'Copied';
+        setTimeout(function () { copyBtn.classList.remove('ok'); copyBtn.textContent = 'Copy'; }, 1400);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(done);
+      else done();
+    });
+  }
+
   // QR pattern for the door-pass mock
   var qr = document.getElementById('qr'), N = 21;
   for (var r = 0; r < N; r++) for (var c = 0; c < N; c++) {
