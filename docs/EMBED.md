@@ -6,7 +6,8 @@ the money sits in the Near Events contract, and there is no platform fee.
 
 Using a coding agent? Send it the prompt in [AI_INSTALL.md](AI_INSTALL.md).
 
-Fastest path for a host: open **`/widget`** in the app (the "For your website"
+Product path: **Integrate widget** at **`/widget`** — choose Luma (payment link) or your landing
+(embed). Fastest for a host: open **`/widget`** (the "Integrate"
 link in the header, or "Put it on your website" on your event page), pick the
 event, match your colors, copy the code.
 

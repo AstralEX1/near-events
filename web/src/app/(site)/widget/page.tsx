@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import Script from "next/script";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { events, type EventView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
 import { agentPrompt } from "@/lib/agentPrompt";
+
+type Path = "luma" | "site";
 
 interface Look {
   mode: "card" | "button";
@@ -39,9 +41,13 @@ function attrs(id: string, l: Look) {
   return a;
 }
 
-/** Host onboarding: pick an event, match your brand, copy one snippet. */
+/**
+ * Product 2 — Integrate widget.
+ * Two options: Luma (payment link) · your landing (embed).
+ */
 export default function WidgetBuilder() {
   const { accountId } = useWallet();
+  const [path, setPath] = useState<Path>("luma");
   const [list, setList] = useState<EventView[]>([]);
   const [eventId, setEventId] = useState("");
   const [look, setLook] = useState<Look>({ mode: "card", label: "", then: "", ...PRESETS[0].look });
@@ -53,6 +59,8 @@ export default function WidgetBuilder() {
   useEffect(() => {
     setOrigin(window.location.origin);
     const fromUrl = new URLSearchParams(window.location.search).get("event");
+    const pathParam = new URLSearchParams(window.location.search).get("path");
+    if (pathParam === "luma" || pathParam === "site") setPath(pathParam);
     events.list().then((l) => {
       setList(l);
       setEventId((cur) => cur || fromUrl || String(l.find((e) => e.status === "Open")?.id ?? l[0]?.id ?? ""));
@@ -62,17 +70,17 @@ export default function WidgetBuilder() {
   const a = attrs(eventId, look);
   const element = `<near-event ${a.map(([k, v]) => `${k}="${esc(v)}"`).join(" ")}></near-event>`;
   const query = new URLSearchParams(a.filter(([k]) => !["event", "mode", "label"].includes(k))).toString();
+  const payLink = `${origin}/p/${eventId}${look.then.trim() ? `?then=${encodeURIComponent(look.then.trim())}` : ""}`;
   const snippets = {
     script: `<script src="${origin}/embed.js" async></script>\n${element}`,
     iframe: `<iframe src="${origin}/embed/e/${eventId}${query ? `?${query}` : ""}"\n  title="Event registration" loading="lazy"\n  style="width:100%;max-width:560px;height:260px;border:0"></iframe>`,
-    link: `${origin}/p/${eventId}${look.then.trim() ? `?then=${encodeURIComponent(look.then.trim())}` : ""}`,
+    link: payLink,
     agent: agentPrompt(origin, eventId, element),
   };
 
-  // The preview is the exact snippet, run through the same embed.js.
   useEffect(() => {
-    if (preview.current && eventId) preview.current.innerHTML = element;
-  }, [element, eventId]);
+    if (preview.current && eventId && path === "site") preview.current.innerHTML = element;
+  }, [element, eventId, path]);
 
   const copy = (k: keyof typeof snippets) => {
     navigator.clipboard.writeText(snippets[k]).then(() => {
@@ -86,69 +94,70 @@ export default function WidgetBuilder() {
   return (
     <div className="space-y-8">
       <Script src="/embed.js" strategy="afterInteractive" />
-      <div className="max-w-2xl">
-        <h1 className="text-3xl font-semibold tracking-tight">Put your event on your website</h1>
-        <p className="text-muted mt-2">
-          Paste two lines into any site (Webflow, Tilda, WordPress, Wix, plain HTML). Guests register and pay the deposit
-          without leaving your page. The money is held by the Near Events contract, not by us, and there is no fee.
+      <div className="max-w-2xl space-y-3">
+        <p className="text-sm text-muted">
+          <Link href="/" className="hover:text-text">
+            Near Events
+          </Link>{" "}
+          · Integrate widget
+        </p>
+        <h1 className="text-3xl font-semibold tracking-tight">Integrate widget</h1>
+        <p className="text-muted">
+          Keep your existing page. Guests pay the deposit with us; you keep Luma or your own landing as the front door.
         </p>
       </div>
 
-      <ol className="grid gap-3 sm:grid-cols-4 text-sm">
-        {[
-          ["Create the event", <>On <Link href="/create" className="text-accent">Create event</Link>.</>],
-          ["Pick it and match your brand", "Colors, font and corners below. The preview is live."],
-          ["Paste the code", "Into your site, where the event should appear."],
-          ["Check guests in", "On the event day, from the event’s Manage page."],
-        ].map(([t, d], i) => (
-          <li key={i} className="card p-4">
-            <div className="text-accent font-semibold">{i + 1}</div>
-            <div className="font-medium mt-1">{t}</div>
-            <div className="text-muted mt-1">{d}</div>
-          </li>
-        ))}
-      </ol>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <PathCard
+          active={path === "luma"}
+          title="Integrate with Luma"
+          body="Paste a payment link next to your Luma register button. Deposit first, then they continue on Luma."
+          onClick={() => setPath("luma")}
+        />
+        <PathCard
+          active={path === "site"}
+          title="Integrate on your landing"
+          body="Embed a card or button on your site (Webflow, Tilda, WordPress, HTML)."
+          onClick={() => setPath("site")}
+        />
+      </div>
 
-      <div className="grid gap-6 md:grid-cols-[320px_1fr]">
-        <div className="card p-5 space-y-4 h-fit">
-          <Field label="Event">
-            <select className="input" value={eventId} onChange={(e) => setEventId(e.target.value)}>
-              {list.map((e) => (
-                <option key={e.id} value={e.id}>
-                  #{e.id} {e.metadata.title}
-                  {mine(e) ? " · yours" : ""}
-                  {e.status !== "Open" ? ` · ${e.status.toLowerCase()}` : ""}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Start from a style">
-            <div className="flex flex-wrap gap-2">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.name}
-                  type="button"
-                  className="btn btn-ghost !py-1 !px-3 text-sm"
-                  onClick={() => {
-                    setLook((l) => ({ ...l, ...p.look }));
-                    setPage(p.page);
-                  }}
-                >
-                  <span className="w-3 h-3 rounded-full" style={{ background: p.look.accent }} />
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </Field>
-          <Field label="What to show">
-            <Segmented value={look.mode} options={[["card", "Event card"], ["button", "Just a button"]]} onChange={(v) => set("mode", v)} />
-          </Field>
-          {look.mode === "button" && (
-            <Field label="Button text (empty = “Register · 5 USDC”)">
-              <input className="input" value={look.label} maxLength={40} onChange={(e) => set("label", e.target.value)} />
-            </Field>
+      <Field label="Event">
+        <select className="input max-w-xl" value={eventId} onChange={(e) => setEventId(e.target.value)}>
+          {list.map((e) => (
+            <option key={e.id} value={e.id}>
+              #{e.id} {e.metadata.title}
+              {mine(e) ? " · yours" : ""}
+              {e.status !== "Open" ? ` · ${e.status.toLowerCase()}` : ""}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted">
+          No event yet?{" "}
+          <Link href="/create" className="text-accent">
+            Create event
+          </Link>
+          {path === "luma" && (
+            <>
+              {" "}
+              (you can import a public lu.ma link there).
+            </>
           )}
-          <Field label="Already have a registration form? (optional)">
+        </p>
+      </Field>
+
+      {path === "luma" ? (
+        <div className="space-y-4 max-w-2xl">
+          <ol className="space-y-3 text-sm text-muted list-decimal list-inside">
+            <li>Create the event here (or import from Luma on Create).</li>
+            <li>Copy the payment link below into your Luma description or as the main CTA instead of free RSVP.</li>
+            <li>
+              Optional: set “then” to your lu.ma URL so after deposit guests land back on Luma (
+              <code className="text-text">{"{account}"}</code> matches payment to their entry).
+            </li>
+            <li>Check guests in from the event’s Manage page (or Luma Plus webhook when configured).</li>
+          </ol>
+          <Field label="After deposit, send guest to (optional)">
             <input
               className="input"
               type="url"
@@ -156,58 +165,117 @@ export default function WidgetBuilder() {
               value={look.then}
               onChange={(e) => set("then", e.target.value)}
             />
-            <p className="text-xs text-muted">
-              Guests pay the deposit first, then continue to your usual form (Luma, Typeform, Google Forms). Add{" "}
-              <code>{"{account}"}</code> to the link to match payments to entries.
-            </p>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Accent">
-              <input className="input !p-1 h-10" type="color" value={look.accent} onChange={(e) => set("accent", e.target.value)} />
+          <Snippet title="Payment link for Luma" code={snippets.link} copied={copied === "link"} onCopy={() => copy("link")} />
+        </div>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-[320px_1fr]">
+          <div className="card p-5 space-y-4 h-fit">
+            <Field label="Start from a style">
+              <div className="flex flex-wrap gap-2">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.name}
+                    type="button"
+                    className="btn btn-ghost !py-1 !px-3 text-sm"
+                    onClick={() => {
+                      setLook((l) => ({ ...l, ...p.look }));
+                      setPage(p.page);
+                    }}
+                  >
+                    <span className="w-3 h-3 rounded-full" style={{ background: p.look.accent }} />
+                    {p.name}
+                  </button>
+                ))}
+              </div>
             </Field>
-            <Field label="Corners (px)">
-              <input className="input" type="number" min="0" max="32" value={look.radius} onChange={(e) => set("radius", e.target.value)} />
+            <Field label="What to show">
+              <Segmented value={look.mode} options={[["card", "Event card"], ["button", "Just a button"]]} onChange={(v) => set("mode", v)} />
+            </Field>
+            {look.mode === "button" && (
+              <Field label="Button text">
+                <input className="input" value={look.label} maxLength={40} onChange={(e) => set("label", e.target.value)} placeholder="Register · 5 USDC" />
+              </Field>
+            )}
+            <Field label="After deposit → (optional)">
+              <input
+                className="input"
+                type="url"
+                placeholder="https://yoursite.com/thanks"
+                value={look.then}
+                onChange={(e) => set("then", e.target.value)}
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Accent">
+                <input className="input !p-1 h-10" type="color" value={look.accent} onChange={(e) => set("accent", e.target.value)} />
+              </Field>
+              <Field label="Corners (px)">
+                <input className="input" type="number" min="0" max="32" value={look.radius} onChange={(e) => set("radius", e.target.value)} />
+              </Field>
+            </div>
+            <Field label="Theme">
+              <Segmented value={look.theme} options={[["light", "Light"], ["dark", "Dark"], ["auto", "Auto"]]} onChange={(v) => set("theme", v)} />
+            </Field>
+            <Field label="Font">
+              <Segmented value={look.font} options={[["geist", "Geist"], ["poppins", "Poppins"], ["system", "System"]]} onChange={(v) => set("font", v)} />
             </Field>
           </div>
-          <Field label="Theme">
-            <Segmented value={look.theme} options={[["light", "Light"], ["dark", "Dark"], ["auto", "Auto"]]} onChange={(v) => set("theme", v)} />
-          </Field>
-          <Field label="Font">
-            <Segmented value={look.font} options={[["geist", "Geist"], ["poppins", "Poppins"], ["system", "System"]]} onChange={(v) => set("font", v)} />
-          </Field>
-          <Field label="Event title">
-            <Segmented value={look.display} options={[["sans", "Same font"], ["serif", "Serif"]]} onChange={(v) => set("display", v)} />
-          </Field>
-        </div>
 
-        <div className="space-y-4 min-w-0">
-          <div className="rounded-2xl border border-border p-6 sm:p-10 transition-colors" style={{ background: page }}>
-            <div className="text-xs mb-3" style={{ color: page === "#0e0e10" ? "#9a9aa6" : "#6b6b76" }}>Preview on your page</div>
-            <div ref={preview} />
+          <div className="space-y-4 min-w-0">
+            <div className="rounded-2xl border border-border p-6 sm:p-10 transition-colors" style={{ background: page }}>
+              <div className="text-xs mb-3" style={{ color: page === "#0e0e10" ? "#9a9aa6" : "#6b6b76" }}>
+                Preview on your page
+              </div>
+              <div ref={preview} />
+            </div>
+            <Snippet title="Embed code" note="Recommended. Sign-up opens in a small window." code={snippets.script} copied={copied === "script"} onCopy={() => copy("script")} />
+            <Snippet title="Iframe" note="If your site blocks scripts." code={snippets.iframe} copied={copied === "iframe"} onCopy={() => copy("iframe")} />
+            <Snippet title="AI agent prompt" code={snippets.agent} copied={copied === "agent"} onCopy={() => copy("agent")} collapsed />
+            <p className="text-sm text-muted">
+              Or a bare link:{" "}
+              <button type="button" className="text-accent" onClick={() => copy("link")}>
+                {copied === "link" ? "Copied" : "copy /p/…"}
+              </button>
+              . Demo:{" "}
+              <a href="/demo/balisquad.html" className="text-accent" target="_blank" rel="noreferrer">
+                Bali Squad
+              </a>
+              .
+            </p>
           </div>
-          <Snippet
-            title="Have an AI agent do it"
-            note="Send this prompt to Claude Code, Cursor or Codex in your website's project. It knows where to put the code for your stack."
-            code={snippets.agent}
-            copied={copied === "agent"}
-            onCopy={() => copy("agent")}
-            collapsed
-          />
-          <Snippet title="Embed code (recommended)" note="Card resizes itself; sign-up opens in a small window where wallets and Google sign-in just work." code={snippets.script} copied={copied === "script"} onCopy={() => copy("script")} />
-          <Snippet title="No scripts allowed? Use an iframe" note="Same card. Set the height yourself." code={snippets.iframe} copied={copied === "iframe"} onCopy={() => copy("iframe")} />
-          <Snippet title="Payment link (Luma description, Instagram, WhatsApp, QR)" code={snippets.link} copied={copied === "link"} onCopy={() => copy("link")} />
-          <p className="text-sm text-muted">
-            Developers: listen for <code className="text-text">registered</code> on the element, or call{" "}
-            <code className="text-text">NearEvents.open({eventId || "id"})</code> from your own button. See{" "}
-            <a href="/demo/balisquad.html" className="text-accent" target="_blank">the Bali Squad demo page</a>.
-          </p>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function PathCard({
+  active,
+  title,
+  body,
+  onClick,
+}: {
+  active: boolean;
+  title: string;
+  body: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`text-left rounded-2xl border p-5 space-y-2 transition-colors ${
+        active ? "border-accent bg-accent-soft/40" : "border-border bg-surface hover:border-accent/40"
+      }`}
+    >
+      <div className="font-semibold">{title}</div>
+      <p className="text-sm text-muted leading-snug">{body}</p>
+    </button>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1.5">
       <div className="label">{label}</div>
@@ -255,7 +323,9 @@ function Snippet({
           <div className="text-sm font-medium">{title}</div>
           {note && <div className="text-xs text-muted">{note}</div>}
         </div>
-        <button className="btn btn-ghost !py-1 !px-3 text-sm ml-auto" onClick={onCopy}>{copied ? "Copied" : "Copy"}</button>
+        <button type="button" className="btn btn-ghost !py-1 !px-3 text-sm ml-auto" onClick={onCopy}>
+          {copied ? "Copied" : "Copy"}
+        </button>
       </div>
       <pre className={`p-4 text-xs font-mono overflow-x-auto ${collapsed ? "whitespace-pre-wrap max-h-40 overflow-y-auto" : "whitespace-pre"}`}>
         {code}
