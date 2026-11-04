@@ -21,7 +21,7 @@ const id = await account(HOST).callFunction({
     metadata: {
       title: "NEAR Builders Night Belgrade",
       description:
-        "Demos, pizza and honest feedback from builders shipping on NEAR.\n\nEveryone puts down 5 USDC. Show up and you get it back plus a share of the no-shows. Hosted by our community DAO; a co-host checks you in at the door.",
+        "Demos, pizza and honest feedback from builders shipping on NEAR.\n\nEveryone puts down 5 USDC. Show up and you get it back plus a share of the no-shows. A co-host checks you in at the door.",
       location: "Startit Centar, Savska 5, Belgrade",
       cover_url: null,
       starts_at: start.getTime(),

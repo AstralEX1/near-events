@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { events, formatUsdc, type EventView, type GuestView } from "@/lib/near";
-import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "@/lib/config";
+import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { Avatar } from "@/components/ui";
 import { QrScanner } from "@/components/Qr";
@@ -174,9 +174,6 @@ export default function ManageEvent() {
 
       {error && <p className="text-sm text-warn break-words">{error}</p>}
 
-      {/* Sputnik DAOs live under sputnik-dao.near (mainnet) or sputnik-v2.testnet. */}
-      {open && event.host.includes("sputnik") && <DaoSponsor eventId={id} dao={event.host} />}
-
       {open && isHost && (
         <div className="pt-2 space-y-2">
           <button
@@ -198,31 +195,9 @@ export default function ManageEvent() {
       )}
       {open && !isHost && (
         <p className="text-xs text-muted">
-          Only the host ({event.host}) can close the event. A DAO host closes it through a DAO proposal in Trezu.
+          Only the host ({event.host}) can close the event. Co-hosts can check guests in.
         </p>
       )}
-    </div>
-  );
-}
-
-/** Proposal the host DAO can paste into Trezu (custom function call) to add a bonus to the pool. */
-function DaoSponsor({ eventId, dao }: { eventId: number; dao: string }) {
-  const [amount, setAmount] = useState("10");
-  const units = String(Math.round(Number(amount || "0") * 1_000_000));
-  const msg = JSON.stringify({ action: "sponsor", event_id: eventId });
-  // From the DAO's NEAR Intents balance (mainnet) or straight from its USDC (any network).
-  const call = INTENTS_CONTRACT
-    ? { contract: INTENTS_CONTRACT, method: "ft_withdraw", args: { token: USDC_CONTRACT, receiver_id: EVENTS_CONTRACT, amount: units, msg }, deposit: "1 yoctoNEAR", gas: "150 Tgas" }
-    : { contract: USDC_CONTRACT, method: "ft_transfer_call", args: { receiver_id: EVENTS_CONTRACT, amount: units, msg }, deposit: "1 yoctoNEAR", gas: "150 Tgas" };
-  return (
-    <div className="card p-4 space-y-3">
-      <div className="font-semibold">Sponsor the pool from the DAO treasury</div>
-      <p className="text-sm text-muted">
-        Create a <b>custom function call</b> proposal in Trezu for <b>{dao}</b> with these values. When the council approves,
-        the bonus is added to the pool{INTENTS_CONTRACT ? ", paid from the DAO’s NEAR Intents balance" : ""}.
-      </p>
-      <input className="input" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
-      <pre className="text-xs bg-bg rounded-xl p-3 overflow-x-auto">{JSON.stringify(call, null, 2)}</pre>
     </div>
   );
 }

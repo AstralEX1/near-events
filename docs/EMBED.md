@@ -118,9 +118,8 @@ your page ── embed.js ──► <iframe /embed/e/:id>  (card, read-only)
 
 ## Host onboarding, start to finish
 
-1. **Create the event** at `/create` with a NEAR wallet or Google/email, or
-   through a DAO proposal (see README, "DAO as host"). Add the door person as
-   co-host.
+1. **Create the event** at `/create` with a NEAR wallet or Google/email. Add the
+   door person as co-host.
 2. **Open `/widget`**, pick the event, choose a style preset or your own colors,
    copy the code.
 3. **Paste it** into the site where the event should appear.

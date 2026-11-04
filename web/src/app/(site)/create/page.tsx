@@ -308,8 +308,7 @@ export default function CreateEvent() {
             </div>
           )}
           <p className="text-xs text-muted">
-            A little NEAR is attached for on-chain storage and comes back when the event closes. Hosting as a DAO? Create the event through a DAO
-            proposal (see the guide).
+            A little NEAR is attached for on-chain storage and comes back when the event closes.
           </p>
         </div>
         {themeOpen && <ThemeBar theme={theme} onChange={setTheme} onClose={() => setThemeOpen(false)} />}

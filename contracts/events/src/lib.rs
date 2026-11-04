@@ -1,7 +1,7 @@
 //! Near Events — Kickback-style event escrow.
 //!
 //! Guests register by sending an equal USDC deposit with `ft_transfer_call`.
-//! The host (often a Sputnik DAO) and its co-hosts check guests in. On
+//! The host and its co-hosts check guests in. On
 //! `finalize` the whole pool (deposits + sponsor bonus) is split equally
 //! between the guests who showed up. No platform fee.
 //!
@@ -142,7 +142,7 @@ pub enum TransferMsg {
     /// Take a seat. `guest` defaults to the sender, so anyone (or 1Click on
     /// a guest's behalf) can pay for a seat.
     Register { event_id: u64, guest: Option<AccountId> },
-    /// Add a bonus to the event's pool (e.g. from a DAO treasury).
+    /// Add a bonus to the event's pool (anyone can sponsor).
     Sponsor { event_id: u64 },
     /// Top up an internal balance for future registrations.
     TopUp { account_id: Option<AccountId> },
@@ -188,8 +188,7 @@ impl Contract {
 
     // ---------------------------------------------------------------- host
 
-    /// Creates an event hosted by the caller. A Sputnik DAO creates one
-    /// through a `FunctionCall` proposal and names its human co-host here.
+    /// Creates an event hosted by the caller. Name co-hosts for door check-in.
     /// Attach NEAR for storage: see `storage_cost`.
     #[payable]
     pub fn create_event(
@@ -346,8 +345,8 @@ impl Contract {
         emit("guest_refunded", json!({ "event_id": event_id, "account_id": account_id, "amount": U128(deposit) }));
     }
 
-    /// Splits the pool between attendees. Host only, so a DAO host finalizes
-    /// by proposal. If nobody attended, everyone gets their deposit back.
+    /// Splits the pool between attendees. Host only.
+    /// If nobody attended, everyone gets their deposit back.
     #[payable]
     pub fn finalize(&mut self, event_id: u64) {
         near_sdk::assert_one_yocto();

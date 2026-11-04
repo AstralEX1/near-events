@@ -96,7 +96,7 @@ export default function WidgetBuilder() {
 
       <ol className="grid gap-3 sm:grid-cols-4 text-sm">
         {[
-          ["Create the event", <>On <Link href="/create" className="text-accent">Create event</Link>, or through your DAO.</>],
+          ["Create the event", <>On <Link href="/create" className="text-accent">Create event</Link>.</>],
           ["Pick it and match your brand", "Colors, font and corners below. The preview is live."],
           ["Paste the code", "Into your site, where the event should appear."],
           ["Check guests in", "On the event day, from the event’s Manage page."],

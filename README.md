@@ -12,15 +12,13 @@ deposits. No platform fee.
   pays the gas.
 - Payouts to any chain: one button moves winnings into the guest's NEAR Intents
   balance, from where they swap or withdraw to any chain.
-- Communities can host: a Sputnik DAO creates the event, sponsors the pool from its
-  treasury (including its NEAR Intents balance, via a Trezu proposal) and votes to
-  pay out; a human co-host checks guests in at the door.
+- Host is a person (NEAR account) with optional co-hosts at the door. Anyone can
+  sponsor a bonus into the pool.
 - Escrow: deposits sit in a Rust contract. The host cannot take the
   pool, only decide who showed up. If the host disappears, anyone can refund
   everyone after a grace period.
 
-Hackathon tracks: Social Money (DAO hosts and funds events) and
-Real-World Money (USDC, 1Click, gasless onboarding).
+Hackathon track focus: Real-World Money (USDC, 1Click, gasless onboarding).
 
 ## Live on testnet
 
@@ -28,7 +26,6 @@ Real-World Money (USDC, 1Click, gasless onboarding).
 |---|---|
 | Event escrow | [`nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/nearevents-11022103.testnet) |
 | Test USDC (open faucet) | [`usdc-nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/usdc-nearevents-11022103.testnet) |
-| Host DAO (Sputnik) | [`nearevents-community.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/nearevents-community.sputnik-v2.testnet) |
 
 NEAR Intents has no testnet, so the full event cycle runs on testnet with test
 USDC, and the 1Click / Intents paths are switched on for mainnet
@@ -71,18 +68,6 @@ HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet node scripts/smoke-tes
 Expected output ends with `"status":"Finalized"` and the guest's balance moving back
 to their wallet.
 
-### DAO as host
-
-`web/scripts/dao-demo.mjs` creates a Sputnik DAO on testnet and runs everything
-through proposals: `create_event`, a 10 USDC sponsor bonus from the treasury, and
-`finalize`. Event #3 on the testnet contract is hosted by
-`nearevents-community.sputnik-v2.testnet`.
-
-```bash
-node scripts/dao-demo.mjs setup        # DAO creates + sponsors an event
-node scripts/dao-demo.mjs finalize 3   # DAO votes to pay out event 3
-```
-
 ## Embed on your website
 
 Any business can take deposit-backed registrations on its own site with two lines:
@@ -101,8 +86,8 @@ client's brand: `/demo/balisquad.html`. Details: [docs/EMBED.md](docs/EMBED.md).
 ```
 guest ──(any chain via 1Click | USDC | Google login)──► escrow contract (NEAR)
                                                            │  ft_on_transfer: register
-co-host ─────────────── check_in ────────────────────────► │
-DAO (Sputnik) ── proposals: create_event / sponsor / finalize ──► │
+host / co-host ── create_event / check_in / finalize ─────► │
+anyone ────────── sponsor bonus ──────────────────────────► │
                                                            ▼
                          pool / attendees → internal balances → withdraw
                                                      (NEAR wallet or NEAR Intents)
@@ -120,7 +105,7 @@ checks it is only a Near Events registration and submits it to `intents.near`
 | `create_event(metadata, deposit, capacity, cohosts)` | anyone (caller = host) | attaches NEAR for storage; unused storage is refunded on close |
 | `ft_transfer_call` → `ft_on_transfer` | guest / friend / 1Click / intents.near | `{"action":"register","event_id":N,"guest":"..."}` or `{"action":"sponsor",...}` |
 | `check_in`, `undo_check_in` | host, co-hosts (+1 yocto) | mark who showed up; check-in batch ≤ capacity |
-| `finalize` | host (DAO via proposal, +1 yocto) | pool ÷ attendees to balances; remainder to host; nobody came → full refund |
+| `finalize` | host (+1 yocto) | pool ÷ attendees to balances; remainder to host; nobody came → full refund |
 | `cancel`, `refund_if_abandoned` | host (+1 yocto) / anyone after 30 days | refund guest deposits and sponsor bonuses |
 | `register_with_balance` | guest (+1 yocto) | reuse a payout for the next event |
 | `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to any NEAR account, or into NEAR Intents |
@@ -148,7 +133,7 @@ cd events && cargo near build non-reproducible-wasm
 Rust `near-sdk` 5.30 and `near-contract-standards`, `cargo-near`; Next.js 16,
 React 19, Tailwind CSS 4; `near-api-js` 7 (and 5 for NEAR Auth);
 `@hot-labs/near-connect` (wallets); `@fast-auth-near/*` (NEAR Auth); NEAR Intents
-1Click API; Sputnik DAO v2.
+1Click API.
 
 **AI disclosure:** the contract, web app, scripts and this README were written with
 Claude (Anthropic) in Claude Code, directed and reviewed by the author.
