@@ -17,7 +17,7 @@ const HOST = [
 ];
 
 const FAQ = [
-  ["Who holds the money?", "A NEAR smart contract. Not the organizer and not us. Every deposit, check-in and payout is public on-chain."],
+  ["Who holds the money?", "A NEAR smart contract holds it, so neither the organizer nor we can take it. Every deposit, check-in and payout is public on-chain."],
   ["Is there a fee?", "No. The whole pool goes to the people who came."],
   ["Can I cancel after registering?", "No. That is what makes people come. If the host cancels, everyone gets their deposit back."],
   ["What if the host forgets to close the event?", "30 days after it ends, anyone can trigger a full refund to every guest."],

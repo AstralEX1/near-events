@@ -1,26 +1,26 @@
-# Near Events — show up, split the pool
+# Near Events: show up, split the pool
 
 Kickback-style events on NEAR. Every guest puts down the same small USDC deposit.
-Guests who show up get their deposit back **plus an equal share of the no-shows'
-deposits**. No platform fee.
+Guests who show up get their deposit back plus an equal share of the no-shows'
+deposits. No platform fee.
 
-- **Pay from any chain or token**: NEAR Intents (1Click) swaps to exactly the
+- Pay from any chain or token: NEAR Intents (1Click) swaps to exactly the
   deposit and delivers it to the escrow, which registers the guest in the same step.
-- **No wallet needed**: sign in with Google, email or passkey (NEAR Auth), any
-  NEAR wallet, or **MetaMask / any EVM wallet**: then your account *is* your NEAR
+- No wallet needed: sign in with Google, email or passkey (NEAR Auth), any
+  NEAR wallet, or MetaMask or any EVM wallet. With an EVM wallet your account is your NEAR
   Intents account (`0x…`), you register by signing one intent, and our relayer
   pays the gas.
-- **Payouts to any chain**: one button moves winnings into the guest's NEAR Intents
+- Payouts to any chain: one button moves winnings into the guest's NEAR Intents
   balance, from where they swap or withdraw to any chain.
-- **Communities host**: a Sputnik DAO creates the event, sponsors the pool from its
+- Communities can host: a Sputnik DAO creates the event, sponsors the pool from its
   treasury (including its NEAR Intents balance, via a Trezu proposal) and votes to
   pay out; a human co-host checks guests in at the door.
-- **Trustless escrow**: deposits sit in a Rust contract. The host cannot take the
+- Escrow: deposits sit in a Rust contract. The host cannot take the
   pool, only decide who showed up. If the host disappears, anyone can refund
   everyone after a grace period.
 
-Hackathon tracks: **Social Money** (DAO hosts and funds events) and
-**Real-World Money** (USDC, 1Click, gasless onboarding).
+Hackathon tracks: Social Money (DAO hosts and funds events) and
+Real-World Money (USDC, 1Click, gasless onboarding).
 
 ## Live on testnet
 
@@ -34,7 +34,7 @@ NEAR Intents has no testnet, so the full event cycle runs on testnet with test
 USDC, and the 1Click / Intents paths are switched on for mainnet
 (`NEXT_PUBLIC_NETWORK=mainnet`).
 
-## Try it (do X, see Y)
+## Try it
 
 ```bash
 cd web
@@ -43,20 +43,20 @@ npm install
 npm run dev                     # http://localhost:3000
 ```
 
-1. **Open http://localhost:3000.** You see open and past events read live from the
+1. Open http://localhost:3000. You see open and past events read live from the
    testnet contract.
-2. **Open an event and click “Continue with Google or email”** (or connect a NEAR
+2. Open an event and click “Continue with Google or email” (or connect a NEAR
    wallet). You get a NEAR account; on testnet the relayer gives it a little NEAR
    for gas.
-3. **Click “Register · 5 USDC”.** Missing test USDC is minted for you, then one
+3. Click “Register · 5 USDC”. Missing test USDC is minted for you, then one
    `ft_transfer_call` puts the deposit in escrow. You now appear under “going”.
-4. **Create your own event** at `/create`, add a friend as co-host.
-5. **As host or co-host open “Manage & check in guests”**, tick who came, click
+4. Create your own event at `/create`, add a friend as co-host.
+5. As host or co-host open “Manage & check in guests”, tick who came, click
    *Check in*. The page shows what each attendee will receive.
-6. **Click “Finalize & pay out”.** Attendees’ balances on `/me` grow by their share;
+6. Click “Finalize & pay out”. Attendees’ balances on `/me` grow by their share;
    they can withdraw to their NEAR wallet (or, on mainnet, into NEAR Intents to
    cash out on any chain).
-7. **“Pay from any chain”** on an event shows a live 1Click price for paying the
+7. “Pay from any chain” on an event shows a live 1Click price for paying the
    deposit with e.g. ETH on Base (dry quote on testnet).
 
 Without a browser, the whole cycle runs from a script (uses your own testnet
@@ -126,7 +126,7 @@ checks it is only a Near Events registration and submits it to `intents.near`
 | `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to any NEAR account, or into NEAR Intents |
 | `payout_to_intents(account_id)` | owner or configured relayer | moves that account's balance into *its own* Intents balance; how EVM-wallet guests get paid |
 
-Init: `new(usdc, intents, relayer)` — `relayer` may be `null` on testnet until the web
+Init: `new(usdc, intents, relayer)`. `relayer` may be `null` on testnet until the web
 relayer account is set. Privileged mutators require exactly 1 yoctoNEAR.
 
 Safety notes: only the configured USDC is accepted; a payment made for someone

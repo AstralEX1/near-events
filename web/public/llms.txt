@@ -11,7 +11,7 @@ This file is for AI coding agents adding Near Events to a host's website. Everyt
 2. Put the element where the event should appear:
    `<near-event event="EVENT_ID"></near-event>`
 
-The element renders an event card with a "Register · N USDC" button. Sign-up and payment open in a small window on the Near Events domain (wallets and Google sign-in need a first-party page). Never copy or modify embed.js; always load it from the host. No API keys or secrets are needed.
+The element renders an event card with a "Register · N USDC" button. Sign-up and payment open in a small window on the Near Events domain (wallets and Google sign-in need a first-party page). Never copy or modify embed.js; always load it from the host. The widget needs no API keys or secrets.
 
 ### Attributes
 - `mode="button"`: only the button (for sites with their own event cards)

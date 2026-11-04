@@ -38,7 +38,7 @@ export default function Landing() {
       <section className="grid gap-10 md:grid-cols-[1.1fr_1fr] items-center">
         <div className="space-y-5">
           <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight leading-[1.05]">
-            Clicking “Going” costs nothing. That’s why half don’t come.
+            Clicking “Going” costs nothing, so half the people who click it don’t come.
           </h1>
           <p className="text-lg text-muted max-w-lg">
             Add a little friction: every guest puts down the same small, refundable deposit. People who show up get it
@@ -87,10 +87,10 @@ export default function Landing() {
           />
         </div>
         <div className="card p-6 sm:p-8 grid gap-4 md:grid-cols-[1fr_1.4fr] items-center border-accent/30">
-          <div className="text-2xl font-semibold tracking-tight">A deposit isn’t a ticket.</div>
+          <div className="text-2xl font-semibold tracking-tight">Everyone who comes gets the deposit back.</div>
           <p className="text-muted">
-            Guests who come get every cent back, plus a bonus from those who didn’t. The event stays free for everyone who
-            shows up, your list is real, and the seats go to people who want them.
+            They also get a share of what the no-shows put down. The event costs nothing for anyone who attends, and the
+            seats go to people who meant to come.
           </p>
         </div>
       </section>
@@ -102,7 +102,7 @@ export default function Landing() {
           {[
             ["It filters", "People who were never coming don’t take a seat. A few dollars is enough to make “maybe” decide."],
             ["Nobody likes losing money", "Once guests have put something down, they plan around the event instead of skipping it."],
-            ["Showing up pays", "No-shows stop being your problem and become a small bonus for the people who came."],
+            ["Showing up pays", "The deposits of people who don’t come are split among the people who do."],
           ].map(([t, d]) => (
             <div key={t} className="space-y-2">
               <div className="font-semibold text-lg">{t}</div>
@@ -118,7 +118,7 @@ export default function Landing() {
           title="For organizers"
           items={[
             "A firm headcount for the venue and the food",
-            "Budget on real turnout, not on RSVPs",
+            "Order food and chairs for the people who will actually come",
             "Every deposit, check-in and payout in Telegram",
             "You never hold anyone’s money",
           ]}
@@ -126,7 +126,7 @@ export default function Landing() {
         <Who
           title="For sponsors"
           items={[
-            "An audience that committed, not a list of maybes",
+            "Every guest on the list paid a deposit to be there",
             "A public list of who registered and who came",
             "Top up the pool to reward people who show up",
           ]}
@@ -143,7 +143,7 @@ export default function Landing() {
 
       {/* N2: three ways in, none of them a new portal */}
       <section className="space-y-6">
-        <h2 className="text-3xl font-semibold tracking-tight">Keep your tools. Add the deposit.</h2>
+        <h2 className="text-3xl font-semibold tracking-tight">Works with the tools you already use</h2>
         <div className="grid gap-4 md:grid-cols-3">
           {[
             ["Your own event page", "Set up like Luma: cover, time, place, registration with a deposit, guest list, QR check-in.", "/create", "Create an event"],
@@ -181,8 +181,8 @@ export default function Landing() {
       </section>
 
       <section className="rounded-3xl border border-border p-6 sm:p-10 space-y-4 text-center">
-        <h2 className="text-3xl font-semibold tracking-tight">Make your next RSVP list tell the truth.</h2>
-        <p className="text-muted">Set it up in a few minutes. Free, because the pool belongs to your guests.</p>
+        <h2 className="text-3xl font-semibold tracking-tight">Try it on your next event</h2>
+        <p className="text-muted">Setup takes a few minutes. We take no fee: the whole pool goes to your guests.</p>
         <div className="flex flex-wrap gap-3 justify-center">
           {primary}
           <Link href="/guide" className="btn btn-ghost !py-3">How it works</Link>

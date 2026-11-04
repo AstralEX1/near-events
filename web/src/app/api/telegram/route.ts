@@ -73,15 +73,15 @@ function help(chat: number) {
   return say(
     chat,
     [
-      "<b>Near Events</b> — deposit-backed registration for your events.",
+      "<b>Near Events</b> takes a refundable deposit when guests register for your events.",
       "",
       "Guests register and pay a small refundable deposit with a button on your own website. People who come get it back plus a share of the no-shows.",
       "",
-      "Here you get: a ping for every registration, the guest list, check-in at the door, and payouts.",
+      "I message you on every registration, and from here you can see the guest list, check people in at the door and pay out.",
       "",
-      "/new — create an event",
-      "/status — your events, pool and buttons",
-      "/luma — on Luma Plus? connect your Luma event",
+      "/new: create an event",
+      "/status: your events, pools and buttons",
+      "/luma: connect a Luma event (needs Luma Plus)",
     ].join("\n"),
   );
 }

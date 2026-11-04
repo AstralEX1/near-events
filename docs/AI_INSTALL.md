@@ -2,7 +2,7 @@
 
 For a business owner who has a coding agent (Claude Code, Cursor, Codex,
 Windsurf, Lovable, v0...). Open the agent **in your website's project** and
-send it the prompt below. Nothing else to read.
+send it the prompt below. You don't need to read anything else.
 
 Easiest: open `/widget` in the Near Events app, pick your event and style, and
 press **Copy** on "Have an AI agent do it". That prompt already has your event
@@ -51,8 +51,8 @@ When done, run the site locally, open the page, and confirm the event card (or b
 ## What the agent will touch
 
 Only your site: one script tag and one `<near-event>` element (or an iframe).
-No keys, no packages, no build changes. The money flow lives in the Near Events
-contract; your site never handles funds or secrets.
+The agent adds no keys or packages and doesn't change the build. Deposits go
+straight to the Near Events contract, so your site never handles money or secrets.
 
 ## Source files, if the agent asks
 
