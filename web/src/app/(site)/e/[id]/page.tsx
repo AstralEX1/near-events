@@ -166,6 +166,7 @@ function MoreMenu({ id, isStaff, canSponsor, onSponsor }: { id: number; isStaff:
               <>
                 <div className="border-t border-border my-1" />
                 <Link className={item} href={`/e/${id}/manage`}>Check in guests</Link>
+                <Link className={item} href={`/create?from=${id}`}>Duplicate event</Link>
                 <Link className={item} href={`/widget?event=${id}`}>Put it on your website</Link>
               </>
             )}

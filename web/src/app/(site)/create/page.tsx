@@ -7,7 +7,7 @@ import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { Cover } from "@/components/ui";
 import { Themed } from "@/components/Themed";
-import { COLORS, FONTS, THEMES, defaultTheme, encodeTheme, themeCover, themeStyle, type FontKey, type Theme, type ThemeName } from "@/lib/theme";
+import { COLORS, FONTS, THEMES, decodeTheme, defaultTheme, encodeTheme, shuffleTheme, themeCover, themeStyle, type FontKey, type Theme, type ThemeName } from "@/lib/theme";
 import { SignInOptions } from "@/components/SignIn";
 
 function localInput(d: Date) {
@@ -42,6 +42,25 @@ export default function CreateEvent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<EventView | null>(null);
+
+  // "Duplicate event" (Luma, Hi.Events): /create?from=<id> copies everything but the date.
+  useEffect(() => {
+    const from = Number(new URLSearchParams(window.location.search).get("from"));
+    if (!Number.isInteger(from) || !window.location.search.includes("from=")) return;
+    events.get(from).then((e) => {
+      if (!e) return;
+      setForm((f) => ({
+        ...f,
+        title: e.metadata.title,
+        description: e.metadata.description,
+        location: e.metadata.location,
+        deposit: String(Number(e.deposit) / 1e6),
+        capacity: String(e.capacity),
+        cohosts: e.cohosts.join(", "),
+      }));
+      setTheme(decodeTheme(e.metadata.cover_url));
+    });
+  }, []);
 
   // Default to tomorrow, on the hour, for two hours (set on the client, not during prerender).
   useEffect(() => {
@@ -342,6 +361,19 @@ function ThemeBar({ theme, onChange }: { theme: Theme; onChange: (t: Theme) => v
         >
           <span className="w-8 h-8 rounded-full border border-border flex items-center justify-center">{theme.display === "dark" ? "☾" : "☀"}</span>
           <span className="text-[11px] text-muted">Display</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange({ ...theme, effect: !theme.effect })}
+          className="flex flex-col items-center gap-1 shrink-0"
+          aria-pressed={theme.effect}
+        >
+          <span className={`w-8 h-8 rounded-full border flex items-center justify-center ${theme.effect ? "border-accent bg-accent-soft" : "border-border"}`}>✨</span>
+          <span className="text-[11px] text-muted">Effect</span>
+        </button>
+        <button type="button" onClick={() => onChange(shuffleTheme(theme))} className="flex flex-col items-center gap-1 shrink-0">
+          <span className="w-8 h-8 rounded-full border border-border flex items-center justify-center">🎲</span>
+          <span className="text-[11px] text-muted">Shuffle</span>
         </button>
         {theme.name === "emoji" && (
           <label className="flex flex-col items-center gap-1 shrink-0">

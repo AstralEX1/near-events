@@ -2,6 +2,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import { themeStyle, type Theme } from "@/lib/theme";
+import { FallingEffect } from "./Effect";
 
 /**
  * Applies an event theme to the whole page, header included: its colors and
@@ -31,6 +32,7 @@ export function Themed({ theme, children }: { theme: Theme; children: ReactNode 
   return (
     <div className="themed" style={vars}>
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10" style={{ background }} />
+      {theme.effect && <FallingEffect emoji={theme.name === "confetti" ? null : theme.emoji} color={theme.color} />}
       {children}
     </div>
   );

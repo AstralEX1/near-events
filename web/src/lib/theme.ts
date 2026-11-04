@@ -26,6 +26,8 @@ export interface Theme {
   display: Display;
   emoji: string;
   image: string | null;
+  /** Partiful-style effect: emoji or confetti falls once when the page opens. */
+  effect: boolean;
 }
 
 interface Preset {
@@ -64,12 +66,13 @@ const HEX = /^#[0-9a-f]{6}$/i;
 
 export function defaultTheme(name: ThemeName = "minimal"): Theme {
   const p = THEMES[name];
-  return { name, color: p.color, font: p.font, display: p.display, emoji: "🎉", image: null };
+  return { name, color: p.color, font: p.font, display: p.display, emoji: "🎉", image: null, effect: false };
 }
 
 export function encodeTheme(t: Theme): string {
   const q = new URLSearchParams({ c: t.color.slice(1), f: t.font, d: t.display });
   if (t.name === "emoji") q.set("e", t.emoji);
+  if (t.effect) q.set("x", "1");
   if (t.image) q.set("i", t.image);
   return `theme:${t.name}?${q}`;
 }
@@ -91,6 +94,7 @@ export function decodeTheme(cover: string | null | undefined): Theme {
         display: q.get("d") === "dark" ? "dark" : q.get("d") === "light" ? "light" : base.display,
         emoji: [...(q.get("e") ?? base.emoji)].slice(0, 2).join(""),
         image: i && /^https:\/\//.test(i) ? i : null,
+        effect: q.get("x") === "1",
       };
     }
   }
@@ -193,4 +197,18 @@ export function themeCover(t: Theme): string {
   if (t.name === "near") return `radial-gradient(circle at 70% 30%, ${c}, transparent 55%), #000`;
   if (t.name === "emoji") return `${svg(`<text x='30' y='80' font-size='60'>${t.emoji}</text>`)} center/60% no-repeat, ${c}33`;
   return `radial-gradient(circle at 25% 25%, ${c}, transparent 60%), radial-gradient(circle at 80% 75%, ${c}99, transparent 55%), ${t.display === "dark" ? "#14121f" : `${c}26`}`;
+}
+
+/** A random theme, color and font: Luma's "shuffle". */
+export function shuffleTheme(current: Theme): Theme {
+  const names = Object.keys(THEMES) as ThemeName[];
+  const name = names[Math.floor(Math.random() * names.length)];
+  const t = defaultTheme(name);
+  return {
+    ...t,
+    color: name === "papertrade" || name === "near" ? t.color : COLORS[Math.floor(Math.random() * COLORS.length)],
+    image: current.image,
+    emoji: current.emoji,
+    effect: current.effect,
+  };
 }
