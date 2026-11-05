@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { formatUsdc, type EventView, type GuestView } from "@/lib/near";
+import { formatUsdc, isTicket, type EventView, type GuestView } from "@/lib/near";
 import { Avatar, shortAccount } from "./ui";
 import { AccountQr } from "./Qr";
 
@@ -16,6 +16,28 @@ export function spotsLine(event: EventView): string {
 /** The rules, right by the button, so nobody is surprised later. */
 export function RulesBox({ event }: { event: EventView }) {
   const d = formatUsdc(event.deposit);
+  if (isTicket(event)) {
+    return (
+      <div className="rounded-2xl bg-accent-soft text-sm p-4 space-y-3 leading-relaxed">
+        <div>
+          <div className="font-semibold text-accent">How it works</div>
+          <ul className="list-disc pl-5 mt-1 space-y-0.5">
+            <li>A ticket costs {d} USDC.</li>
+            <li>The money waits in a NEAR smart contract and goes to the host only after the event has started.</li>
+            <li>The host checks you in at the door with your QR pass.</li>
+          </ul>
+        </div>
+        <div>
+          <div className="font-semibold text-accent">Good to know</div>
+          <ul className="list-disc pl-5 mt-1 space-y-0.5">
+            <li>If the host cancels, or never closes the event within 30 days, everyone gets the ticket money back.</li>
+            <li>The host can also refund one guest who asks in time.</li>
+            <li>No platform fee.</li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="rounded-2xl bg-accent-soft text-sm p-4 space-y-3 leading-relaxed">
       <div>
@@ -46,6 +68,7 @@ export function RulesBox({ event }: { event: EventView }) {
 function note(event: EventView, g: GuestView): { text: string; dim: boolean } | null {
   if (event.status === "Cancelled") return { text: "refunded", dim: false };
   if (event.status !== "Finalized") return null;
+  if (isTicket(event)) return g.status === "Attended" ? { text: "came", dim: false } : null;
   if (g.status !== "Attended") return { text: "no-show", dim: true };
   const profit = BigInt(event.payout_per_attendee) - BigInt(event.deposit);
   return { text: profit > 0n ? `+${formatUsdc(profit)}` : "came", dim: false };
@@ -98,7 +121,9 @@ function googleCalendarUrl(event: EventView, url: string): string {
     action: "TEMPLATE",
     text: event.metadata.title,
     dates: `${fmt(event.metadata.starts_at)}/${fmt(event.metadata.ends_at)}`,
-    details: `You put down ${formatUsdc(event.deposit)} USDC. Get checked in to get it back plus a share.\n${url}`,
+    details: isTicket(event)
+      ? `Your ticket: ${formatUsdc(event.deposit)} USDC. Show your QR pass at the door.\n${url}`
+      : `You put down ${formatUsdc(event.deposit)} USDC. Get checked in to get it back plus a share.\n${url}`,
     location: event.metadata.location,
   });
   return `https://calendar.google.com/calendar/render?${q}`;
@@ -118,7 +143,7 @@ function icsUrl(event: EventView, url: string): string {
     `DTEND:${fmt(event.metadata.ends_at)}`,
     `SUMMARY:${esc(event.metadata.title)}`,
     `LOCATION:${esc(event.metadata.location)}`,
-    `DESCRIPTION:${esc(`Get checked in to get your deposit back plus a share. ${url}`)}`,
+    `DESCRIPTION:${esc(isTicket(event) ? `Show your QR pass at the door. ${url}` : `Get checked in to get your deposit back plus a share. ${url}`)}`,
     "END:VEVENT",
     "END:VCALENDAR",
   ].join("\r\n");

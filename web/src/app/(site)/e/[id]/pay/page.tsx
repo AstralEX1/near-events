@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { events, formatUsdc, type EventView } from "@/lib/near";
+import { events, formatUsdc, isTicket, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT, NETWORK, ONECLICK_REGISTERS } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import type { OneClickToken } from "@/lib/oneclick";
@@ -110,7 +110,7 @@ export default function PayFromAnyChain() {
       <h1 className="text-3xl font-semibold tracking-tight">Pay from any chain</h1>
       <p className="text-muted">
         Send any supported token from any chain. NEAR Intents (1Click) swaps it to exactly{" "}
-        <b className="text-text">{formatUsdc(event.deposit)} USDC</b> and delivers it to the event escrow, which registers{" "}
+        <b className="text-text">{formatUsdc(event.deposit)} USDC</b> {isTicket(event) ? "for your ticket " : ""}and delivers it to the event escrow, which registers{" "}
         {accountId ? <b className="text-text">{accountId}</b> : "you"} in the same step. Anything extra is refunded.
       </p>
       {NETWORK === "testnet" && (

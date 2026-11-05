@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { events, formatUsdc, usdc, type EventView, type GuestStatus } from "@/lib/near";
+import { events, formatUsdc, usdc, type EventView, type GuestStatus, isTicket } from "@/lib/near";
 import { EVENTS_CONTRACT, HAS_FAUCET, ONECLICK_REGISTERS, USDC_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
@@ -69,7 +69,7 @@ export function RegistrationCard({
     }
     setStage("Confirm in your wallet…");
     await send(payDepositAddress(USDC_CONTRACT, quote.depositAddress, quote.amountIn));
-    setStage("NEAR Intents is delivering your deposit…");
+    setStage("NEAR Intents is delivering your payment…");
     await waitForSwap(quote.depositAddress, (s) => setStage(`NEAR Intents: ${s.toLowerCase().replaceAll("_", " ")}…`));
   };
 
@@ -115,18 +115,21 @@ export function RegistrationCard({
     });
 
   const price = `${formatUsdc(event.deposit)} USDC`;
+  const ticket = isTicket(event);
+  const action = ticket ? "Get ticket" : "Register";
   // One primary button per state; alternatives stay folded away.
   let body;
   if (event.status === "Cancelled") {
     body = (
       <div className="space-y-2">
-        <p className="text-sm">This event was cancelled. Every deposit went back to its guest.</p>
+        <p className="text-sm">This event was cancelled. {ticket ? "Every ticket was refunded." : "Every deposit went back to its guest."}</p>
         {balance > 0n && <CashOut accountId={accountId!} kind={kind} balance={balance} onDone={loadBalance} startOpen />}
       </div>
     );
   } else if (event.status === "Finalized") {
-    body =
-      myStatus === "Attended" ? (
+    body = ticket ? (
+      <p className="text-sm">This event is over. Thanks for coming.</p>
+    ) : myStatus === "Attended" ? (
         balance > 0n ? (
           <div className="space-y-2">
             <p className="text-sm">
@@ -148,7 +151,7 @@ export function RegistrationCard({
     body = (
       <div>
         <p className="font-semibold text-good">✓ You’re checked in</p>
-        <p className="text-sm text-muted mt-1">Withdraw your payout here once the host closes the event.</p>
+        {!ticket && <p className="text-sm text-muted mt-1">Withdraw your payout here once the host closes the event.</p>}
       </div>
     );
   } else if (myStatus === "Registered") {
@@ -163,22 +166,22 @@ export function RegistrationCard({
         <button className="w-full text-xs text-muted pt-1" onClick={() => setChoosing(false)}>Back</button>
       </div>
     ) : (
-      <button className="btn btn-accent w-full !py-3.5" onClick={() => setChoosing(true)}>Register · {price}</button>
+      <button className="btn btn-accent w-full !py-3.5" onClick={() => setChoosing(true)}>{action} · {price}</button>
     );
   } else if (kind === "evm") {
     const enough = HAS_FAUCET || (intentsBalance !== null && intentsBalance >= BigInt(event.deposit));
     body = enough ? (
       <button className="btn btn-accent w-full" disabled={busy} onClick={registerViaIntents}>
-        {busy ? stage ?? "Sign in your wallet…" : `Register · ${price}`}
+        {busy ? stage ?? "Sign in your wallet…" : `${action} · ${price}`}
       </button>
     ) : (
-      <Link href={`/e/${event.id}/pay`} className="btn btn-accent w-full">Register · {price}</Link>
+      <Link href={`/e/${event.id}/pay`} className="btn btn-accent w-full">{action} · {price}</Link>
     );
   } else {
     body = (
       <div className="space-y-2">
         <button className="btn btn-accent w-full !py-3.5" disabled={busy} onClick={register}>
-          {busy ? stage ?? "Working…" : `Register · ${price}`}
+          {busy ? stage ?? "Working…" : `${action} · ${price}`}
         </button>
         <p className="text-xs text-muted text-center">
           {ONECLICK_REGISTERS ? "Paid through NEAR Intents. No USDC on NEAR? You can pay with any token from any chain." : "Testnet: free test USDC. Payouts go out through NEAR Intents."}
@@ -194,7 +197,7 @@ export function RegistrationCard({
       {error && <p className="text-sm text-warn break-words">{error}</p>}
       {open && (
         <p className="text-sm text-muted leading-relaxed">
-          Come and get it back plus a share of the no-shows. No cancelling.{" "}
+          {ticket ? "Refunded if the host cancels." : "Come and get it back plus a share of the no-shows. No cancelling."}{" "}
           <button className="text-accent" onClick={() => setRules(!rules)}>{rules ? "Hide" : "How it works"}</button>
         </p>
       )}

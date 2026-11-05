@@ -524,3 +524,83 @@ async fn measure_finalize_gas(
     );
     Ok(())
 }
+
+/// Ticket mode on the real runtime: buy, cancel-free close after the start,
+/// host withdraws the ticket money as USDC.
+#[tokio::test]
+async fn sandbox_ticket_cycle() -> anyhow::Result<()> {
+    let worker = near_workspaces::sandbox().await?;
+    let usdc = worker.dev_deploy_tla(wasm("test-usdc")).await?;
+    usdc.call("new").transact().await?.into_result()?;
+    let events = worker.dev_deploy(wasm("near-events")).await?;
+    events
+        .call("new")
+        .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    let host = worker.dev_create_account().await?;
+    let a = worker.dev_create_account().await?;
+    let b = worker.dev_create_account().await?;
+    storage_deposit(&usdc, &host, events.id()).await?;
+    storage_deposit(&usdc, &host, host.id()).await?;
+    let price = 20 * 1_000_000;
+    for g in [&a, &b] {
+        mint(&usdc, g, g.id(), price).await?;
+    }
+
+    // Started a minute ago, so the host may close it right away.
+    let now_ms = worker.view_block().await?.timestamp() / 1_000_000;
+    let event_id: u64 = host
+        .call(events.id(), "create_event")
+        .args_json(json!({
+            "metadata": {
+                "title": "Paid workshop",
+                "description": "ticket cycle",
+                "location": "local",
+                "cover_url": null,
+                "starts_at": now_ms - 60_000,
+                "ends_at": now_ms + 3_600_000
+            },
+            "deposit": price.to_string(),
+            "capacity": 10,
+            "cohosts": null,
+            "mode": "Ticket"
+        }))
+        .transact()
+        .await?
+        .json()?;
+    let view: serde_json::Value = events.view("get_event").args_json(json!({ "event_id": event_id })).await?.json()?;
+    assert_eq!(view["mode"], "Ticket");
+    assert_eq!(view["price"], price.to_string());
+
+    for g in [&a, &b] {
+        transfer_call(g, usdc.id(), events.id(), price, json!({ "action": "register", "event_id": event_id }))
+            .await?
+            .into_result()?;
+        assert_eq!(token_balance(&usdc, g.id()).await?, 0);
+    }
+
+    // Nobody checked in: in Ticket mode the host is still paid for both tickets.
+    host.call(events.id(), "finalize")
+        .args_json(json!({ "event_id": event_id }))
+        .deposit(yocto(1))
+        .gas(Gas::from_tgas(100))
+        .transact()
+        .await?
+        .into_result()?;
+    assert_eq!(escrow_balance(&events, host.id()).await?, 2 * price);
+    assert_eq!(escrow_balance(&events, a.id()).await?, 0);
+
+    host.call(events.id(), "withdraw")
+        .args_json(json!({ "amount": null, "receiver_id": null, "to_intents": null }))
+        .deposit(yocto(1))
+        .gas(Gas::from_tgas(100))
+        .transact()
+        .await?
+        .into_result()?;
+    assert_eq!(token_balance(&usdc, host.id()).await?, 2 * price);
+    assert_eq!(token_balance(&usdc, events.id()).await?, 0);
+    Ok(())
+}
