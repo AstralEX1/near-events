@@ -1,19 +1,19 @@
-# Near Events
+# Near Me
 
 > Deposit-backed event registration you can add to any website. Guests put down a small refundable USDC deposit; people who show up get it back plus an equal share of the no-shows' deposits. Funds sit in a NEAR smart contract, never with the organizer or with us. No platform fee.
 
 An event can instead sell a paid ticket (mode `Ticket`): one price per guest, held in the contract and paid to the host once the event has started; refunded if the host cancels. An event is either deposit or ticket, never both.
 
-This file is for AI coding agents adding Near Events to a host's website. Everything loads from the Near Events host that serves this file; below it is written as `https://NEAR-EVENTS-HOST` (use the origin you fetched this file from).
+This file is for AI coding agents adding Near Me to a host's website. Everything loads from the Near Me host that serves this file; below it is written as `https://NEAR-ME-HOST` (use the origin you fetched this file from).
 
 ## Add the widget (any site)
 
 1. Load the script once per page:
-   `<script src="https://NEAR-EVENTS-HOST/embed.js" async></script>`
+   `<script src="https://NEAR-ME-HOST/embed.js" async></script>`
 2. Put the element where the event should appear:
    `<near-event event="EVENT_ID"></near-event>`
 
-The element renders an event card with a "Register · N USDC" button. Sign-up and payment open in a small window on the Near Events domain (wallets and Google sign-in need a first-party page). Never copy or modify embed.js; always load it from the host. The widget needs no API keys or secrets.
+The element renders an event card with a "Register · N USDC" button. Sign-up and payment open in a small window on the Near Me domain (wallets and Google sign-in need a first-party page). Never copy or modify embed.js; always load it from the host. The widget needs no API keys or secrets.
 
 ### Attributes
 - `mode="button"`: only the button (for sites with their own event cards)
@@ -27,10 +27,10 @@ The element renders an event card with a "Register · N USDC" button. Sign-up an
 - The element also fires `registered` (bubbles, composed)
 
 ### No scripts allowed
-`<iframe src="https://NEAR-EVENTS-HOST/embed/e/EVENT_ID" title="Event registration" loading="lazy" style="width:100%;max-width:560px;height:260px;border:0"></iframe>`
+`<iframe src="https://NEAR-ME-HOST/embed/e/EVENT_ID" title="Event registration" loading="lazy" style="width:100%;max-width:560px;height:260px;border:0"></iframe>`
 
 ### Just a link
-`https://NEAR-EVENTS-HOST/p/EVENT_ID` is the payment page (add `?then=` the same way). Use it in a Luma event description, Instagram bio, WhatsApp, email or a QR code at the venue.
+`https://NEAR-ME-HOST/p/EVENT_ID` is the payment page (add `?then=` the same way). Use it in a Luma event description, Instagram bio, WhatsApp, email or a QR code at the venue.
 
 ## Where to paste, per platform
 - Plain HTML / static: both lines into the page
@@ -45,17 +45,17 @@ The element renders an event card with a "Register · N USDC" button. Sign-up an
 - Wix: "Embed code" → "Embed HTML"
 - Squarespace: a "Code" block
 - Framer: an "Embed" component (HTML)
-- Luma, Google Forms, Typeform, Eventbrite: they don't run scripts; put the payment link `https://NEAR-EVENTS-HOST/p/EVENT_ID?then=<the form or Luma URL>` in the description or first question
+- Luma, Google Forms, Typeform, Eventbrite: they don't run scripts; put the payment link `https://NEAR-ME-HOST/p/EVENT_ID?then=<the form or Luma URL>` in the description or first question
 
 ## Content-Security-Policy
-If the site sets one, allow: `script-src`, `frame-src` and `connect-src` for `https://NEAR-EVENTS-HOST`.
+If the site sets one, allow: `script-src`, `frame-src` and `connect-src` for `https://NEAR-ME-HOST`.
 
 ## Read-only API
-`GET https://NEAR-EVENTS-HOST/api/embed/EVENT_ID` → `{ id, title, starts_at, ends_at, location, status, deposit_usdc, mode, going, capacity, full }` (CORS open). `mode` is `Deposit` or `Ticket`; `deposit_usdc` is the price in both.
+`GET https://NEAR-ME-HOST/api/embed/EVENT_ID` → `{ id, title, starts_at, ends_at, location, status, deposit_usdc, mode, going, capacity, full }` (CORS open). `mode` is `Deposit` or `Ticket`; `deposit_usdc` is the price in both.
 
 ## For hosts
 - Create and manage events from the Telegram bot: /new, deposit notifications, guest list, check-in, payouts and refunds (each confirmed by the host).
 - On Luma Plus, the bot connects the Luma event: paid guests are added to Luma as Going and Luma check-ins count for the payout.
 
 ## Verify
-Run the site, open the page, confirm the card or button renders and that clicking Register opens the Near Events window. Report which files changed.
+Run the site, open the page, confirm the card or button renders and that clicking Register opens the Near Me window. Report which files changed.
