@@ -2,7 +2,7 @@
 
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { events, formatUsdc, type EventView } from "@/lib/near";
+import { events, formatUsdc, isTicket, priceLabel, type EventView } from "@/lib/near";
 import { embedQuery, embedVars, readEmbedStyle, type EmbedMessage } from "@/lib/embed";
 import { AvatarStack, Cover, DateBadge, formatWhen } from "@/components/ui";
 import { spotsLine } from "@/components/EventParts";
@@ -85,13 +85,15 @@ export default function EmbedCard() {
               <div className="flex items-center gap-2 min-w-0">
                 {guests.length > 0 && <AvatarStack accounts={guests} max={5} />}
                 <span className="text-muted truncate">
-                  {spotsLine(event)} · pool {formatUsdc(event.total_pool)} USDC
+                  {spotsLine(event)}{isTicket(event) ? "" : ` · pool ${formatUsdc(event.total_pool)} USDC`}
                 </span>
               </div>
             </div>
             <CardAction event={event} joined={joined} joinUrl={joinUrl} onOpen={open} />
             <p className="text-xs text-muted">
-              Show up and get your {formatUsdc(event.deposit)} USDC back plus a share of the no-shows ·{" "}
+              {isTicket(event)
+                ? `${formatUsdc(event.deposit)} USDC ticket, refunded if the host cancels`
+                : `Show up and get your ${formatUsdc(event.deposit)} USDC back plus a share of the no-shows`} ·{" "}
               <a href={`/e/${event.id}`} target="_blank" rel="noopener" className="underline underline-offset-2">
                 Near Events
               </a>
@@ -115,12 +117,12 @@ function CardAction({
   onOpen: (e: React.MouseEvent) => void;
 }) {
   if (joined) return <div className="btn btn-ghost w-full text-good">✓ You’re going</div>;
-  if (event.status === "Finalized") return <div className="btn btn-ghost w-full text-muted">Event ended · pool paid out</div>;
-  if (event.status === "Cancelled") return <div className="btn btn-ghost w-full text-muted">Cancelled · deposits returned</div>;
+  if (event.status === "Finalized") return <div className="btn btn-ghost w-full text-muted">{isTicket(event) ? "Event ended" : "Event ended · pool paid out"}</div>;
+  if (event.status === "Cancelled") return <div className="btn btn-ghost w-full text-muted">{isTicket(event) ? "Cancelled · tickets refunded" : "Cancelled · deposits returned"}</div>;
   if (event.guest_count >= event.capacity) return <div className="btn btn-ghost w-full text-muted">Event is full</div>;
   return (
     <a href={joinUrl} target="_blank" rel="opener" onClick={onOpen} className="btn btn-accent w-full">
-      Register · {formatUsdc(event.deposit)} USDC deposit
+      {isTicket(event) ? "Get ticket" : "Register"} · {priceLabel(event)}
     </a>
   );
 }

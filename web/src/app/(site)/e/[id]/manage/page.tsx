@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
-import { events, formatUsdc, type EventView, type GuestView } from "@/lib/near";
+import { events, formatUsdc, isTicket, priceLabel, type EventView, type GuestView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { checkIns } from "@/lib/checkinsClient";
 import { useWallet } from "@/lib/wallet";
@@ -162,6 +162,21 @@ function ManageEvent() {
   const open = event.status === "Open";
   const pool = BigInt(event.total_pool);
   const share = event.attended_count > 0 ? pool / BigInt(event.attended_count) : 0n;
+  const ticket = isTicket(event);
+  // Ticket money is released only once the event has started (the contract enforces it too).
+  const ticketTooEarly = ticket && Date.now() < event.metadata.starts_at;
+  const finalizeEvent = () => {
+    if (ticketTooEarly) return setError("Ticket money is released once the event has started. You can close the event after that.");
+    run(
+      "finalize",
+      { event_id: id, attended: attendedList },
+      ticket
+        ? `Close the event and take the ticket money?\n\n${event.guest_count} tickets · ${formatUsdc(pool)} USDC to you.\n\nThis cannot be undone.`
+        : event.attended_count === 0
+          ? "Nobody was checked in, so every deposit goes back to its guest. Close the event?"
+          : `Close the event and pay out?\n\n${event.attended_count} of ${event.guest_count} came.\nPool: ${formatUsdc(pool)} USDC.\nEach attendee gets ${formatUsdc(share)} USDC.\n\nThis cannot be undone.`,
+    );
+  };
   const paid = guests.length;
   const checkedIn = guests.filter((g) => g.status === "Attended").length;
   const pageUrl = `${origin}/e/${id}`;
@@ -226,21 +241,14 @@ function ManageEvent() {
           onCopy={copy}
           onGuests={() => setTab("guests")}
           onRegistration={() => setTab("registration")}
-          onFinalize={() =>
-            run(
-              "finalize",
-              { event_id: id, attended: attendedList },
-              event.attended_count === 0
-                ? "Nobody was checked in, so every deposit goes back to its guest. Close the event?"
-                : `Close the event and pay out?\n\n${event.attended_count} of ${event.guest_count} came.\nPool: ${formatUsdc(pool)} USDC.\nEach attendee gets ${formatUsdc(share)} USDC.\n\nThis cannot be undone.`,
-            )
-          }
-          onCancel={() => run("cancel", { event_id: id }, "Cancel the event and refund every guest deposit?")}
+          onFinalize={finalizeEvent}
+          onCancel={() => run("cancel", { event_id: id }, ticket ? "Cancel the event and refund every ticket?" : "Cancel the event and refund every guest deposit?")}
         />
       )}
 
       {tab === "guests" && (
         <GuestsTab
+          ticket={ticket}
           open={open}
           isHost={isHost}
           busy={busy}
@@ -263,21 +271,13 @@ function ManageEvent() {
           onCheckInSelected={() => mark([...selected], true)}
           onUndo={(account) => mark([account], false)}
           onRefund={(account) =>
-            run("refund_guest", { event_id: id, account_id: account }, `Return ${account}’s deposit and free their spot?`)
+            run("refund_guest", { event_id: id, account_id: account }, `Return ${account}’s ${ticket ? "ticket money" : "deposit"} and free their spot?`)
           }
           onExport={exportCsv}
           onInvite={() => {
             setTab("registration");
           }}
-          onFinalize={() =>
-            run(
-              "finalize",
-              { event_id: id, attended: attendedList },
-              event.attended_count === 0
-                ? "Nobody was checked in, so every deposit goes back to its guest. Close the event?"
-                : `Close & pay out ${formatUsdc(pool)} USDC to ${event.attended_count} guests (${formatUsdc(share)} each)?`,
-            )
-          }
+          onFinalize={finalizeEvent}
         />
       )}
 
@@ -356,7 +356,7 @@ function OverviewTab({
         <ActionTile
           tone="amber"
           title="Registration"
-          body={`${formatUsdc(event.deposit)} USDC deposit · ${event.capacity} spots`}
+          body={`${priceLabel(event)} · ${event.capacity} spots`}
           onClick={onRegistration}
         />
       </section>
@@ -371,7 +371,7 @@ function OverviewTab({
       {open && isHost && (
         <section className="pt-2 space-y-3 border-t border-border">
           <button type="button" className="btn btn-primary w-full sm:w-auto" disabled={busy} onClick={onFinalize}>
-            Close event &amp; pay out
+            {isTicket(event) ? "Close event & get paid" : "Close event & pay out"}
           </button>
           <div>
             <button type="button" className="text-sm text-muted hover:text-warn" disabled={busy} onClick={onCancel}>
@@ -414,6 +414,7 @@ function GuestsTab({
   onRefund,
   onExport,
   onInvite,
+  ticket,
   onFinalize,
 }: {
   open: boolean;
@@ -437,6 +438,7 @@ function GuestsTab({
   onRefund: (a: string) => void;
   onExport: () => void;
   onInvite: () => void;
+  ticket: boolean;
   onFinalize: () => void;
 }) {
   return (
@@ -574,7 +576,7 @@ function GuestsTab({
       {open && isHost && paid > 0 && (
         <div className="pt-2 border-t border-border">
           <button type="button" className="btn btn-primary w-full sm:w-auto" disabled={busy} onClick={onFinalize}>
-            Close event &amp; pay out
+            {ticket ? "Close event & get paid" : "Close event & pay out"}
           </button>
         </div>
       )}
@@ -609,7 +611,7 @@ function RegistrationTab({
           good={open}
         />
         <StatusCard icon="↑" label="Capacity" value={`${event.guest_count} / ${event.capacity}`} />
-        <StatusCard icon="◎" label="Deposit" value={`${formatUsdc(event.deposit)} USDC`} />
+        <StatusCard icon="◎" label={isTicket(event) ? "Ticket" : "Deposit"} value={`${formatUsdc(event.deposit)} USDC`} />
       </div>
 
       <section className="space-y-3">
@@ -617,9 +619,11 @@ function RegistrationTab({
           <h2 className="text-lg font-semibold">How guests sign up</h2>
         </div>
         <div className="card p-4 space-y-1">
-          <div className="font-medium">Standard deposit</div>
+          <div className="font-medium">{isTicket(event) ? "Paid ticket" : "Standard deposit"}</div>
           <p className="text-sm text-muted">
-            Same amount for everyone. Who shows up gets it back plus a share of no-shows. No platform fee.
+            {isTicket(event)
+              ? "Same price for everyone. The money waits in the escrow and goes to you once the event has started and you close it. No platform fee."
+              : "Same amount for everyone. Who shows up gets it back plus a share of no-shows. No platform fee."}
           </p>
           <div className="text-sm font-mono mt-2">{formatUsdc(event.deposit)} USDC · {event.capacity} spots</div>
         </div>

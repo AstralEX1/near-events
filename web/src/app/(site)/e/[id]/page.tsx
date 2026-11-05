@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { events, formatUsdc, type EventView, type GuestView } from "@/lib/near";
+import { events, formatUsdc, isTicket, type EventView, type GuestView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
 import { Avatar, AvatarStack, Cover, DateBadge, StatusPill, formatWhen, shortAccount } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
@@ -100,7 +100,9 @@ export default function EventPage() {
               <div className="text-sm">
                 <div className="font-medium">{event.metadata.location || "Location TBA"}</div>
                 <div className="text-muted">
-                  {formatUsdc(event.deposit)} USDC deposit · pool {formatUsdc(event.total_pool)} USDC
+                  {isTicket(event)
+                    ? `${formatUsdc(event.deposit)} USDC ticket`
+                    : `${formatUsdc(event.deposit)} USDC deposit · pool ${formatUsdc(event.total_pool)} USDC`}
                 </div>
               </div>
             </div>

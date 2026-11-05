@@ -81,8 +81,7 @@ if ((await view("get_guest_status", { event_id: eventId, account_id: GUEST })) =
 }
 
 // 3. Check in and close.
-await call(host, EVENTS, "check_in", { event_id: eventId, accounts: [GUEST] }, 1n);
-await call(host, EVENTS, "finalize", { event_id: eventId }, 1n, 300n * TGAS);
+await call(host, EVENTS, "finalize", { event_id: eventId, attended: [GUEST] }, 1n, 300n * TGAS);
 const balance = await view("balance_of", { account_id: GUEST });
 console.log("3. finalized, guest balance", balance);
 
