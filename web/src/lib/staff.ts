@@ -12,10 +12,8 @@ import { JsonRpcProvider, baseDecode, decodeTransaction } from "near-api-js";
 import { verifyMessage } from "near-api-js/nep413";
 import { EVENTS_CONTRACT, RPC_URL } from "./config";
 import { events } from "./near";
+import { STAFF_MESSAGE, STAFF_PROOF_METHOD } from "./staffShared";
 
-export const STAFF_MESSAGE = "Sign in to check guests in at Near Events";
-/** The method name the Google/email proof transaction names. It does not exist on the contract. */
-export const STAFF_PROOF_METHOD = "near_events_staff_sign_in";
 const TOKEN_TTL_S = 12 * 60 * 60;
 const PROOF_MAX_AGE_MS = 10 * 60 * 1000;
 

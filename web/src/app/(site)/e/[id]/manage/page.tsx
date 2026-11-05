@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import { events, formatUsdc, type EventView, type GuestView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
+import { checkIns } from "@/lib/checkinsClient";
 import { useWallet } from "@/lib/wallet";
 import { Avatar, formatWhen, shortAccount } from "@/components/ui";
 import { QrScanner } from "@/components/Qr";
@@ -32,7 +33,7 @@ function ManageEvent() {
   const id = Number(useParams<{ id: string }>().id);
   const search = useSearchParams();
   const router = useRouter();
-  const { accountId, send } = useWallet();
+  const { accountId, send, staffToken } = useWallet();
   const [event, setEvent] = useState<EventView | null>(null);
   const [guests, setGuests] = useState<GuestView[]>([]);
   const [query, setQuery] = useState("");
@@ -54,9 +55,16 @@ function ManageEvent() {
   };
 
   const load = useCallback(async () => {
-    const [e, g] = await Promise.all([events.get(id), events.guests(id)]);
-    setEvent(e);
-    setGuests(g);
+    const [e, g, marks] = await Promise.all([events.get(id), events.guests(id), checkIns.list(id).catch(() => ({}))]);
+    // Door check-ins live on our server until finalize puts them on-chain.
+    if (e && e.status === "Open") {
+      const withMarks = g.map((x): GuestView => (marks[x.account_id] ? { ...x, status: "Attended" } : x));
+      setGuests(withMarks);
+      setEvent({ ...e, attended_count: withMarks.filter((x) => x.status === "Attended").length });
+    } else {
+      setEvent(e);
+      setGuests(g);
+    }
     setSelected(new Set());
   }, [id]);
 
@@ -103,6 +111,22 @@ function ManageEvent() {
       setBusy(false);
     }
   };
+
+  /** Marks guests at the door on our server (no transaction). */
+  const mark = async (accounts: string[], on: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await staffToken();
+      for (const account of accounts) await checkIns.set(token, id, account, on);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const attendedList = guests.filter((g) => g.status === "Attended").map((g) => g.account_id);
 
   const onScan = (text: string) => {
     const account = text.replace(/^near:/, "").trim().toLowerCase();
@@ -205,7 +229,7 @@ function ManageEvent() {
           onFinalize={() =>
             run(
               "finalize",
-              { event_id: id },
+              { event_id: id, attended: attendedList },
               event.attended_count === 0
                 ? "Nobody was checked in, so every deposit goes back to its guest. Close the event?"
                 : `Close the event and pay out?\n\n${event.attended_count} of ${event.guest_count} came.\nPool: ${formatUsdc(pool)} USDC.\nEach attendee gets ${formatUsdc(share)} USDC.\n\nThis cannot be undone.`,
@@ -235,9 +259,9 @@ function ManageEvent() {
           scanNote={scanNote}
           selected={selected}
           filtered={filtered}
-          onCheckInOne={(account) => run("check_in", { event_id: id, accounts: [account] })}
-          onCheckInSelected={() => run("check_in", { event_id: id, accounts: [...selected] })}
-          onUndo={(account) => run("undo_check_in", { event_id: id, account_id: account })}
+          onCheckInOne={(account) => mark([account], true)}
+          onCheckInSelected={() => mark([...selected], true)}
+          onUndo={(account) => mark([account], false)}
           onRefund={(account) =>
             run("refund_guest", { event_id: id, account_id: account }, `Return ${account}’s deposit and free their spot?`)
           }
@@ -248,7 +272,7 @@ function ManageEvent() {
           onFinalize={() =>
             run(
               "finalize",
-              { event_id: id },
+              { event_id: id, attended: attendedList },
               event.attended_count === 0
                 ? "Nobody was checked in, so every deposit goes back to its guest. Close the event?"
                 : `Close & pay out ${formatUsdc(pool)} USDC to ${event.attended_count} guests (${formatUsdc(share)} each)?`,
