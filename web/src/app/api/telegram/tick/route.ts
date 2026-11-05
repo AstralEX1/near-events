@@ -13,11 +13,9 @@ export async function POST(req: Request) {
     const id = Number(idStr);
     const [e, guests] = await Promise.all([events.get(id).catch(() => null), events.guests(id).catch(() => [])]);
     if (!e || e.status !== "Open") continue;
-    const viaLuma = store.luma?.[idStr]?.guests ?? {};
     const fresh = guests.filter((g) => !ev.seen.includes(g.account_id));
     if (fresh.length === 0) continue;
     for (const g of fresh) {
-      if (viaLuma[g.account_id]) continue; // already announced with name and email
       await notifyHost(
         id,
         `💰 <b>${esc(g.account_id.length > 20 ? `${g.account_id.slice(0, 8)}…${g.account_id.slice(-4)}` : g.account_id)}</b> paid ${formatUsdc(e.deposit)} USDC for ${esc(e.metadata.title)}\nPool ${formatUsdc(e.total_pool)} USDC · ${e.guest_count}/${e.capacity}`,
