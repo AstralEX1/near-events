@@ -1,9 +1,14 @@
 //! Near Events — Kickback-style event escrow.
 //!
 //! Guests register by sending an equal USDC deposit with `ft_transfer_call`.
-//! The host and the co-hosts named at creation check guests in. On
-//! `finalize` the whole pool of deposits is split equally
-//! between the guests who showed up. No platform fee.
+//! Check-in at the door happens off-chain (the host, the co-hosts named at
+//! creation, or the Telegram bot mark guests on the Near Events server). The
+//! host then calls `finalize` once with the list of guests who came, and the
+//! whole pool of deposits is split equally between them. No platform fee.
+//!
+//! The owner (the account that initialised the contract) can pause new events
+//! and registrations if something goes wrong. Payouts, refunds and
+//! withdrawals keep working while paused.
 //!
 //! Payouts land on an internal balance that the guest can withdraw to any
 //! NEAR account, into their NEAR Intents balance (`intents.near`, from where
@@ -55,7 +60,6 @@ const MAX_TITLE_LEN: usize = 120;
 const MAX_TEXT_LEN: usize = 2000;
 const MAX_SHORT_LEN: usize = 300;
 const MAX_COHOSTS: usize = 10;
-const MAX_CHECK_IN_BATCH: usize = MAX_CAPACITY as usize;
 /// Events must end within a year, so the abandoned-event refund is always reachable.
 const MAX_EVENT_HORIZON_MS: u64 = 365 * 24 * 60 * 60 * 1000;
 
@@ -186,6 +190,9 @@ pub struct Contract {
     open_events: LookupMap<AccountId, u32>,
     /// Optional account allowed to call `payout_to_intents` for other users (web relayer).
     relayer: Option<AccountId>,
+    /// Can pause new events and registrations. The account that ran `new`.
+    owner: AccountId,
+    paused: bool,
 }
 
 #[near]
@@ -202,7 +209,21 @@ impl Contract {
             balances: LookupMap::new(StorageKey::Balances),
             open_events: LookupMap::new(StorageKey::OpenEvents),
             relayer,
+            owner: env::predecessor_account_id(),
+            paused: false,
         }
+    }
+
+    // --------------------------------------------------------------- owner
+
+    /// Stops new events and registrations (`true`) or resumes them. Owner only.
+    /// Finalize, cancel, refunds and withdrawals are never paused.
+    #[payable]
+    pub fn set_paused(&mut self, paused: bool) {
+        near_sdk::assert_one_yocto();
+        require!(env::predecessor_account_id() == self.owner, "Only the owner");
+        self.paused = paused;
+        emit("paused", json!({ "paused": paused }));
     }
 
     // ---------------------------------------------------------------- host
@@ -217,6 +238,7 @@ impl Contract {
         capacity: u32,
         cohosts: Option<Vec<AccountId>>,
     ) -> u64 {
+        require!(!self.paused, "Near Events is paused");
         let host = env::predecessor_account_id();
         let cohosts = cohosts.unwrap_or_default();
         validate_metadata(&metadata);
@@ -252,46 +274,9 @@ impl Contract {
         id
     }
 
-    /// Marks registered guests as attended. Host or co-host.
-    #[payable]
-    pub fn check_in(&mut self, event_id: u64, accounts: Vec<AccountId>) {
-        near_sdk::assert_one_yocto();
-        require!(accounts.len() <= MAX_CHECK_IN_BATCH, "Too many accounts");
-        self.assert_open_and_staff(event_id);
-        let mut added = 0u32;
-        for account in &accounts {
-            let record = self
-                .guests
-                .get_mut(&(event_id, account.clone()))
-                .unwrap_or_else(|| env::panic_str(&format!("{} is not registered", account)));
-            if record.status == GuestStatus::Registered {
-                record.status = GuestStatus::Attended;
-                added += 1;
-            }
-        }
-        self.event_mut(event_id).attended_count += added;
-        emit("check_in", json!({ "event_id": event_id, "accounts": accounts }));
-    }
-
-    /// Reverts a mistaken check-in. Host or co-host.
-    #[payable]
-    pub fn undo_check_in(&mut self, event_id: u64, account_id: AccountId) {
-        near_sdk::assert_one_yocto();
-        self.assert_open_and_staff(event_id);
-        let record = self
-            .guests
-            .get_mut(&(event_id, account_id.clone()))
-            .unwrap_or_else(|| env::panic_str("Not registered"));
-        if record.status == GuestStatus::Attended {
-            record.status = GuestStatus::Registered;
-            self.event_mut(event_id).attended_count -= 1;
-        }
-        emit("undo_check_in", json!({ "event_id": event_id, "account_id": account_id }));
-    }
-
     /// Takes one guest off the list and returns their deposit to their balance,
-    /// e.g. someone who asked to cancel in time. Host only, while open, and not
-    /// for guests already checked in. The last guest takes the freed seat index.
+    /// e.g. someone who asked to cancel in time. Host only, while open. The
+    /// last guest takes the freed seat index.
     #[payable]
     pub fn refund_guest(&mut self, event_id: u64, account_id: AccountId) {
         near_sdk::assert_one_yocto();
@@ -305,7 +290,6 @@ impl Contract {
             .guests
             .remove(&(event_id, account_id.clone()))
             .unwrap_or_else(|| env::panic_str("Not registered"));
-        require!(record.status == GuestStatus::Registered, "Guest is already checked in");
         let last = self.event(event_id).guest_count - 1;
 
         if record.index != last {
@@ -323,24 +307,37 @@ impl Contract {
         emit("guest_refunded", json!({ "event_id": event_id, "account_id": account_id, "amount": U128(deposit) }));
     }
 
-    /// Splits the pool between attendees. Host only.
-    /// If nobody attended, everyone gets their deposit back.
+    /// Closes the event with the guests who came (`attended`, checked in at
+    /// the door off-chain). Host only. The pool is split equally between them;
+    /// the rounding remainder goes to the host. Unknown accounts fail the call,
+    /// duplicates count once. An empty list returns every deposit.
     #[payable]
-    pub fn finalize(&mut self, event_id: u64) {
+    pub fn finalize(&mut self, event_id: u64, attended: Vec<AccountId>) {
         near_sdk::assert_one_yocto();
         let event = self.event(event_id);
         require!(env::predecessor_account_id() == event.host, "Only the host");
         require!(event.status == EventStatus::Open, "Event is closed");
-        if event.attended_count == 0 {
+        require!(attended.len() <= MAX_CAPACITY as usize, "Too many accounts");
+        let (host, deposit, guest_count) = (event.host.clone(), event.deposit, event.guest_count);
+
+        let mut came = 0u32;
+        for account in &attended {
+            let record = self
+                .guests
+                .get_mut(&(event_id, account.clone()))
+                .unwrap_or_else(|| env::panic_str(&format!("{} is not registered", account)));
+            if record.status == GuestStatus::Registered {
+                record.status = GuestStatus::Attended;
+                came += 1;
+            }
+        }
+        if came == 0 {
             return self.close_with_refunds(event_id, EventStatus::Finalized);
         }
 
-        let (host, deposit, guest_count, attended) =
-            (event.host.clone(), event.deposit, event.guest_count, event.attended_count);
         let pool = deposit * guest_count as u128;
-        let share = pool / attended as u128;
-        let remainder = pool - share * attended as u128;
-
+        let share = pool / came as u128;
+        let remainder = pool - share * came as u128;
         for i in 0..guest_count {
             let account = self.guest_index[&(event_id, i)].clone();
             if self.guests[&(event_id, account.clone())].status == GuestStatus::Attended {
@@ -351,11 +348,13 @@ impl Contract {
             self.credit(&host, remainder);
         }
 
-        self.event_mut(event_id).payout_per_attendee = share;
+        let event = self.event_mut(event_id);
+        event.attended_count = came;
+        event.payout_per_attendee = share;
         self.mark_closed(event_id, EventStatus::Finalized);
         emit(
             "finalized",
-            json!({ "event_id": event_id, "attended": attended, "payout_per_attendee": U128(share) }),
+            json!({ "event_id": event_id, "attended": came, "payout_per_attendee": U128(share) }),
         );
     }
 
@@ -471,6 +470,14 @@ impl Contract {
         self.intents.clone()
     }
 
+    pub fn owner(&self) -> AccountId {
+        self.owner.clone()
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+
     pub fn relayer(&self) -> Option<AccountId> {
         self.relayer.clone()
     }
@@ -548,6 +555,9 @@ impl FungibleTokenReceiver for Contract {
                 }
                 let guest = guest.unwrap_or_else(|| sender_id.clone());
                 let third_party = guest != sender_id;
+                if self.paused {
+                    return self.keep_for_guest_or_reject(third_party, event_id, &guest, amount, "Near Events is paused");
+                }
                 // Missing event and a short payment used to panic. A panic makes
                 // the token send the USDC back to `sender_id`. When that sender
                 // is intents.near or 1Click, the refund often never reaches the
@@ -576,9 +586,9 @@ impl FungibleTokenReceiver for Contract {
                     self.register(event_id, guest.clone(), sender_id);
                     amount.0 - deposit
                 } else {
-                    emit("register_failed", json!({ "event_id": event_id, "guest": guest, "amount": amount }));
-                    amount.0
+                    return self.keep_for_guest_or_reject(true, event_id, &guest, amount, "Registration failed");
                 };
+                // The seat's storage already covers the guest's balance entry.
                 if leftover > 0 {
                     self.credit(&guest, leftover);
                 }
@@ -602,6 +612,13 @@ impl Contract {
     ) -> PromiseOrValue<U128> {
         if !third_party {
             env::panic_str(reason);
+        }
+        // A new balance entry costs the contract storage. Without a floor anyone
+        // could create thousands of them with dust payments to made-up names.
+        // Real payments are at least a deposit, so they are never caught here.
+        // No storage-pool check: keeping a real payment matters more.
+        if self.balance(guest) == 0 {
+            require!(amount.0 >= MIN_DEPOSIT, reason);
         }
         self.credit(guest, amount.0);
         emit("register_failed", json!({ "event_id": event_id, "guest": guest, "amount": amount }));
@@ -650,13 +667,6 @@ impl Contract {
         self.events
             .get_mut(u32::try_from(event_id).unwrap_or(u32::MAX))
             .unwrap_or_else(|| env::panic_str("Event not found"))
-    }
-
-    fn assert_open_and_staff(&self, event_id: u64) {
-        let event = self.event(event_id);
-        let caller = env::predecessor_account_id();
-        require!(event.host == caller || event.cohosts.contains(&caller), "Only the host or a co-host");
-        require!(event.status == EventStatus::Open, "Event is closed");
     }
 
     fn send_out(&mut self, owner: AccountId, receiver: AccountId, amount: Option<U128>, to_intents: bool) -> Promise {
