@@ -105,8 +105,8 @@ checks it is only a Near Events registration and submits it to `intents.near`
 
 | Method | Who | What |
 |---|---|---|
-| `create_event(metadata, deposit, capacity, cohosts)` | anyone (caller = host) | free: the contract pays storage from its own balance; max 5 open events per host, capacity ≤ 300, deposit ≥ 0.1 USDC |
-| `ft_transfer_call` → `ft_on_transfer` | guest / friend / 1Click / intents.near | `{"action":"register","event_id":N,"guest":"..."}` or `{"action":"top_up",...}` |
+| `create_event(metadata, deposit, capacity, cohosts)` | anyone (caller = host) | free: the contract pays storage from its own balance; max 5 open events per host, capacity ≤ 300, deposit ≥ 0.1 USDC; up to 10 co-hosts, fixed after creation |
+| `ft_transfer_call` → `ft_on_transfer` | guest / friend / 1Click / intents.near | `{"action":"register","event_id":N,"guest":"..."}` |
 | `check_in`, `undo_check_in` | host, co-hosts (+1 yocto) | mark who showed up; check-in batch ≤ capacity |
 | `refund_guest` | host (+1 yocto) | refund one guest who has not been checked in |
 | `finalize` | host (+1 yocto) | pool ÷ attendees to balances; remainder to host; nobody came → full refund |
@@ -114,7 +114,6 @@ checks it is only a Near Events registration and submits it to `intents.near`
 | `cleanup_event(event_id, limit)` | anyone, 7 days after close | deletes up to 100 guest records so their storage NEAR returns to the contract; payouts stay on balances |
 | `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to a NEAR account (e.g. a 1Click deposit address) or into NEAR Intents |
 | `payout_to_intents(account_id)` | owner or configured relayer | moves that account's balance into *its own* Intents balance; how EVM-wallet guests get paid |
-| `register_with_balance` | guest (+1 yocto) | reuse a payout for the next event (contract only, not in the web app) |
 
 Views include `storage_pool` (NEAR left for free event creation) and `open_events_of(account)`.
 

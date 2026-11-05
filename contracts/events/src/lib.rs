@@ -1,13 +1,13 @@
 //! Near Events — Kickback-style event escrow.
 //!
 //! Guests register by sending an equal USDC deposit with `ft_transfer_call`.
-//! The host and its co-hosts check guests in. On
+//! The host and the co-hosts named at creation check guests in. On
 //! `finalize` the whole pool of deposits is split equally
 //! between the guests who showed up. No platform fee.
 //!
 //! Payouts land on an internal balance that the guest can withdraw to any
 //! NEAR account, into their NEAR Intents balance (`intents.near`, from where
-//! 1Click takes it to any chain), or reuse for the next event.
+//! 1Click takes it to any chain).
 //!
 //! Intents-first entry: a guest with USDC in NEAR Intents signs an
 //! `ft_withdraw` intent with `receiver_id` = this contract and
@@ -162,8 +162,6 @@ pub enum TransferMsg {
     /// Take a seat. `guest` defaults to the sender, so anyone (or 1Click on
     /// a guest's behalf) can pay for a seat.
     Register { event_id: u64, guest: Option<AccountId> },
-    /// Top up an internal balance for future registrations.
-    TopUp { account_id: Option<AccountId> },
 }
 
 #[ext_contract(ext_ft)]
@@ -209,7 +207,8 @@ impl Contract {
 
     // ---------------------------------------------------------------- host
 
-    /// Creates an event hosted by the caller. Name co-hosts for door check-in.
+    /// Creates an event hosted by the caller. Name co-hosts for door check-in;
+    /// the list is fixed after creation.
     /// Free: the contract pays for storage from its own balance.
     pub fn create_event(
         &mut self,
@@ -251,29 +250,6 @@ impl Contract {
 
         emit("event_created", json!({ "event_id": id, "host": host, "deposit": deposit }));
         id
-    }
-
-    #[payable]
-    pub fn add_cohost(&mut self, event_id: u64, account_id: AccountId) {
-        near_sdk::assert_one_yocto();
-        let event = self.event_mut(event_id);
-        require!(env::predecessor_account_id() == event.host, "Only the host");
-        require!(event.status == EventStatus::Open, "Event is closed");
-        require!(event.cohosts.len() < MAX_COHOSTS, "Too many co-hosts");
-        if !event.cohosts.contains(&account_id) {
-            event.cohosts.push(account_id.clone());
-        }
-        emit("cohost_added", json!({ "event_id": event_id, "account_id": account_id }));
-    }
-
-    #[payable]
-    pub fn remove_cohost(&mut self, event_id: u64, account_id: AccountId) {
-        near_sdk::assert_one_yocto();
-        let event = self.event_mut(event_id);
-        require!(env::predecessor_account_id() == event.host, "Only the host");
-        require!(event.status == EventStatus::Open, "Event is closed");
-        event.cohosts.retain(|a| a != &account_id);
-        emit("cohost_removed", json!({ "event_id": event_id, "account_id": account_id }));
     }
 
     /// Marks registered guests as attended. Host or co-host.
@@ -434,19 +410,6 @@ impl Contract {
     }
 
     // --------------------------------------------------------------- guest
-
-    /// Registers the caller using their internal balance (e.g. a previous payout).
-    /// Requires 1 yoctoNEAR so only a full-access key can spend the balance.
-    #[payable]
-    pub fn register_with_balance(&mut self, event_id: u64) {
-        near_sdk::assert_one_yocto();
-        let guest = env::predecessor_account_id();
-        let deposit = self.event(event_id).deposit;
-        let balance = self.balance(&guest);
-        require!(balance >= deposit, "Not enough balance");
-        self.set_balance(&guest, balance - deposit);
-        self.register(event_id, guest.clone(), guest);
-    }
 
     /// Withdraws USDC from the internal balance. `receiver_id` defaults to the
     /// caller. With `to_intents`, the USDC is deposited into the receiver's
@@ -619,18 +582,6 @@ impl FungibleTokenReceiver for Contract {
                 if leftover > 0 {
                     self.credit(&guest, leftover);
                 }
-                PromiseOrValue::Value(U128(0))
-            }
-            TransferMsg::TopUp { account_id } => {
-                let account = account_id.unwrap_or(sender_id);
-                self.balances.flush();
-                let initial_storage = env::storage_usage();
-                self.credit(&account, amount.0);
-                // The balance map keeps the write in a cache until flush, so the
-                // byte check has to happen after the flush. A new key would let
-                // anyone grow the contract's storage with a 1-unit transfer.
-                self.balances.flush();
-                require!(env::storage_usage() == initial_storage, "Top-up needs an existing balance");
                 PromiseOrValue::Value(U128(0))
             }
         }

@@ -133,22 +133,6 @@ fn overpayment_is_returned_and_friend_can_pay() {
 }
 
 #[test]
-fn reuse_payout_for_next_event() {
-    let (mut c, id) = setup(10);
-    register(&mut c, id, &accounts(2));
-    ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
-
-    ctx(&accounts(0), NearToken::from_near(5));
-    let next = c.create_event(meta(), U128(10 * USDC), 10, None);
-    ctx(&accounts(2), one_yocto());
-    c.register_with_balance(next);
-    assert_eq!(c.balance_of(accounts(2)).0, 0);
-    assert_eq!(c.get_guest_events(accounts(2)), vec![id, next]);
-}
-
-#[test]
 fn undo_check_in() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
@@ -484,20 +468,6 @@ fn stranger_cannot_payout_to_intents() {
 }
 
 #[test]
-#[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
-fn register_with_balance_requires_one_yocto() {
-    let (mut c, id) = setup(10);
-    register(&mut c, id, &accounts(2));
-    ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
-    ctx(&accounts(0), NearToken::from_near(5));
-    let next = c.create_event(meta(), U128(10 * USDC), 10, None);
-    ctx(&accounts(2), NearToken::from_yoctonear(0));
-    c.register_with_balance(next);
-}
-
-#[test]
 #[should_panic(expected = "Too many accounts")]
 fn check_in_rejects_oversized_batch() {
     let (mut c, id) = setup(10);
@@ -506,15 +476,6 @@ fn check_in_rejects_oversized_batch() {
         .collect();
     ctx(&accounts(0), one_yocto());
     c.check_in(id, too_many);
-}
-
-#[test]
-#[should_panic(expected = "Event is closed")]
-fn remove_cohost_requires_open() {
-    let (mut c, id) = setup(10);
-    ctx(&accounts(0), one_yocto());
-    c.finalize(id);
-    c.remove_cohost(id, accounts(1));
 }
 
 #[test]
@@ -813,20 +774,6 @@ fn event_created_already_past_the_grace_period_can_be_refunded_immediately() {
 }
 
 #[test]
-fn cohost_changes_need_no_storage_budget() {
-    let (mut c, id) = setup(10);
-    let extra: AccountId = "door.testnet".parse().unwrap();
-    ctx(&accounts(0), one_yocto());
-    c.add_cohost(id, extra.clone());
-    ctx(&accounts(0), one_yocto());
-    c.add_cohost(id, extra.clone());
-    assert_eq!(c.get_event(id).unwrap().cohosts.iter().filter(|a| **a == extra).count(), 1);
-    ctx(&accounts(0), one_yocto());
-    c.remove_cohost(id, extra.clone());
-    assert!(!c.get_event(id).unwrap().cohosts.contains(&extra));
-}
-
-#[test]
 fn largest_event_fits_the_reserved_record_size() {
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = Contract::new(usdc(), None, None);
@@ -870,38 +817,6 @@ fn one_seat_fits_the_reserved_guest_size_for_a_guest_with_history() {
         max_used <= STORAGE_BYTES_PER_GUEST,
         "one registration used {max_used} bytes, the reserved seat is {STORAGE_BYTES_PER_GUEST}"
     );
-}
-
-#[test]
-fn top_up_extends_an_existing_balance_only() {
-    let (mut c, id) = setup(10);
-    register(&mut c, id, &accounts(2));
-    ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
-    let refund = pay(
-        &mut c,
-        &accounts(4),
-        3 * USDC,
-        &format!(r#"{{"action":"top_up","account_id":"{}"}}"#, accounts(2)),
-    );
-    assert_eq!(refund, 0);
-    assert_eq!(c.balance_of(accounts(2)).0, 13 * USDC);
-}
-
-#[test]
-#[should_panic(expected = "Top-up needs an existing balance")]
-fn top_up_rejects_a_new_account() {
-    let (mut c, _) = setup(10);
-    pay(&mut c, &accounts(2), USDC, r#"{"action":"top_up"}"#);
-}
-
-#[test]
-#[should_panic(expected = "Not enough balance")]
-fn register_with_balance_rejects_a_short_balance() {
-    let (mut c, id) = setup(10);
-    ctx(&accounts(2), one_yocto());
-    c.register_with_balance(id);
 }
 
 #[test]
@@ -1089,26 +1004,6 @@ fn undo_twice_does_not_underflow() {
 }
 
 #[test]
-#[should_panic(expected = "Only the host or a co-host")]
-fn removed_cohost_cannot_check_in() {
-    let (mut c, id) = setup(10);
-    register(&mut c, id, &accounts(2));
-    ctx(&accounts(0), one_yocto());
-    c.remove_cohost(id, accounts(1));
-    ctx(&accounts(1), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-}
-
-#[test]
-#[should_panic(expected = "Only the host")]
-fn stranger_cannot_add_a_cohost() {
-    let (mut c, id) = setup(10);
-    let stranger: AccountId = "stranger.testnet".parse().unwrap();
-    ctx(&stranger, one_yocto());
-    c.add_cohost(id, "door.testnet".parse().unwrap());
-}
-
-#[test]
 #[should_panic(expected = "Only the host")]
 fn cohost_cannot_cancel() {
     let (mut c, id) = setup(10);
@@ -1119,12 +1014,11 @@ fn cohost_cannot_cancel() {
 #[test]
 #[should_panic(expected = "Too many co-hosts")]
 fn eleventh_cohost_is_rejected() {
-    let (mut c, id) = setup(10);
-    for i in 0..MAX_COHOSTS {
-        ctx(&accounts(0), one_yocto());
-        let account: AccountId = format!("door{i}.testnet").parse().unwrap();
-        c.add_cohost(id, account);
-    }
+    ctx(&accounts(0), NearToken::from_near(5));
+    let mut c = Contract::new(usdc(), None, None);
+    let cohosts: Vec<AccountId> =
+        (0..=MAX_COHOSTS).map(|i| format!("door{i}.testnet").parse().unwrap()).collect();
+    c.create_event(meta(), U128(10 * USDC), 10, Some(cohosts));
 }
 
 #[test]
