@@ -12,7 +12,7 @@ import type { OneClickToken } from "@/lib/oneclick";
 const INTENTS_ACCOUNT = "intents";
 
 /**
- * The one way money leaves Near Events: payouts and refunds go out through
+ * The one way money leaves Near Me: payouts and refunds go out through
  * NEAR Intents, to any chain and any wallet, or to any NEAR Intents account.
  * NEAR accounts: the escrow sends straight to the destination (one wallet
  * confirmation). EVM wallets: the relayer moves the payout into the wallet's

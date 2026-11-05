@@ -1,8 +1,8 @@
-# Put Near Events on your website
+# Put Near Me on your website
 
 Any business that runs events (a community, a coworking, a run club) can take
 deposit-backed registrations on its own site. The guest never leaves the page,
-the money sits in the Near Events contract, and there is no platform fee.
+the money sits in the Near Me contract, and there is no platform fee.
 
 Using a coding agent? Send it the prompt in [AI_INSTALL.md](AI_INSTALL.md).
 
@@ -14,7 +14,7 @@ event, match your colors, copy the code.
 ## 1. Script + element (recommended)
 
 ```html
-<script src="https://YOUR-NEAR-EVENTS-HOST/embed.js" async></script>
+<script src="https://YOUR-NEAR-ME-HOST/embed.js" async></script>
 
 <near-event event="6"></near-event>
 ```
@@ -40,7 +40,7 @@ Or your own button:
 | Attribute | Values | Default |
 |---|---|---|
 | `theme` | `light`, `dark`, `auto` (follows the visitor's OS) | `light` |
-| `accent` | any hex color, e.g. `#ff401f` | Near Events purple |
+| `accent` | any hex color, e.g. `#ff401f` | Near Me purple |
 | `font` | `geist`, `poppins`, `system` | `geist` |
 | `display` | `serif` for a serif event title (Instrument Serif) | same font |
 | `radius` | corner radius in px, 0 to 32 (buttons: any) | 16 |
@@ -78,7 +78,7 @@ the event's guest list, so nothing private is shared.
 ## 2. Iframe (when the site builder doesn't allow scripts)
 
 ```html
-<iframe src="https://YOUR-NEAR-EVENTS-HOST/embed/e/6?accent=%23ff401f&font=poppins"
+<iframe src="https://YOUR-NEAR-ME-HOST/embed/e/6?accent=%23ff401f&font=poppins"
   title="Event registration" loading="lazy"
   style="width:100%;max-width:560px;height:260px;border:0"></iframe>
 ```
@@ -88,7 +88,7 @@ the height yourself and don't get the `registered` event.
 
 ## 3. Plain link
 
-`https://YOUR-NEAR-EVENTS-HOST/e/6` works anywhere: Instagram bio, WhatsApp,
+`https://YOUR-NEAR-ME-HOST/e/6` works anywhere: Instagram bio, WhatsApp,
 email, QR code at the venue.
 
 ## How it works
@@ -102,7 +102,7 @@ your page ── embed.js ──► <iframe /embed/e/:id>  (card, read-only)
                 ◄───────────────────┘ (via the card, or straight to your page)
 ```
 
-- Sign-up happens in a small window on the Near Events domain, not inside the
+- Sign-up happens in a small window on the Near Me domain, not inside the
   iframe. Wallet pop-ups, Google/email sign-in (FastAuth) and 1Click payment
   all need a normal top-level page; inside a third-party iframe browsers block
   their storage and pop-ups. On phones the window opens as a new tab.

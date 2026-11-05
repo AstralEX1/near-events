@@ -33,7 +33,7 @@ export async function GET(req: Request) {
   if (!slug) return Response.json({ error: "Paste a link like https://lu.ma/your-event" }, { status: 400 });
 
   const res = await fetch(`https://api.lu.ma/url?url=${encodeURIComponent(slug)}`, {
-    headers: { accept: "application/json", "user-agent": "NearEvents/1.0" },
+    headers: { accept: "application/json", "user-agent": "NearMe/1.0" },
     cache: "no-store",
   }).catch(() => null);
   if (!res?.ok) return Response.json({ error: "Couldn’t read that Luma event. Is it public?" }, { status: 404 });

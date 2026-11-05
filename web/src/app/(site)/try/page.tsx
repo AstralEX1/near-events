@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Fill every slot · Near Events",
+  title: "Fill every slot · Near Me",
   description:
     "Turn sign-ups into show-ups. Create an event or embed the deposit widget on your site.",
 };
@@ -18,7 +18,7 @@ export default function TryPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full text-left">
         <Link href="/create" className="rounded-2xl border border-border bg-surface p-4 hover:border-accent/40 transition-colors">
           <div className="font-semibold">Create event</div>
-          <p className="text-sm text-muted mt-1">Host on Near Events</p>
+          <p className="text-sm text-muted mt-1">Host on Near Me</p>
         </Link>
         <Link href="/widget" className="rounded-2xl border border-border bg-surface p-4 hover:border-accent/40 transition-colors">
           <div className="font-semibold">Integrate widget</div>

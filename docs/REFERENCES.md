@@ -1,4 +1,4 @@
-# REFERENCES — all links for Near Events
+# REFERENCES — all links for Near Me
 
 One place for every repo and doc we use. Add new links here with `(date, source)`.
 Take contract addresses (USDC, intents.near) only from official docs,

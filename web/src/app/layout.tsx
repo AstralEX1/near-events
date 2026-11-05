@@ -12,7 +12,7 @@ const serif = Instrument_Serif({ variable: "--font-serif", subsets: ["latin"], w
 const rounded = Nunito({ variable: "--font-rounded", subsets: ["latin", "cyrillic"] });
 
 export const metadata: Metadata = {
-  title: "Near Events: show up, split the pool",
+  title: "Near Me: show up, split the pool",
   description: "Commit a small USDC deposit to an event. Everyone who shows up splits the pool.",
 };
 
