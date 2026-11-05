@@ -90,7 +90,7 @@ install it: [docs/AI_INSTALL.md](docs/AI_INSTALL.md).
 ```
 guest ──(any chain via 1Click | USDC from a NEAR wallet | Google login)──► NEAR Intents
                                                                               │
-host / co-host ── create_event / check_in / finalize ──► escrow contract (NEAR)
+host / co-host ── create_event / finalize(attended) ──► escrow contract (NEAR)
                                                                               │
                    pool / attendees → internal balances → withdraw through Intents
                                    (any chain via 1Click, or any Intents account)
@@ -107,9 +107,9 @@ checks it is only a Near Events registration and submits it to `intents.near`
 |---|---|---|
 | `create_event(metadata, deposit, capacity, cohosts)` | anyone (caller = host) | free: the contract pays storage from its own balance; max 5 open events per host, capacity ≤ 300, deposit ≥ 0.1 USDC; up to 10 co-hosts, fixed after creation |
 | `ft_transfer_call` → `ft_on_transfer` | guest / friend / 1Click / intents.near | `{"action":"register","event_id":N,"guest":"..."}` |
-| `check_in`, `undo_check_in` | host, co-hosts (+1 yocto) | mark who showed up; check-in batch ≤ capacity |
 | `refund_guest` | host (+1 yocto) | refund one guest who has not been checked in |
-| `finalize` | host (+1 yocto) | pool ÷ attendees to balances; remainder to host; nobody came → full refund |
+| `finalize(event_id, attended)` | host (+1 yocto) | `attended` = guests checked in at the door (kept off-chain on our server until now). Deposit: pool ÷ attendees, remainder to host, empty list → full refund. Ticket: all ticket money to the host after the start |
+| `set_paused(paused)` | owner = the account that ran `new` (+1 yocto) | stops new events and registrations; payouts, refunds and withdrawals keep working |
 | `cancel`, `refund_if_abandoned` | host (+1 yocto) / anyone after 30 days | refund every guest deposit |
 | `cleanup_event(event_id, limit)` | anyone, 7 days after close | deletes up to 100 guest records so their storage NEAR returns to the contract; payouts stay on balances |
 | `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to a NEAR account (e.g. a 1Click deposit address) or into NEAR Intents |

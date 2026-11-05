@@ -55,7 +55,7 @@ function ManageEvent() {
   };
 
   const load = useCallback(async () => {
-    const [e, g, marks] = await Promise.all([events.get(id), events.guests(id), checkIns.list(id).catch(() => ({}))]);
+    const [e, g, marks] = await Promise.all([events.get(id), events.guests(id), checkIns.list(id).catch((): Record<string, unknown> => ({}))]);
     // Door check-ins live on our server until finalize puts them on-chain.
     if (e && e.status === "Open") {
       const withMarks = g.map((x): GuestView => (marks[x.account_id] ? { ...x, status: "Attended" } : x));
