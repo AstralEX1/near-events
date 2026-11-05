@@ -168,7 +168,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         for (const call of calls) await fastAuthSend(call);
         return;
       }
-      if (kind === "evm") throw new Error("EVM wallets act through NEAR Intents; this action needs a NEAR account.");
+      if (kind === "evm") throw new Error("EVM wallets can register and withdraw. Hosting an event needs a NEAR account: sign out and sign in with Google or a NEAR wallet.");
 
       const c = connector.current;
       if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");

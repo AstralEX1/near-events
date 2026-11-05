@@ -101,7 +101,18 @@ export function RegistrationCard({
     if (kind === "evm" && accountId) intentsUsdcBalance(accountId).then(setIntentsBalance).catch(() => setIntentsBalance(0n));
   }, [kind, accountId]);
 
-  const registerViaIntents = () => run(() => registerFromIntents(accountId!, event.id, event.deposit));
+  // EVM wallets pay from their NEAR Intents balance. On testnet an empty
+  // balance gets free test USDC first (the relayer deposits it into Intents).
+  const registerViaIntents = () =>
+    run(async () => {
+      if (HAS_FAUCET && (intentsBalance ?? 0n) < BigInt(event.deposit)) {
+        setStage("Getting test USDC into NEAR Intents…");
+        const r = await fetch("/api/faucet", { method: "POST", body: JSON.stringify({ accountId }) });
+        if (!r.ok) throw new Error((await r.json()).error ?? "Faucet failed");
+      }
+      setStage("Sign in your wallet…");
+      await registerFromIntents(accountId!, event.id, event.deposit);
+    });
 
   const price = `${formatUsdc(event.deposit)} USDC`;
   const ticket = isTicket(event);
@@ -158,10 +169,10 @@ export function RegistrationCard({
       <button className="btn btn-accent w-full !py-3.5" onClick={() => setChoosing(true)}>{action} · {price}</button>
     );
   } else if (kind === "evm") {
-    const enough = intentsBalance !== null && intentsBalance >= BigInt(event.deposit);
+    const enough = HAS_FAUCET || (intentsBalance !== null && intentsBalance >= BigInt(event.deposit));
     body = enough ? (
       <button className="btn btn-accent w-full" disabled={busy} onClick={registerViaIntents}>
-        {busy ? "Sign in your wallet…" : `${action} · ${price}`}
+        {busy ? stage ?? "Sign in your wallet…" : `${action} · ${price}`}
       </button>
     ) : (
       <Link href={`/e/${event.id}/pay`} className="btn btn-accent w-full">{action} · {price}</Link>
