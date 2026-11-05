@@ -51,7 +51,7 @@ The element renders an event card with a "Register · N USDC" button. Sign-up an
 If the site sets one, allow: `script-src`, `frame-src` and `connect-src` for `https://NEAR-EVENTS-HOST`.
 
 ## Read-only API
-`GET https://NEAR-EVENTS-HOST/api/embed/EVENT_ID` → `{ id, title, starts_at, ends_at, location, status, deposit_usdc, mode, going, capacity, full }` (CORS open). `mode` is `Deposit` or `Ticket`; `deposit_usdc` is the price in both..
+`GET https://NEAR-EVENTS-HOST/api/embed/EVENT_ID` → `{ id, title, starts_at, ends_at, location, status, deposit_usdc, mode, going, capacity, full }` (CORS open). `mode` is `Deposit` or `Ticket`; `deposit_usdc` is the price in both.
 
 ## For hosts
 - Create and manage events from the Telegram bot: /new, deposit notifications, guest list, check-in, payouts and refunds (each confirmed by the host).
