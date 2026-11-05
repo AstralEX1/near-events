@@ -2,6 +2,10 @@ import { EVENTS_CONTRACT, RPC_URL, USDC_CONTRACT, USDC_DECIMALS } from "./config
 
 export type EventStatus = "Open" | "Finalized" | "Cancelled";
 export type GuestStatus = "Registered" | "Attended";
+/** Deposit: show-ups split the no-shows' deposits. Ticket: a paid ticket, money to the host after the event. Never both. */
+export type EventMode = "Deposit" | "Ticket";
+
+export const isTicket = (e: { mode?: EventMode }) => e.mode === "Ticket";
 
 export interface EventMetadata {
   title: string;
@@ -17,7 +21,10 @@ export interface EventView {
   host: string;
   cohosts: string[];
   metadata: EventMetadata;
+  /** What each guest pays: the deposit, or the ticket price when `mode` is "Ticket". */
   deposit: string;
+  /** Missing on escrows older than escrow-v4: those are always "Deposit". */
+  mode?: EventMode;
   capacity: number;
   status: EventStatus;
   guest_count: number;
@@ -85,6 +92,11 @@ export const usdc = {
 export function formatUsdc(units: string | bigint, digits = 2): string {
   const n = Number(BigInt(units)) / 10 ** USDC_DECIMALS;
   return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: digits });
+}
+
+/** "20 USDC ticket" or "10 USDC deposit". */
+export function priceLabel(e: { deposit: string; mode?: EventMode }): string {
+  return `${formatUsdc(e.deposit)} USDC ${isTicket(e) ? "ticket" : "deposit"}`;
 }
 
 export function toUnits(usd: string | number): string {

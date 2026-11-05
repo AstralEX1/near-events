@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { formatUsdc, type EventView } from "@/lib/near";
+import { formatUsdc, priceLabel, type EventView } from "@/lib/near";
 import { Cover } from "./ui";
 
 /** Luma-style list: a date on the left, that day's events as cards on the right. */
@@ -41,7 +41,7 @@ export function Timeline({ items, empty }: { items: EventView[]; empty: string }
                       ) : (
                         <>
                           <span className="inline-block px-2 py-0.5 rounded-full bg-accent-soft text-accent text-xs font-medium mr-2">
-                            {formatUsdc(e.deposit)} USDC deposit
+                            {priceLabel(e)}
                           </span>
                           <span className="text-muted">{e.guest_count >= e.capacity ? "Full" : `${e.guest_count} going`}</span>
                         </>

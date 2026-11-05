@@ -2,6 +2,8 @@
 
 > Deposit-backed event registration you can add to any website. Guests put down a small refundable USDC deposit; people who show up get it back plus an equal share of the no-shows' deposits. Funds sit in a NEAR smart contract, never with the organizer or with us. No platform fee.
 
+An event can instead sell a paid ticket (mode `Ticket`): one price per guest, held in the contract and paid to the host once the event has started; refunded if the host cancels. An event is either deposit or ticket, never both.
+
 This file is for AI coding agents adding Near Events to a host's website. Everything loads from the Near Events host that serves this file; below it is written as `https://NEAR-EVENTS-HOST` (use the origin you fetched this file from).
 
 ## Add the widget (any site)
@@ -49,7 +51,7 @@ The element renders an event card with a "Register · N USDC" button. Sign-up an
 If the site sets one, allow: `script-src`, `frame-src` and `connect-src` for `https://NEAR-EVENTS-HOST`.
 
 ## Read-only API
-`GET https://NEAR-EVENTS-HOST/api/embed/EVENT_ID` → `{ id, title, starts_at, ends_at, location, status, deposit_usdc, going, capacity, full }` (CORS open).
+`GET https://NEAR-EVENTS-HOST/api/embed/EVENT_ID` → `{ id, title, starts_at, ends_at, location, status, deposit_usdc, mode, going, capacity, full }` (CORS open). `mode` is `Deposit` or `Ticket`; `deposit_usdc` is the price in both..
 
 ## For hosts
 - Create and manage events from the Telegram bot: /new, deposit notifications, guest list, check-in, payouts and refunds (each confirmed by the host).

@@ -148,7 +148,7 @@
             b.disabled = true;
             b.textContent = e.full ? "Event is full" : "Registration closed";
           } else if (!custom) {
-            b.textContent = "Register · " + e.deposit_usdc + " USDC";
+            b.textContent = (e.mode === "Ticket" ? "Get ticket · " : "Register · ") + e.deposit_usdc + " USDC";
           }
         })
         .catch(function () {});

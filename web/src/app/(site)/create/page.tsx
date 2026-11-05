@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { events, toUnits, type EventView } from "@/lib/near";
+import { events, toUnits, type EventMode, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { Cover } from "@/components/ui";
@@ -28,7 +28,7 @@ interface When {
  */
 export default function CreateEvent() {
   const { accountId, send } = useWallet();
-  const [form, setForm] = useState({ title: "", description: "", location: "", deposit: "10", capacity: "50", cohosts: "" });
+  const [form, setForm] = useState({ title: "", description: "", location: "", deposit: "10", capacity: "50", cohosts: "", mode: "Deposit" as EventMode });
   const [when, setWhen] = useState<When | null>(null);
   const [theme, setTheme] = useState<Theme>(defaultTheme("minimal"));
   const [themeOpen, setThemeOpen] = useState(false);
@@ -58,6 +58,7 @@ export default function CreateEvent() {
         description: e.metadata.description,
         location: e.metadata.location,
         deposit: String(Number(e.deposit) / 1e6),
+        mode: e.mode ?? "Deposit",
         capacity: String(e.capacity),
         cohosts: e.cohosts.join(", "),
       }));
@@ -119,6 +120,7 @@ export default function CreateEvent() {
             deposit: toUnits(form.deposit),
             capacity,
             cohosts: form.cohosts.split(/[\s,]+/).filter(Boolean),
+            mode: form.mode,
           },
         },
       ]);
@@ -265,19 +267,51 @@ export default function CreateEvent() {
           <div className="space-y-2 pt-1">
             <div className="text-sm font-medium text-muted">Event Options</div>
             <div className="rounded-xl overflow-hidden flex flex-col lu-rows">
+              {/* One or the other, never both: a deposit pool or a paid ticket. */}
+              <div className="lu-row">
+                <Icon d="M12 8c-2.2 0-4 .9-4 2s1.8 2 4 2 4 .9 4 2-1.8 2-4 2m0-8V6m0 10v2M4 12a8 8 0 1016 0 8 8 0 00-16 0z" className="text-muted" />
+                <span className="flex-1">Guests pay</span>
+                <div className="flex gap-1 rounded-full p-0.5" style={{ background: "color-mix(in srgb, var(--text) 8%, transparent)" }} role="radiogroup" aria-label="Guests pay">
+                  {(["Deposit", "Ticket"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      role="radio"
+                      aria-checked={form.mode === m}
+                      onClick={() => setForm((f) => ({ ...f, mode: m }))}
+                      className={`px-3 py-1 rounded-full text-sm ${form.mode === m ? "bg-accent text-white" : "text-muted"}`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <OptionRow
                 icon="M4 8a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4zM14 6v12"
-                label="Deposit"
+                label={form.mode === "Ticket" ? "Ticket price" : "Deposit"}
                 value={`${form.deposit} USDC`}
-                title="Deposit"
-                help="Each guest puts this down. People who come get it back plus a share of the no-shows."
+                title={form.mode === "Ticket" ? "Ticket price" : "Deposit"}
+                help={
+                  form.mode === "Ticket"
+                    ? "Each guest pays this for a ticket. You get it after the event starts and you close it. If you cancel, every guest gets it back."
+                    : "Each guest puts this down. People who come get it back plus a share of the no-shows."
+                }
               >
                 <input className="input" type="number" min="0.1" step="0.01" required value={form.deposit} onChange={(e) => set("deposit")(e.target.value)} />
               </OptionRow>
               <div className="lu-row">
                 <Icon d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" className="text-muted" />
-                <span className="flex-1">Show-ups split no-shows</span>
-                <span className="text-muted text-sm">Always on</span>
+                {form.mode === "Ticket" ? (
+                  <>
+                    <span className="flex-1">You get paid after the event</span>
+                    <span className="text-muted text-sm">Refunds if cancelled</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1">Show-ups split no-shows</span>
+                    <span className="text-muted text-sm">Always on</span>
+                  </>
+                )}
               </div>
               <OptionRow
                 icon="M16 19v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9.5 10a3 3 0 100-6 3 3 0 000 6zM21 19v-1a4 4 0 00-3-3.9M16 4.1a3 3 0 010 5.8"
@@ -683,7 +717,7 @@ function Created({ event }: { event: EventView }) {
       <div className="space-y-3">
         <Way
           title="1 · Near Events page"
-          text="Share this link. Registration, deposit and check-in all happen here."
+          text="Share this link. Registration, payment and check-in all happen here."
           value={page}
         />
         <Way
