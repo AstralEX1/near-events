@@ -716,7 +716,7 @@ function Created({ event }: { event: EventView }) {
 
       <div className="space-y-3">
         <Way
-          title="1 · Near Events page"
+          title="1 · Near Me page"
           text="Share this link. Registration, payment and check-in all happen here."
           value={page}
         />

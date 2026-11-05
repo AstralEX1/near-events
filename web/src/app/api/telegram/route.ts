@@ -70,7 +70,7 @@ function help(chat: number) {
   return say(
     chat,
     [
-      "<b>Near Events</b> takes a refundable deposit when guests register for your events.",
+      "<b>Near Me</b> takes a refundable deposit when guests register for your events.",
       "",
       "Guests register and pay a small refundable deposit with a button on your own website. People who come get it back plus a share of the no-shows.",
       "",

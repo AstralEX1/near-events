@@ -1,9 +1,9 @@
 // The copy-paste prompt a host sends to their own coding agent (Claude Code,
 // Cursor, Codex...) to add the embed to their site. Same text as docs/AI_INSTALL.md.
 export function agentPrompt(origin: string, eventId: string, element: string): string {
-  return `Add a Near Events registration widget to this website.
+  return `Add a Near Me registration widget to this website.
 
-Near Events lets guests register for an event by putting down a small refundable USDC deposit; people who show up get it back plus a share of the no-shows. The widget is a dependency-free script that defines a <near-event> custom element. Full reference for agents: ${origin}/llms.txt
+Near Me lets guests register for an event by putting down a small refundable USDC deposit; people who show up get it back plus a share of the no-shows. The widget is a dependency-free script that defines a <near-event> custom element. Full reference for agents: ${origin}/llms.txt
 
 What to add:
 1. Load the script once per page, before </body> or in <head>:
@@ -33,5 +33,5 @@ Optional: react to registrations (show a toast, send to analytics/CRM):
 
 Do not copy embed.js into the project or modify it; load it from ${origin}. Do not add any keys or secrets: none are needed.
 
-When done, run the site locally, open the page, and confirm the event card (or button) renders and that clicking Register opens the Near Events sign-up window. Tell me which files you changed.`;
+When done, run the site locally, open the page, and confirm the event card (or button) renders and that clicking Register opens the Near Me sign-up window. Tell me which files you changed.`;
 }

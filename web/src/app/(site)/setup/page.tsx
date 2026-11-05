@@ -84,7 +84,7 @@ export default function Setup() {
     <div className="max-w-lg mx-auto space-y-5">
       <h1 className="text-3xl font-semibold tracking-tight">Mainnet setup</h1>
       <p className="text-muted">
-        Creates <b className="text-text">{ACCOUNT}</b> on NEAR mainnet, paid from your wallet, to hold the Near Events escrow.
+        Creates <b className="text-text">{ACCOUNT}</b> on NEAR mainnet, paid from your wallet, to hold the Near Me escrow.
         Use <b className="text-text">Ethereum Wallets</b> to sign with MetaMask: your 0x address is your NEAR account.
       </p>
       <div className="card p-5 space-y-4">

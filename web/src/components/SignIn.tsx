@@ -60,7 +60,7 @@ export function SignInMenu() {
         <>
           <div className="fixed inset-0" onClick={() => setOpen(false)} />
           <div className="absolute right-0 mt-2 w-72 card p-4 shadow-xl z-20">
-            <div className="font-semibold mb-1">Welcome to Near Events</div>
+            <div className="font-semibold mb-1">Welcome to Near Me</div>
             <p className="text-xs text-muted mb-3">No wallet? Sign in with Google or email; we create your NEAR account.</p>
             <SignInOptions onDone={() => setOpen(false)} />
           </div>

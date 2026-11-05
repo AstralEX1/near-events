@@ -20,7 +20,7 @@ export function Header() {
           <span className="inline-flex w-7 h-7 rounded-lg bg-accent text-white text-[13px] font-bold items-center justify-center">
             N
           </span>
-          Near Events
+          Near Me
         </Link>
         {NETWORK === "testnet" && (
           <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-accent-soft text-accent">testnet</span>

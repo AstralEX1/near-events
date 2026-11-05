@@ -95,7 +95,7 @@ export default function EmbedCard() {
                 ? `${formatUsdc(event.deposit)} USDC ticket, refunded if the host cancels`
                 : `Show up and get your ${formatUsdc(event.deposit)} USDC back plus a share of the no-shows`} ·{" "}
               <a href={`/e/${event.id}`} target="_blank" rel="noopener" className="underline underline-offset-2">
-                Near Events
+                Near Me
               </a>
             </p>
           </div>
