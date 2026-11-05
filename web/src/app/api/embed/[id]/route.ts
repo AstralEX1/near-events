@@ -17,6 +17,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/embed/[id]">) {
       location: e.metadata.location,
       status: e.status,
       deposit_usdc: formatUsdc(e.deposit),
+      mode: e.mode ?? "Deposit",
       going: e.guest_count,
       capacity: e.capacity,
       full: e.guest_count >= e.capacity,

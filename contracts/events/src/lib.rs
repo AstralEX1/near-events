@@ -16,6 +16,12 @@
 //! than the guest pays, a failed or partial registration is credited to the
 //! guest's internal balance instead of bouncing.
 //!
+//! An event runs in one of two modes, never both. `Deposit` (the default) is
+//! the Kickback pool above. `Ticket` is a plain paid ticket: the price waits in
+//! the escrow and goes to the host on `finalize`, which is allowed only once the
+//! event has started; cancel, abandon and `refund_guest` give it back. The
+//! amount a guest pays lives in `deposit` in both modes.
+//!
 //! Creating an event is free for the host. The contract pays for storage from
 //! its own NEAR balance, which the operator keeps topped up. To keep that pool
 //! from being drained: a host can have at most `MAX_OPEN_EVENTS_PER_HOST` open
@@ -82,6 +88,17 @@ pub enum EventStatus {
     Cancelled,
 }
 
+/// How the money of an event works. One or the other, never mixed.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum EventMode {
+    /// Equal deposits; people who show up split the pool.
+    #[default]
+    Deposit,
+    /// Paid ticket; the host gets the ticket money after the event.
+    Ticket,
+}
+
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GuestStatus {
@@ -106,7 +123,9 @@ pub struct Event {
     pub host: AccountId,
     pub cohosts: Vec<AccountId>,
     pub metadata: EventMetadata,
+    /// What each guest pays: the deposit, or the ticket price in `Ticket` mode.
     pub deposit: u128,
+    pub mode: EventMode,
     pub capacity: u32,
     pub status: EventStatus,
     pub guest_count: u32,
@@ -126,7 +145,11 @@ pub struct EventView {
     pub host: AccountId,
     pub cohosts: Vec<AccountId>,
     pub metadata: EventMetadata,
+    /// What each guest pays (deposit or ticket price, see `mode`).
     pub deposit: U128,
+    pub mode: EventMode,
+    /// Same as `deposit`; the name to show in a UI for both modes.
+    pub price: U128,
     pub capacity: u32,
     pub status: EventStatus,
     pub guest_count: u32,
@@ -217,9 +240,11 @@ impl Contract {
         deposit: U128,
         capacity: u32,
         cohosts: Option<Vec<AccountId>>,
+        mode: Option<EventMode>,
     ) -> u64 {
         let host = env::predecessor_account_id();
         let cohosts = cohosts.unwrap_or_default();
+        let mode = mode.unwrap_or_default();
         validate_metadata(&metadata);
         require!(deposit.0 >= MIN_DEPOSIT, "Deposit must be at least 0.1 USDC");
         require!(capacity > 0 && capacity <= MAX_CAPACITY, "Capacity out of range");
@@ -238,6 +263,7 @@ impl Contract {
             cohosts,
             metadata,
             deposit: deposit.0,
+            mode,
             capacity,
             status: EventStatus::Open,
             guest_count: 0,
@@ -249,7 +275,7 @@ impl Contract {
         });
         self.open_events.insert(host.clone(), open + 1);
 
-        emit("event_created", json!({ "event_id": id, "host": host, "deposit": deposit }));
+        emit("event_created", json!({ "event_id": id, "host": host, "deposit": deposit, "mode": mode }));
         id
     }
 
@@ -347,14 +373,19 @@ impl Contract {
         emit("guest_refunded", json!({ "event_id": event_id, "account_id": account_id, "amount": U128(deposit) }));
     }
 
-    /// Splits the pool between attendees. Host only.
-    /// If nobody attended, everyone gets their deposit back.
+    /// Closes the event. Host only.
+    /// `Deposit`: splits the pool between attendees; if nobody attended,
+    /// everyone gets their deposit back.
+    /// `Ticket`: pays all ticket money to the host, once the event has started.
     #[payable]
     pub fn finalize(&mut self, event_id: u64) {
         near_sdk::assert_one_yocto();
         let event = self.event(event_id);
         require!(env::predecessor_account_id() == event.host, "Only the host");
         require!(event.status == EventStatus::Open, "Event is closed");
+        if event.mode == EventMode::Ticket {
+            return self.finalize_tickets(event_id);
+        }
         if event.attended_count == 0 {
             return self.close_with_refunds(event_id, EventStatus::Finalized);
         }
@@ -379,7 +410,7 @@ impl Contract {
         self.mark_closed(event_id, EventStatus::Finalized);
         emit(
             "finalized",
-            json!({ "event_id": event_id, "attended": attended, "payout_per_attendee": U128(share) }),
+            json!({ "event_id": event_id, "mode": EventMode::Deposit, "attended": attended, "payout_per_attendee": U128(share) }),
         );
     }
 
@@ -638,6 +669,28 @@ impl FungibleTokenReceiver for Contract {
 }
 
 impl Contract {
+    /// `Ticket` mode close: the host gets every ticket, attended or not.
+    /// Not before the start, so a host cannot sell tickets and take the money
+    /// long before the event; until then cancel and abandon still refund.
+    fn finalize_tickets(&mut self, event_id: u64) {
+        let event = self.event(event_id);
+        require!(
+            env::block_timestamp_ms() >= event.metadata.starts_at,
+            "Ticket money is released once the event has started"
+        );
+        let host = event.host.clone();
+        let total = event.deposit * event.guest_count as u128;
+        let attended = event.attended_count;
+        if total > 0 {
+            self.credit(&host, total);
+        }
+        self.mark_closed(event_id, EventStatus::Finalized);
+        emit(
+            "finalized",
+            json!({ "event_id": event_id, "mode": EventMode::Ticket, "attended": attended, "paid_to_host": U128(total) }),
+        );
+    }
+
     /// A payment made for someone else never bounces: the USDC stays on that
     /// guest's balance. The guest pays for their own seat, so a bad payment
     /// still refunds through the token.
@@ -829,10 +882,14 @@ fn view_event(id: u64, e: &Event) -> EventView {
         cohosts: e.cohosts.clone(),
         metadata: e.metadata.clone(),
         deposit: U128(e.deposit),
+        mode: e.mode,
+        price: U128(e.deposit),
         capacity: e.capacity,
         status: e.status,
         guest_count: e.guest_count,
         attended_count: e.attended_count,
+        // Deposit mode: the pool attendees split. Ticket mode: ticket money
+        // held for the host until `finalize`.
         total_pool: U128(e.deposit * e.guest_count as u128),
         payout_per_attendee: U128(e.payout_per_attendee),
         created_at: e.created_at,
