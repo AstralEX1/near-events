@@ -5,7 +5,7 @@ mainnet clip once mainnet is live. Speak over it, or add captions. (2026-11-04, 
 
 | Time | Show | Say |
 |---|---|---|
-| 0:00–0:15 | Home page | "Free meetups lose half their guests. Near Events: everyone puts down 5 USDC, people who show up split the pool. No fee." |
+| 0:00–0:15 | Home page | "Free meetups lose half their guests. Near Me: everyone puts down 5 USDC, people who show up split the pool. No fee." |
 | 0:15–0:35 | Event page | "Deposits sit in a NEAR escrow, not with the host. Same small deposit for every guest. Creating the event cost the host nothing." |
 | 0:35–0:55 | Click *Continue with Google*, then *Register · 5 USDC* | "No wallet needed: I log in with Google, FastAuth gives me a NEAR account, and I register in one click." |
 | 0:55–1:15 | *Pay from any chain* screen | "Or pay with ETH on Base, or anything else: NEAR Intents swaps it to exactly 5 USDC and registers me in the same transfer. MetaMask users sign one intent, no gas." |

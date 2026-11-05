@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   }
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
   if (!isOurTransaction(sign_payload)) {
-    return Response.json({ error: "Only Near Events transactions are relayed" }, { status: 400 });
+    return Response.json({ error: "Only Near Me transactions are relayed" }, { status: 400 });
   }
   try {
     const outcome = await relayer().callFunctionRaw({

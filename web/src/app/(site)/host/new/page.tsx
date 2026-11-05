@@ -103,7 +103,7 @@ export default function ConfirmEvent() {
       )}
       {error && <p className="text-sm text-warn break-words">{error}</p>}
       <p className="text-xs text-muted">
-        Creating an event is free (up to 5 open events at a time). The Near Events bot is added as
+        Creating an event is free (up to 5 open events at a time). The Near Me bot is added as
         co-host so it can check guests in. Payouts and refunds always need your confirmation.
       </p>
     </div>

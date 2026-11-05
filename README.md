@@ -1,4 +1,4 @@
-# Near Events: show up, split the pool
+# Near Me: show up, split the pool
 
 Kickback-style events on NEAR. Every guest puts down the same small USDC deposit.
 Guests who show up get their deposit back plus an equal share of the no-shows'
@@ -76,7 +76,7 @@ to their wallet.
 Any business can take deposit-backed registrations on its own site with two lines:
 
 ```html
-<script src="https://YOUR-NEAR-EVENTS-HOST/embed.js" async></script>
+<script src="https://YOUR-NEAR-ME-HOST/embed.js" async></script>
 <near-event event="6" accent="#ff401f"></near-event>
 ```
 
@@ -100,7 +100,7 @@ Contract: `contracts/events/src/lib.rs` (86 unit tests in `tests.rs`).
 
 **EVM wallet flow (mainnet):** the guest signs an ERC-191 intent
 `ft_withdraw {token: USDC, receiver_id: escrow, msg: register}`; `/api/intents/execute`
-checks it is only a Near Events registration and submits it to `intents.near`
+checks it is only a Near Me registration and submits it to `intents.near`
 (`execute_intents`), which calls `ft_transfer_call` on the escrow.
 
 | Method | Who | What |

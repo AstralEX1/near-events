@@ -1,7 +1,7 @@
 "use client";
 
 // Guests who sign in with an EVM wallet (MetaMask, Rabby, Coinbase…). Their
-// NEAR Events account is their NEAR Intents account: the lowercase 0x address.
+// Near Me account is their NEAR Intents account: the lowercase 0x address.
 // They never hold NEAR: they sign intents with their wallet (ERC-191) and our
 // relayer submits them to intents.near, paying the gas.
 import { baseEncode } from "near-api-js";

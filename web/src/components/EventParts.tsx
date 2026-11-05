@@ -135,7 +135,7 @@ function icsUrl(event: EventView, url: string): string {
   const ics = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Near Events//EN",
+    "PRODID:-//Near Me//EN",
     "BEGIN:VEVENT",
     `UID:near-events-${event.id}@near-events`,
     `DTSTAMP:${fmt(Date.now())}`,
