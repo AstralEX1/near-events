@@ -24,9 +24,9 @@ Hackathon track focus: Real-World Money (USDC, NEAR Intents, gasless onboarding)
 
 | What | Account |
 |---|---|
-| Event escrow (the web app's default) | [`escrow-tp2.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-tp2.nearevents-11022103.testnet) |
+| Event escrow (the web app's default: deposits or paid tickets, check-in off-chain, `finalize` with the attendee list) | [`escrow-tp3.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-tp3.nearevents-11022103.testnet) |
 | Test USDC (Tidepool faucet) | [`usdc.tidepool-sandbox.testnet`](https://testnet.nearblocks.io/address/usdc.tidepool-sandbox.testnet) |
-| Previous escrow code (deposit only) on our own test USDC, used by the script below | [`escrow-v3.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-v3.nearevents-11022103.testnet) + [`usdc-nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/usdc-nearevents-11022103.testnet) |
+| Older escrow code with on-chain check-in (kept for history): `escrow-tp2` (tickets), `escrow-tp` and `escrow-v3` (deposit only, our own test USDC `usdc-nearevents-11022103.testnet`) | not used by the app |
 
 NEAR Intents itself has no testnet. On testnet the Intents paths run on
 [Tidepool](https://www.usetidepool.tech/docs), a 1Click sandbox with the official
@@ -52,24 +52,26 @@ npm run dev                     # http://localhost:3000
 3. Click “Register · 5 USDC”. On testnet the test USDC comes from the faucet, then
    the deposit goes into the escrow and you appear under “going”.
 4. Create your own event at `/create` (free) and add a friend as co-host.
-5. As host or co-host open “Manage & check in guests”, tick who came and click
-   *Check in*. The page shows what each attendee will receive.
-6. Click “Close event & pay out”. Each attendee's share lands on their balance.
+5. As host or co-host open “Manage & check in guests” and tick who came. The
+   first tick asks your wallet (or Google account) to sign a message once; the
+   marks are kept on our server, no transaction per guest. The page shows what
+   each attendee will receive.
+6. Click “Close event & pay out”. This one transaction sends the list of who
+   came to the contract, and each attendee's share lands on their balance.
 7. Press Withdraw on the event page or `/me`: send the payout through NEAR
    Intents to any chain (via 1Click) or to any NEAR Intents account.
 
 Without a browser, the whole cycle runs from a script (uses your own testnet
-accounts from `~/.near-credentials`). It mints from our own test USDC, so it runs
-against escrow-v3, which has the same code as the app's escrow:
+accounts from `~/.near-credentials`; Tidepool's faucet tops the guest up with test USDC):
 
 ```bash
 cd web
-EVENTS_CONTRACT=escrow-v3.nearevents-11022103.testnet USDC_CONTRACT=usdc-nearevents-11022103.testnet \
-HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet node scripts/smoke-testnet.mjs
+export EVENTS_CONTRACT=escrow-tp3.nearevents-11022103.testnet HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet
+node scripts/smoke-intents-testnet.mjs   # deposit via 1Click → finalize(attended) → cash out to Base and into Intents
+node scripts/smoke-tickets-testnet.mjs   # paid ticket → finalize after the start → cancel refunds
 ```
 
-Expected output ends with `"status":"Finalized"` and the guest's balance moving back
-to their wallet.
+Both print each step and end with the payouts landing (checked on 2026-11-05).
 
 ## Embed on your website
 
@@ -96,7 +98,7 @@ host / co-host ── create_event / finalize(attended) ──► escrow contrac
                                    (any chain via 1Click, or any Intents account)
 ```
 
-Contract: `contracts/events/src/lib.rs` (86 unit tests in `tests.rs`).
+Contract: `contracts/events/src/lib.rs` (91 unit tests in `tests.rs`).
 
 **EVM wallet flow (mainnet):** the guest signs an ERC-191 intent
 `ft_withdraw {token: USDC, receiver_id: escrow, msg: register}`; `/api/intents/execute`
@@ -129,7 +131,7 @@ reach the guest; it lands on the guest's balance instead. Capacity is capped at
 
 ```bash
 cd contracts
-cargo test -p near-events                       # 86 unit tests
+cargo test -p near-events                       # 91 unit tests
 cargo test -p test-usdc                         # faucet guards
 cargo test -p near-events-sandbox               # local NEAR sandbox
 cd events && cargo near build non-reproducible-wasm
