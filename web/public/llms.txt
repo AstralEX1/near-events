@@ -13,7 +13,7 @@ This file is for AI coding agents adding Near Me to a host's website. Everything
 2. Put the element next to the event, where guests would sign up:
    `<near-event event="EVENT_ID" mode="button"></near-event>`
 
-The site keeps its own event page. The host creates the event on Near Me and copies its button code from /widget. The button opens hosted checkout and can reopen the guest's QR pass, payout or refund. Never copy or modify embed.js; always load it from the host. The widget needs no API keys or secrets.
+The site keeps its own event page. The host pastes a Luma or BaliSquad link at /widget, creates the event on Near Me and copies its button code (for an existing event: /widget?event=ID). The button opens hosted checkout and can reopen the guest's QR pass, payout or refund. Never copy or modify embed.js; always load it from the host. The widget needs no API keys or secrets.
 
 ### Attributes
 - `mode="button"`: only the button
