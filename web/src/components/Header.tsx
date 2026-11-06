@@ -7,14 +7,14 @@ import { NETWORK } from "@/lib/config";
 import { Avatar, shortAccount } from "./ui";
 import { SignInMenu } from "./SignIn";
 
-/** Logo, Create and Events links, plus the account menu. */
+/** Logo, Create, Integrate and Events links, plus the account menu. */
 export function Header() {
   const { accountId, signOut } = useWallet();
   const path = usePathname() || "/";
 
   return (
     <header className="sticky top-0 z-10 backdrop-blur bg-bg/90 border-b border-border">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-4">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-2 sm:gap-4 whitespace-nowrap">
         <Link href="/" className="font-semibold tracking-tight flex items-center gap-2">
           <span className="inline-flex w-7 h-7 rounded-lg bg-accent text-white text-[13px] font-bold items-center justify-center">
             N
@@ -22,7 +22,7 @@ export function Header() {
           Near Me
         </Link>
         {NETWORK === "testnet" && (
-          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-accent-soft text-accent">testnet</span>
+          <span className="hidden sm:inline text-[11px] font-medium px-2 py-0.5 rounded-full bg-accent-soft text-accent">testnet</span>
         )}
         <nav className="ml-auto flex items-center gap-1 sm:gap-2 text-sm">
           <Link href="/events" className="hidden sm:inline text-muted hover:text-text px-2">
@@ -33,6 +33,12 @@ export function Header() {
             className={`px-2 py-1 rounded-lg ${path.startsWith("/create") ? "text-text font-medium" : "text-muted hover:text-text"}`}
           >
             Create
+          </Link>
+          <Link
+            href="/widget"
+            className={`px-2 py-1 rounded-lg ${path.startsWith("/widget") ? "text-text font-medium" : "text-muted hover:text-text"}`}
+          >
+            Integrate
           </Link>
           {accountId ? (
             <>
