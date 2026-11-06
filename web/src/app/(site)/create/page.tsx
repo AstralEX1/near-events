@@ -1,14 +1,14 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { events, toUnits, type EventMode, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
-import { Cover } from "@/components/ui";
+import { EventSetup } from "@/components/EventSetup";
 import { SignInOptions } from "@/components/SignIn";
 import { LOCAL_TZ, city, dayLabel, fromEpoch, gmtLabel, toEpoch } from "@/lib/time";
-import type { ImportedEvent } from "@/lib/eventImport";
+import { detectEventSource, fitImportedEvent, IMPORT_ENDPOINT, type ImportedEvent } from "@/lib/eventImport";
 
 
 const SLOTS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
@@ -19,15 +19,44 @@ interface When {
   tz: string;
 }
 
-/** Create an event with its public details and escrow options. */
-export default function CreateEvent() {
+const DEPOSIT_HELP = "Each guest puts this down. People who come get it back plus a share of the no-shows.";
+const TICKET_HELP = "Each guest pays this for a ticket. You get it after the event starts and you close it. If you cancel, every guest gets it back.";
+
+export default function CreatePage() {
+  return (
+    <Suspense fallback={<p className="max-w-2xl mx-auto text-sm text-muted">Loading…</p>}>
+      <CreateEvent />
+    </Suspense>
+  );
+}
+
+/**
+ * Create an event with its public details and escrow options.
+ * /create?flow=widget&import=<link> is the Integrate flow: the event is imported on load,
+ * and the host has to choose how guests pay, the amount and the capacity themselves.
+ */
+function CreateEvent() {
   const { accountId, send } = useWallet();
-  const [form, setForm] = useState({ title: "", location: "", description: "", deposit: "10", capacity: "50", cohosts: "", mode: "Deposit" as EventMode });
+  const params = useSearchParams();
+  const integrate = params.get("flow") === "widget";
+  const importOnLoad = params.get("import");
+  const [form, setForm] = useState({
+    title: "",
+    location: "",
+    description: "",
+    deposit: integrate ? "" : "10",
+    capacity: integrate ? "" : "50",
+    cohosts: "",
+    mode: (integrate ? null : "Deposit") as EventMode | null,
+  });
   const [when, setWhen] = useState<When | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [importUrl, setImportUrl] = useState("");
+  const [importUrl, setImportUrl] = useState(importOnLoad ?? "");
   const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [loadingImport, setLoadingImport] = useState(Boolean(importOnLoad));
   const [imported, setImported] = useState<string | null>(null);
+  const [shortened, setShortened] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<EventView | null>(null);
@@ -64,40 +93,52 @@ export default function CreateEvent() {
   }, []);
 
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const amountLabel = form.mode === "Ticket" ? "Ticket price" : form.mode === "Deposit" ? "Deposit" : "Amount";
 
-  const importEvent = async () => {
+  const importEvent = async (link: string) => {
     setImporting(true);
-    setError(null);
+    setImportError(null);
     try {
-      const isBaliSquad = (() => {
-        try {
-          const value = importUrl.trim();
-          const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`);
-          return ["balisquad.com", "www.balisquad.com"].includes(url.hostname);
-        } catch {
-          return false;
-        }
-      })();
-      const source = isBaliSquad ? "BaliSquad" : "Luma";
-      const endpoint = isBaliSquad ? "/api/balisquad/import" : "/api/luma/import";
-      const r = await fetch(`${endpoint}?url=${encodeURIComponent(importUrl)}`);
+      // An unknown link goes to Luma too: its importer explains what a good link looks like.
+      const source = detectEventSource(link) ?? "Luma";
+      const r = await fetch(`${IMPORT_ENDPOINT[source]}?url=${encodeURIComponent(link)}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Import failed");
-      const event = j as ImportedEvent;
+      const { event, shortened } = fitImportedEvent(j as ImportedEvent);
+      setShortened(shortened);
       setForm((f) => ({ ...f, title: event.title, location: event.location, description: event.description }));
       setWhen((w) => ({ tz: w?.tz ?? LOCAL_TZ, start: event.starts_at, end: event.ends_at }));
       setImported(source);
       setImportOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setImportError(e instanceof Error ? e.message : String(e));
+      setImportOpen(true);
     } finally {
       setImporting(false);
     }
   };
 
+  // Integrate flow: the link was given on the previous screen, so don't ask for it again.
+  const importStarted = useRef(false);
+  useEffect(() => {
+    if (!importOnLoad || importStarted.current) return;
+    importStarted.current = true;
+    importEvent(importOnLoad).finally(() => setLoadingImport(false));
+  }, [importOnLoad]);
+
+  const amount = Number(form.deposit);
+  const seats = Number(form.capacity);
+  const missing = !form.mode
+    ? "Choose Deposit or Ticket to continue."
+    : !(amount >= 0.1)
+      ? `Set the ${form.mode === "Ticket" ? "ticket price" : "deposit"}: at least 0.1 USDC.`
+      : !(Number.isInteger(seats) && seats >= 1 && seats <= 300)
+        ? "Set the capacity: 1 to 300 guests."
+        : null;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!when) return;
+    if (!when || missing || !form.mode) return;
     if (!accountId) return setAskSignIn(true);
     if (when.end <= when.start) return setError("The event has to end after it starts.");
     setBusy(true);
@@ -136,6 +177,7 @@ export default function CreateEvent() {
       // The new event is the latest one this account created with this title.
       const latest = (await events.list()).find((ev) => ev.host === accountId && ev.metadata.title === title);
       if (latest) setCreated(latest);
+      else setError("Your event was created, but we couldn’t load it yet. Find it on your profile page.");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -143,11 +185,19 @@ export default function CreateEvent() {
     }
   };
 
-  if (created) return <Created event={created} />;
+  if (created) return <EventSetup event={created} integrate={integrate} />;
+  if (loadingImport) {
+    return (
+      <p className="max-w-2xl mx-auto text-sm text-muted" role="status">
+        Importing your event from {detectEventSource(importOnLoad ?? "") ?? "the link"}…
+      </p>
+    );
+  }
 
   return (
     <>
       <form onSubmit={submit} className="max-w-2xl mx-auto space-y-4 pb-40">
+          {integrate && <p className="text-sm text-muted">Registration for your website</p>}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="lu-chip">
               {accountId ? <span className="truncate max-w-44">{accountId}</span> : "Your events"}
@@ -171,11 +221,12 @@ export default function CreateEvent() {
                 value={importUrl}
                 onChange={(e) => setImportUrl(e.target.value)}
               />
-              <button type="button" className="btn btn-primary !py-1.5 text-sm" disabled={!importUrl.trim() || importing} onClick={importEvent}>
+              <button type="button" className="btn btn-primary !py-1.5 text-sm" disabled={!importUrl.trim() || importing} onClick={() => importEvent(importUrl)}>
                 {importing ? "Importing…" : "Import"}
               </button>
             </div>
           )}
+          {importError && <p className="text-sm text-warn break-words">{importError}</p>}
 
           <textarea
             required
@@ -193,8 +244,9 @@ export default function CreateEvent() {
           <div className="space-y-3">
             <label className="block space-y-1.5">
               <span className="label">Location (optional)</span>
-              <input
-                className="lu-field w-full px-3 py-2 text-sm"
+              <textarea
+                rows={1}
+                className="lu-field w-full px-3 py-2 text-sm resize-none [field-sizing:content]"
                 value={form.location}
                 onChange={(e) => set("location")(e.target.value)}
                 placeholder="Venue or address"
@@ -209,6 +261,7 @@ export default function CreateEvent() {
                 placeholder="Description, host contacts, and useful links"
               />
             </label>
+            {shortened && <p className="text-xs text-warn">We shortened the imported location or details to fit on chain. Check them before creating.</p>}
             <p className="text-xs text-muted">Location and event details are public on Near Me and stored in the event’s NEAR metadata.</p>
           </div>
 
@@ -236,14 +289,10 @@ export default function CreateEvent() {
               </div>
               <OptionRow
                 icon="M4 8a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4zM14 6v12"
-                label={form.mode === "Ticket" ? "Ticket price" : "Deposit"}
-                value={`${form.deposit} USDC`}
-                title={form.mode === "Ticket" ? "Ticket price" : "Deposit"}
-                help={
-                  form.mode === "Ticket"
-                    ? "Each guest pays this for a ticket. You get it after the event starts and you close it. If you cancel, every guest gets it back."
-                    : "Each guest puts this down. People who come get it back plus a share of the no-shows."
-                }
+                label={amountLabel}
+                value={form.deposit ? `${form.deposit} USDC` : "Set"}
+                title={amountLabel}
+                help={form.mode === "Ticket" ? TICKET_HELP : form.mode === "Deposit" ? DEPOSIT_HELP : "What each guest pays, in USDC."}
               >
                 <input className="input" type="number" min="0.1" step="0.01" required value={form.deposit} onChange={(e) => set("deposit")(e.target.value)} />
               </OptionRow>
@@ -254,17 +303,19 @@ export default function CreateEvent() {
                     <span className="flex-1">You get paid after the event</span>
                     <span className="text-muted text-sm">Refunds if cancelled</span>
                   </>
-                ) : (
+                ) : form.mode === "Deposit" ? (
                   <>
                     <span className="flex-1">Show-ups split no-shows</span>
                     <span className="text-muted text-sm">Always on</span>
                   </>
+                ) : (
+                  <span className="flex-1 text-muted">Choose how guests pay</span>
                 )}
               </div>
               <OptionRow
                 icon="M16 19v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9.5 10a3 3 0 100-6 3 3 0 000 6zM21 19v-1a4 4 0 00-3-3.9M16 4.1a3 3 0 010 5.8"
                 label="Capacity"
-                value={form.capacity}
+                value={form.capacity || "Set"}
                 title="Max capacity"
                 help="Up to 300 guests. Registration closes when it's full."
               >
@@ -280,10 +331,17 @@ export default function CreateEvent() {
                 <input className="input" value={form.cohosts} onChange={(e) => set("cohosts")(e.target.value)} placeholder="alice.near, bob.near" />
               </OptionRow>
             </div>
+            {!form.mode && (
+              <div className="text-xs text-muted space-y-1">
+                <p>Deposit: {DEPOSIT_HELP}</p>
+                <p>Ticket: {TICKET_HELP}</p>
+              </div>
+            )}
           </div>
 
           {error && <p className="text-sm text-warn break-words">{error}</p>}
-          <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy}>
+          {missing && <p className="text-sm text-muted">{missing}</p>}
+          <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy || !!missing}>
             {busy ? "Confirm in your wallet…" : "Create Event"}
           </button>
           <p className="text-xs text-muted/80">
@@ -495,101 +553,5 @@ function OptionRow({ icon, label, value, title, help, children }: { icon: string
         </div>
       )}
     </>
-  );
-}
-
-/** After creating: share the event page, quick checkout, or simple site button. */
-function Created({ event }: { event: EventView }) {
-  const [origin, setOrigin] = useState("");
-  const [copiedCode, setCopiedCode] = useState(false);
-  useEffect(() => setOrigin(window.location.origin), []);
-  const page = `${origin}/e/${event.id}`;
-  const checkout = `${origin}/p/${event.id}`;
-  const buttonCode = `<script src="${origin}/embed.js" async></script>\n<near-event event="${event.id}" mode="button"></near-event>`;
-  return (
-    <div className="max-w-xl mx-auto space-y-6">
-      <div className="flex gap-4 items-center">
-        <Cover event={event} className="w-20 h-20 rounded-xl shrink-0 [&>span]:hidden" />
-        <div>
-          <div className="text-sm text-good font-medium">✓ Event created</div>
-          <h1 className="text-2xl font-semibold tracking-tight">{event.metadata.title}</h1>
-          <p className="text-sm text-muted mt-1">Your event page, quick checkout, and host controls are ready.</p>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <Way
-          title="Event page on Near Me"
-          text="Share this link. Registration, payment and check-in all happen here."
-          value={page}
-        />
-        <Way
-          title="Quick checkout link"
-          text="Use this in a message, or put it behind any button on your site."
-          value={checkout}
-        />
-        <div className="card p-4 space-y-3">
-          <div>
-            <div className="font-medium">Checkout button for your site</div>
-            <p className="text-sm text-muted mt-1">This opens the quick checkout. Guests can return to the same button for their QR pass or payout.</p>
-          </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-bg p-3 text-xs">{buttonCode}</pre>
-          <button
-            type="button"
-            className="btn btn-ghost !py-1.5 text-sm self-start"
-            disabled={!origin}
-            onClick={() => navigator.clipboard.writeText(buttonCode).then(() => {
-              setCopiedCode(true);
-              setTimeout(() => setCopiedCode(false), 1500);
-            })}
-          >
-            {copiedCode ? "Copied" : "Copy button code"}
-          </button>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        <Link href={`/e/${event.id}`} className="btn btn-primary">
-          Open event page
-        </Link>
-        <Link href={`/e/${event.id}/manage`} className="btn btn-ghost">
-          Manage guests &amp; check-in
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-function Way({
-  title,
-  text,
-  value,
-}: {
-  title: string;
-  text: string;
-  value: string;
-}) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="card p-4 space-y-2">
-      <div className="font-medium">{title}</div>
-      <p className="text-sm text-muted">{text}</p>
-      <div className="flex gap-2">
-        <code className="flex-1 min-w-0 truncate text-xs bg-bg rounded-lg px-3 py-2 border border-border">{value}</code>
-        <button
-          type="button"
-          className="btn btn-ghost !py-1.5 text-sm"
-          disabled={!value}
-          onClick={() =>
-            navigator.clipboard.writeText(value).then(() => {
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            })
-          }
-        >
-          {copied ? "Copied" : "Copy"}
-        </button>
-      </div>
-    </div>
   );
 }

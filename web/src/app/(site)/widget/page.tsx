@@ -1,14 +1,76 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { events, type EventView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
+import { detectEventSource } from "@/lib/eventImport";
+import { aiPrompt, buttonCode, checkoutLink } from "@/lib/integration";
+import { Snippet } from "@/components/Snippet";
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+// /widget starts the Integrate flow; /widget?event=<id> is the setup for an event that already exists.
+export default function WidgetPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
+      <WidgetRoute />
+    </Suspense>
+  );
+}
+
+function WidgetRoute() {
+  const requested = useSearchParams().get("event");
+  return requested ? <WidgetBuilder requested={requested} /> : <IntegrateStart />;
+}
+
+/** First step of the Integrate flow: one event link, then the prefilled creation form. */
+function IntegrateStart() {
+  const router = useRouter();
+  const [link, setLink] = useState("");
+  const source = detectEventSource(link);
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (source) router.push(`/create?flow=widget&import=${encodeURIComponent(link.trim())}`);
+  };
+
+  return (
+    <form onSubmit={submit} className="max-w-2xl mx-auto space-y-4 pb-16">
+      <div className="space-y-3 pb-2">
+        <h1 className="text-3xl font-semibold tracking-tight">Add registration to your site</h1>
+        <p className="text-muted">Paste your event link. We bring over the details, then you choose how guests pay.</p>
+      </div>
+      <label className="block space-y-1.5">
+        <span className="label">Luma or BaliSquad event link</span>
+        <input
+          autoFocus
+          className="lu-field w-full px-3 py-2 text-sm"
+          inputMode="url"
+          autoComplete="off"
+          placeholder="https://lu.ma/your-event"
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
+        />
+      </label>
+      <div className="min-h-[1.875rem]" aria-live="polite">
+        {source && <span className="lu-chip">✓ {source} event</span>}
+        {!source && link.trim() && <p className="text-sm text-warn">Use a public event link from Luma or BaliSquad.</p>}
+      </div>
+      <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={!source}>
+        Continue
+      </button>
+      <p className="text-sm text-muted">
+        No event page yet?{" "}
+        <Link href="/create" className="underline hover:text-text">
+          Create an event
+        </Link>
+      </p>
+    </form>
+  );
+}
 
 /** Add one registration button to an existing event page. */
-export default function WidgetBuilder() {
+function WidgetBuilder({ requested }: { requested: string }) {
   const { accountId } = useWallet();
   const [list, setList] = useState<EventView[]>([]);
   const [eventId, setEventId] = useState("");
@@ -16,15 +78,13 @@ export default function WidgetBuilder() {
   const [origin, setOrigin] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [copied, setCopied] = useState<"button" | "link" | null>(null);
 
   useEffect(() => {
     setOrigin(window.location.origin);
-    const requested = new URLSearchParams(window.location.search).get("event");
     events
       .list()
       .then(async (items) => {
-        if (requested && /^(0|[1-9]\d*)$/.test(requested) && Number.isSafeInteger(Number(requested))
+        if (/^(0|[1-9]\d*)$/.test(requested) && Number.isSafeInteger(Number(requested))
           && !items.some((e) => String(e.id) === requested)) {
           const event = await events.get(Number(requested));
           if (event) items = [event, ...items];
@@ -32,32 +92,18 @@ export default function WidgetBuilder() {
         setList(items);
         setEventId((current) => {
           if (current && items.some((e) => String(e.id) === current)) return current;
-          if (requested && items.some((e) => String(e.id) === requested)) return requested;
+          if (items.some((e) => String(e.id) === requested)) return requested;
           return String(items.find((e) => e.status === "Open")?.id ?? items[0]?.id ?? "");
         });
       })
       .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
-  }, []);
+  }, [requested]);
 
   const selected = list.find((e) => String(e.id) === eventId);
-  const thenValue = then.trim();
-  const thenAttribute = thenValue ? ` then="${esc(thenValue)}"` : "";
-  const buttonCode = eventId
-    ? `<script src="${origin}/embed.js" async></script>\n<near-event event="${esc(eventId)}" mode="button"${thenAttribute}></near-event>`
-    : "";
-  const linkCode = eventId
-    ? `${origin}/p/${eventId}${thenValue ? `?then=${encodeURIComponent(thenValue)}` : ""}`
-    : "";
+  const target = { origin, eventId, then: then.trim() };
 
   const mine = (event: EventView) => !!accountId && (event.host === accountId || event.cohosts.includes(accountId));
-  const copy = async (kind: "button" | "link") => {
-    const value = kind === "button" ? buttonCode : linkCode;
-    if (!selected || !value) return;
-    await navigator.clipboard.writeText(value);
-    setCopied(kind);
-    setTimeout(() => setCopied(null), 1500);
-  };
 
   return (
     <div className="max-w-3xl space-y-8">
@@ -110,18 +156,23 @@ export default function WidgetBuilder() {
           <Snippet
             title="Button code"
             note="After payment, the checkout shows the guest’s QR pass. This button can reopen the pass or payout page later."
-            code={buttonCode}
-            copied={copied === "button"}
+            code={eventId ? buttonCode(target) : ""}
             disabled={!selected}
-            onCopy={() => copy("button")}
+            placeholder="Choose an event first."
+          />
+          <Snippet
+            title="AI prompt"
+            note="Send this to the coding agent working on your site. It adds the button for you."
+            code={selected ? aiPrompt(target, selected.mode ?? "Deposit") : ""}
+            long
+            placeholder="Choose an event first."
           />
           <Snippet
             title="Direct checkout link"
             note="Use this in a message or where your site builder does not allow scripts."
-            code={linkCode}
-            copied={copied === "link"}
+            code={eventId ? checkoutLink(target) : ""}
             disabled={!selected}
-            onCopy={() => copy("link")}
+            placeholder="Choose an event first."
           />
           <p className="text-sm text-muted">
             Create events and manage guests in Near Me. On event day, guests show their QR pass; after the event closes, eligible guests can claim their payout from the same checkout page.
@@ -137,37 +188,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     <div className="space-y-1.5">
       <div className="label">{label}</div>
       {children}
-    </div>
-  );
-}
-
-function Snippet({
-  title,
-  note,
-  code,
-  copied,
-  disabled,
-  onCopy,
-}: {
-  title: string;
-  note?: string;
-  code: string;
-  copied: boolean;
-  disabled: boolean;
-  onCopy: () => void;
-}) {
-  return (
-    <div className="card overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-border">
-        <div className="min-w-0">
-          <div className="text-sm font-medium">{title}</div>
-          {note && <div className="text-xs text-muted">{note}</div>}
-        </div>
-        <button type="button" className="btn btn-ghost !py-1 !px-3 text-sm ml-auto" onClick={onCopy} disabled={disabled}>
-          {copied ? "Copied" : "Copy"}
-        </button>
-      </div>
-      <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-all">{code || "Choose an event first."}</pre>
     </div>
   );
 }

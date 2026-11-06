@@ -2,7 +2,7 @@
 
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { events, type EventView, type GuestStatus } from "@/lib/near";
+import { events, isTicket, type EventView, type GuestStatus } from "@/lib/near";
 import { embedQuery, embedVars, readEmbedStyle, readThen, type EmbedMessage } from "@/lib/embed";
 import { useWallet } from "@/lib/wallet";
 import { Cover, formatWhen } from "@/components/ui";
@@ -71,7 +71,7 @@ export default function EmbedJoin() {
             )}
             {status && then && (
               <div className="text-center space-y-2">
-                <p className="text-sm text-muted">Deposit paid. One more step on the organizer’s side:</p>
+                <p className="text-sm text-muted">{isTicket(event) ? "Ticket paid." : "Deposit paid."} One more step on the organizer’s side:</p>
                 <a href={then} className="btn btn-accent w-full !py-3.5">Finish registration →</a>
               </div>
             )}
