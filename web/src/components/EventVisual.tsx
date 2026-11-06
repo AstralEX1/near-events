@@ -3,19 +3,39 @@
 import type { CSSProperties, ReactNode } from "react";
 import { resolveEventVisual, type EventVisualConfig } from "@/lib/event-visuals";
 
+function layerCount(images: string): number {
+  let depth = 0;
+  let count = 1;
+  for (const char of images) {
+    if (char === "(") depth++;
+    else if (char === ")") depth--;
+    else if (char === "," && depth === 0) count++;
+  }
+  return count;
+}
+
 export function VisualBackdrop({ visual, className = "", children }: { visual: EventVisualConfig; className?: string; children?: ReactNode }) {
   const resolved = resolveEventVisual(visual);
   const [dark, mid, light] = resolved.colors;
-  const baseBackground = `radial-gradient(ellipse at 78% 18%, ${light}70, transparent 48%), linear-gradient(135deg, ${dark}, ${mid} 58%, ${dark})`;
-  const backgroundImage = resolved.backgroundAsset
-    ? `linear-gradient(135deg, #08121a20, #08121a85), url("${resolved.backgroundAsset}")`
-    : baseBackground;
+  const textureLayers = layerCount(resolved.texture);
+  const overlay = resolved.backgroundAsset
+    ? "linear-gradient(135deg, #08121a20, #08121a85)"
+    : `radial-gradient(ellipse at 78% 18%, ${light}70, transparent 48%), linear-gradient(135deg, ${dark}, ${mid} 58%, ${dark})`;
+  const backgroundImage = `${resolved.texture}, ${overlay}${resolved.backgroundAsset ? `, url("${resolved.backgroundAsset}")` : ""}`;
+  const backgroundPosition = resolved.backgroundAsset
+    ? `${Array(textureLayers).fill("center").join(", ")}, ${resolved.backgroundPosition}, ${resolved.backgroundPosition}`
+    : "center";
+  const backgroundSize = resolved.backgroundAsset
+    ? `${Array(textureLayers).fill("auto").join(", ")}, ${resolved.backgroundSize}, ${resolved.backgroundSize}`
+    : undefined;
+  const backgroundRepeat = resolved.backgroundAsset
+    ? `${Array(textureLayers).fill("repeat").join(", ")}, no-repeat, no-repeat`
+    : undefined;
   return (
     <div
       className={`relative isolate overflow-hidden ${className}`}
-      style={{ backgroundColor: dark, backgroundImage, backgroundSize: resolved.backgroundAsset ? "cover, cover" : undefined, backgroundPosition: "center" }}
+      style={{ backgroundColor: dark, backgroundImage, backgroundSize, backgroundPosition, backgroundRepeat }}
     >
-      <div aria-hidden="true" className="absolute inset-0 z-0 opacity-50" style={{ backgroundImage: resolved.texture }} />
       <div className="relative z-10 flex h-full w-full flex-col justify-end">{children}</div>
     </div>
   );
@@ -41,9 +61,23 @@ export function EventPoster({ title, visual, coverUrl = null, className = "" }: 
   const icon = "icon" in theme ? theme.icon : undefined;
   const mark = theme.mark;
   const iconClass = theme.id === "near" ? "brightness-0 invert" : "";
-  const backgroundImage = safeCover
-    ? `${resolved.texture}, linear-gradient(160deg, #0003, #0009), url("${safeCover}")`
-    : `${resolved.texture}, radial-gradient(ellipse at 75% 15%, ${light}a6, transparent 50%), linear-gradient(145deg, ${dark}, ${mid} 58%, ${dark})`;
+  const imageAsset = safeCover || resolved.coverAsset;
+  const imagePosition = safeCover ? "center" : resolved.coverPosition;
+  const imageSize = safeCover ? "cover" : resolved.coverSize;
+  const textureLayers = layerCount(resolved.texture);
+  const overlay = imageAsset
+    ? `linear-gradient(160deg, ${dark}65, #0009)`
+    : `radial-gradient(ellipse at 75% 15%, ${light}a6, transparent 50%), linear-gradient(145deg, ${dark}, ${mid} 58%, ${dark})`;
+  const backgroundImage = `${resolved.texture}, ${overlay}${imageAsset ? `, url("${imageAsset}")` : ""}`;
+  const backgroundPosition = imageAsset
+    ? `${Array(textureLayers).fill("center").join(", ")}, ${imagePosition}, ${imagePosition}`
+    : "center";
+  const backgroundSize = imageAsset
+    ? `${Array(textureLayers).fill("auto").join(", ")}, ${imageSize}, ${imageSize}`
+    : undefined;
+  const backgroundRepeat = imageAsset
+    ? `${Array(textureLayers).fill("repeat").join(", ")}, no-repeat, no-repeat`
+    : undefined;
   const titleStyle: CSSProperties = {
     position: "absolute",
     top: layout === "center" ? "50%" : layout === "offset" ? "42%" : undefined,
@@ -57,7 +91,7 @@ export function EventPoster({ title, visual, coverUrl = null, className = "" }: 
     textShadow: "0 2px 18px #0009",
   };
   return (
-    <div className={`relative isolate overflow-hidden text-white ${className}`} style={{ containerType: "inline-size", backgroundColor: dark, backgroundImage, backgroundSize: safeCover ? "auto, cover, cover" : undefined, backgroundPosition: "center" }}>
+    <div className={`relative isolate overflow-hidden text-white ${className}`} style={{ containerType: "inline-size", backgroundColor: dark, backgroundImage, backgroundSize, backgroundPosition, backgroundRepeat }}>
       <div className="relative flex items-center gap-2 px-[7%] pt-[7%] text-[clamp(0.48rem,1.5vw,0.72rem)] font-semibold uppercase tracking-[0.18em] text-white/80">
         {icon ? <img src={icon} alt="" aria-hidden="true" className={`h-5 w-5 object-contain opacity-90 ${iconClass}`} /> : <span className="leading-none">{mark}</span>}
         <span className="leading-none">{theme.name}</span>

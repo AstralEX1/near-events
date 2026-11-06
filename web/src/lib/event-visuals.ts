@@ -30,6 +30,11 @@ export interface ResolvedEventVisual {
   config: EventVisualConfig;
   theme: (typeof EVENT_THEMES)[number];
   backgroundAsset: string | null;
+  backgroundPosition: string;
+  backgroundSize: string;
+  coverAsset: string | null;
+  coverPosition: string;
+  coverSize: string;
   texture: string;
   colors: [string, string, string];
   fontFamily: string;
@@ -45,6 +50,14 @@ const PARADISE_BACKGROUNDS = [
   "/event-themes/paradise/canggu-surf.jpg",
   "/event-themes/paradise/canggu-coworking.png",
 ] as const;
+const AI_TEXTURE_SHEET = "/event-themes/ai/ai-brand-panels.png";
+const AI_PANEL_POSITION: Partial<Record<EventThemeId, string>> = {
+  claude: "0% center",
+  codex: "25% center",
+  cursor: "50% center",
+  grok: "75% center",
+  hermes: "100% center",
+};
 
 const PALETTES: Record<EventThemeId, [string, string, string][]> = {
   ethereum: [["#171735", "#6959d9", "#8ce4de"], ["#172b42", "#536ad0", "#d8b8ff"], ["#32204a", "#ab79d6", "#89daca"]],
@@ -159,10 +172,17 @@ export function resolveEventVisual(config: EventVisualConfig): ResolvedEventVisu
   const theme = EVENT_THEMES.find((item) => item.id === config.themeId) ?? EVENT_THEMES[0];
   const variant = safeSeed % 3;
   const layout = (["center", "lower", "offset"] as const)[(safeSeed >>> 4) % 3];
+  const aiPanel = AI_PANEL_POSITION[theme.id] ?? null;
+  const paradiseImage = theme.id === "paradise" ? PARADISE_BACKGROUNDS[(safeSeed >>> 8) % PARADISE_BACKGROUNDS.length] : null;
   return {
     config: { themeId: theme.id, seed: safeSeed },
     theme,
-    backgroundAsset: theme.id === "paradise" ? PARADISE_BACKGROUNDS[(safeSeed >>> 8) % PARADISE_BACKGROUNDS.length] : null,
+    backgroundAsset: paradiseImage ?? (aiPanel ? AI_TEXTURE_SHEET : null),
+    backgroundPosition: aiPanel ?? "center",
+    backgroundSize: aiPanel ? "500% 100%" : "cover",
+    coverAsset: aiPanel ? AI_TEXTURE_SHEET : null,
+    coverPosition: aiPanel ?? "center",
+    coverSize: aiPanel ? "500% 100%" : "cover",
     texture: TEXTURES[theme.id][variant],
     colors: PALETTES[theme.id][variant],
     fontFamily: FONTS[(safeSeed >>> 12) % FONTS.length],
