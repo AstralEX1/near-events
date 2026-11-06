@@ -94,6 +94,23 @@ export default function EventPage() {
             </div>
           </div>
 
+          {(event.metadata.location || event.metadata.description) && (
+            <div className="card p-4 space-y-4">
+              {event.metadata.location && (
+                <section className="space-y-1">
+                  <h2 className="font-medium">Location</h2>
+                  <PublicText value={event.metadata.location} />
+                </section>
+              )}
+              {event.metadata.description && (
+                <section className="space-y-1">
+                  <h2 className="font-medium">Event details</h2>
+                  <PublicText value={event.metadata.description} />
+                </section>
+              )}
+            </div>
+          )}
+
           <div className="card overflow-hidden bg-surface/80 backdrop-blur">
             <div className="px-4 py-2.5 text-sm font-medium text-muted border-b border-border">Registration</div>
             <div className="p-4">
@@ -104,6 +121,26 @@ export default function EventPage() {
           {event.status !== "Open" && <GuestGrid event={event} guests={guests} me={accountId} />}
         </section>
       </div>
+  );
+}
+
+function PublicText({ value }: { value: string }) {
+  return (
+    <p className="text-sm text-muted whitespace-pre-wrap break-words">
+      {value.split(/(https?:\/\/[^\s]+)/g).map((part, index) => {
+        if (!/^https?:\/\//i.test(part)) return <span key={index}>{part}</span>;
+        const match = part.match(/^(.*?)([),.;!?]*)$/);
+        const href = match?.[1] ?? part;
+        const tail = match?.[2] ?? "";
+        try {
+          const url = new URL(href);
+          if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return <span key={index}>{part}</span>;
+          return <span key={index}><a href={url.href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-text">{href}</a>{tail}</span>;
+        } catch {
+          return <span key={index}>{part}</span>;
+        }
+      })}
+    </p>
   );
 }
 
@@ -140,7 +177,7 @@ function MoreMenu({ id, isStaff }: { id: number; isStaff: boolean }) {
                 <div className="border-t border-border my-1" />
                 <Link className={item} href={`/e/${id}/manage`}>Manage event</Link>
                 <Link className={item} href={`/create?from=${id}`}>Duplicate event</Link>
-                <Link className={item} href={`/widget?event=${id}`}>Put it on your website</Link>
+                <Link className={item} href={`/e/${id}/manage?tab=registration`}>Get quick checkout button</Link>
               </>
             )}
           </div>

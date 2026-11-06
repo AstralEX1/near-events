@@ -8,6 +8,7 @@ import { useWallet } from "@/lib/wallet";
 import { Cover } from "@/components/ui";
 import { SignInOptions } from "@/components/SignIn";
 import { LOCAL_TZ, city, dayLabel, fromEpoch, gmtLabel, toEpoch } from "@/lib/time";
+import type { ImportedEvent } from "@/lib/eventImport";
 
 
 const SLOTS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
@@ -18,13 +19,13 @@ interface When {
   tz: string;
 }
 
-/** Create an event with its title, time, and escrow options. */
+/** Create an event with its public details and escrow options. */
 export default function CreateEvent() {
   const { accountId, send } = useWallet();
-  const [form, setForm] = useState({ title: "", deposit: "10", capacity: "50", cohosts: "", mode: "Deposit" as EventMode });
+  const [form, setForm] = useState({ title: "", location: "", description: "", deposit: "10", capacity: "50", cohosts: "", mode: "Deposit" as EventMode });
   const [when, setWhen] = useState<When | null>(null);
-  const [lumaOpen, setLumaOpen] = useState(false);
-  const [lumaUrl, setLumaUrl] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -45,6 +46,8 @@ export default function CreateEvent() {
       setForm((f) => ({
         ...f,
         title: e.metadata.title,
+        location: e.metadata.location,
+        description: e.metadata.description,
         deposit: String(Number(e.deposit) / 1e6),
         mode: e.mode ?? "Deposit",
         capacity: String(e.capacity),
@@ -62,17 +65,29 @@ export default function CreateEvent() {
 
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  const importLuma = async () => {
+  const importEvent = async () => {
     setImporting(true);
     setError(null);
     try {
-      const r = await fetch(`/api/luma/import?url=${encodeURIComponent(lumaUrl)}`);
+      const isBaliSquad = (() => {
+        try {
+          const value = importUrl.trim();
+          const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`);
+          return ["balisquad.com", "www.balisquad.com"].includes(url.hostname);
+        } catch {
+          return false;
+        }
+      })();
+      const source = isBaliSquad ? "BaliSquad" : "Luma";
+      const endpoint = isBaliSquad ? "/api/balisquad/import" : "/api/luma/import";
+      const r = await fetch(`${endpoint}?url=${encodeURIComponent(importUrl)}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Import failed");
-      setForm((f) => ({ ...f, title: j.title }));
-      setWhen((w) => ({ tz: w?.tz ?? LOCAL_TZ, start: new Date(j.starts_at).getTime(), end: new Date(j.ends_at).getTime() }));
-      setImported(lumaUrl.trim());
-      setLumaOpen(false);
+      const event = j as ImportedEvent;
+      setForm((f) => ({ ...f, title: event.title, location: event.location, description: event.description }));
+      setWhen((w) => ({ tz: w?.tz ?? LOCAL_TZ, start: event.starts_at, end: event.ends_at }));
+      setImported(source);
+      setImportOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -94,6 +109,10 @@ export default function CreateEvent() {
       if (encoder.encode(title).length > 120) {
         throw new Error("Title is too long. Shorten it and try again.");
       }
+      const location = form.location.trim();
+      const description = form.description.trim();
+      if (encoder.encode(location).length > 300) throw new Error("Location is too long. Shorten it and try again.");
+      if (encoder.encode(description).length > 2000) throw new Error("Event details are too long. Shorten them and try again.");
       await send([
         {
           receiverId: EVENTS_CONTRACT,
@@ -101,8 +120,8 @@ export default function CreateEvent() {
           args: {
             metadata: {
               title,
-              description: "",
-              location: "",
+              description,
+              location,
               cover_url: null,
               starts_at: when.start,
               ends_at: when.end,
@@ -134,8 +153,8 @@ export default function CreateEvent() {
               {accountId ? <span className="truncate max-w-44">{accountId}</span> : "Your events"}
             </span>
             <div className="flex items-center gap-2">
-              <button type="button" className="lu-chip lu-hover" onClick={() => setLumaOpen(!lumaOpen)}>
-                {imported ? "✓ Imported from Luma" : "Import from Luma"}
+              <button type="button" className="lu-chip lu-hover" onClick={() => setImportOpen(!importOpen)}>
+                {imported ? `✓ Imported from ${imported}` : "Import event"}
               </button>
               <span className="lu-chip" title="Every event is public in v1">
                 <Icon d="M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18" size={14} />
@@ -143,16 +162,16 @@ export default function CreateEvent() {
               </span>
             </div>
           </div>
-          {lumaOpen && (
+          {importOpen && (
             <div className="lu-field p-2 flex gap-2">
               <input
                 autoFocus
                 className="flex-1 min-w-0 bg-transparent px-2 outline-none text-sm"
-                placeholder="Paste your lu.ma link"
-                value={lumaUrl}
-                onChange={(e) => setLumaUrl(e.target.value)}
+                placeholder="Paste a Luma or BaliSquad event link"
+                value={importUrl}
+                onChange={(e) => setImportUrl(e.target.value)}
               />
-              <button type="button" className="btn btn-primary !py-1.5 text-sm" disabled={!lumaUrl.trim() || importing} onClick={importLuma}>
+              <button type="button" className="btn btn-primary !py-1.5 text-sm" disabled={!importUrl.trim() || importing} onClick={importEvent}>
                 {importing ? "Importing…" : "Import"}
               </button>
             </div>
@@ -170,6 +189,28 @@ export default function CreateEvent() {
           />
 
           {when && <WhenBlock when={when} onChange={setWhen} />}
+
+          <div className="space-y-3">
+            <label className="block space-y-1.5">
+              <span className="label">Location (optional)</span>
+              <input
+                className="lu-field w-full px-3 py-2 text-sm"
+                value={form.location}
+                onChange={(e) => set("location")(e.target.value)}
+                placeholder="Venue or address"
+              />
+            </label>
+            <label className="block space-y-1.5">
+              <span className="label">Event details (optional)</span>
+              <textarea
+                className="lu-field w-full px-3 py-2 text-sm min-h-28 resize-y"
+                value={form.description}
+                onChange={(e) => set("description")(e.target.value)}
+                placeholder="Description, host contacts, and useful links"
+              />
+            </label>
+            <p className="text-xs text-muted">Location and event details are public on Near Me and stored in the event’s NEAR metadata.</p>
+          </div>
 
           <div className="space-y-2 pt-1">
             <div className="text-sm font-medium text-muted">Event Options</div>
@@ -246,10 +287,7 @@ export default function CreateEvent() {
             {busy ? "Confirm in your wallet…" : "Create Event"}
           </button>
           <p className="text-xs text-muted/80">
-            You get an event page and a widget for your own site.{" "}
-            <Link href="/widget" className="underline underline-offset-2 hover:text-text">
-              How the widget works
-            </Link>
+            One event gives you a full Near Me page, a quick checkout link, and a button code for your site. Manage guests and check-in in the event admin.
           </p>
       </form>
       {askSignIn && <SignInDialog onClose={() => setAskSignIn(false)} />}
@@ -460,12 +498,14 @@ function OptionRow({ icon, label, value, title, help, children }: { icon: string
   );
 }
 
-/** After creating: share our page, or embed on the host’s own site. */
+/** After creating: share the event page, quick checkout, or simple site button. */
 function Created({ event }: { event: EventView }) {
   const [origin, setOrigin] = useState("");
+  const [copiedCode, setCopiedCode] = useState(false);
   useEffect(() => setOrigin(window.location.origin), []);
   const page = `${origin}/e/${event.id}`;
-  const widget = `${origin}/widget?event=${event.id}`;
+  const checkout = `${origin}/p/${event.id}`;
+  const buttonCode = `<script src="${origin}/embed.js" async></script>\n<near-event event="${event.id}" mode="button"></near-event>`;
   return (
     <div className="max-w-xl mx-auto space-y-6">
       <div className="flex gap-4 items-center">
@@ -473,28 +513,39 @@ function Created({ event }: { event: EventView }) {
         <div>
           <div className="text-sm text-good font-medium">✓ Event created</div>
           <h1 className="text-2xl font-semibold tracking-tight">{event.metadata.title}</h1>
-          <p className="text-sm text-muted mt-1">Share the page, or put the widget on your own site.</p>
+          <p className="text-sm text-muted mt-1">Your event page, quick checkout, and host controls are ready.</p>
         </div>
       </div>
 
       <div className="space-y-3">
         <Way
-          title="1 · Near Me page"
+          title="Event page on Near Me"
           text="Share this link. Registration, payment and check-in all happen here."
           value={page}
         />
         <Way
-          title="2 · Your own website"
-          text="Two lines of code, or paste a prompt into Cursor / Claude and let it add the widget."
-          value={widget}
-          link
-          linkLabel="Open integrate guide"
-          extra={
-            <Link href={widget} className="text-sm font-medium text-accent hover:underline">
-              Want to integrate on your website? →
-            </Link>
-          }
+          title="Quick checkout link"
+          text="Use this in a message, or put it behind any button on your site."
+          value={checkout}
         />
+        <div className="card p-4 space-y-3">
+          <div>
+            <div className="font-medium">Checkout button for your site</div>
+            <p className="text-sm text-muted mt-1">This opens the quick checkout. Guests can return to the same button for their QR pass or payout.</p>
+          </div>
+          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-bg p-3 text-xs">{buttonCode}</pre>
+          <button
+            type="button"
+            className="btn btn-ghost !py-1.5 text-sm self-start"
+            disabled={!origin}
+            onClick={() => navigator.clipboard.writeText(buttonCode).then(() => {
+              setCopiedCode(true);
+              setTimeout(() => setCopiedCode(false), 1500);
+            })}
+          >
+            {copiedCode ? "Copied" : "Copy button code"}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -502,10 +553,7 @@ function Created({ event }: { event: EventView }) {
           Open event page
         </Link>
         <Link href={`/e/${event.id}/manage`} className="btn btn-ghost">
-          Manage event
-        </Link>
-        <Link href={widget} className="btn btn-ghost">
-          Integrate widget
+          Manage guests &amp; check-in
         </Link>
       </div>
     </div>
@@ -516,43 +564,31 @@ function Way({
   title,
   text,
   value,
-  link,
-  linkLabel,
-  extra,
 }: {
   title: string;
   text: string;
   value: string;
-  link?: boolean;
-  linkLabel?: string;
-  extra?: ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="card p-4 space-y-2">
       <div className="font-medium">{title}</div>
       <p className="text-sm text-muted">{text}</p>
-      {extra}
       <div className="flex gap-2">
         <code className="flex-1 min-w-0 truncate text-xs bg-bg rounded-lg px-3 py-2 border border-border">{value}</code>
-        {link ? (
-          <a href={value} className="btn btn-ghost !py-1.5 text-sm">
-            {linkLabel ?? "Open"}
-          </a>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-ghost !py-1.5 text-sm"
-            onClick={() =>
-              navigator.clipboard.writeText(value).then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
-              })
-            }
-          >
-            {copied ? "Copied" : "Copy"}
-          </button>
-        )}
+        <button
+          type="button"
+          className="btn btn-ghost !py-1.5 text-sm"
+          disabled={!value}
+          onClick={() =>
+            navigator.clipboard.writeText(value).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            })
+          }
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
       </div>
     </div>
   );
