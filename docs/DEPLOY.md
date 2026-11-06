@@ -1,8 +1,8 @@
 # Web app hosting and escrow release
 
-Status last checked on 2026-11-06: the testnet escrow deployment is recorded
-below; the Vercel hosting steps had not been run. Recheck before using this as a
-current deployment status.
+Status last checked on 2026-11-07: testnet contract behavior was verified with
+transactions and the local UI (step 4); the Vercel hosting steps had not been
+run. Recheck before using this as a current deployment status.
 
 ## Vercel (recommended)
 1. Import the public repo in Vercel, **Root Directory = `web`**, framework Next.js
@@ -82,10 +82,15 @@ for future storage commitments.
    A mismatch is a release blocker. Confirm the target chain supports the SDK's
    minimum protocol version before deploying. The current lockfile uses
    `near-sdk` 5.29.1 (minimum protocol 84); 5.30.0 requires protocol 88, so
-   check the target RPC again before upgrading the SDK or releasing.
-4. Before a hosted testnet demo, run the Tidepool and ERC-191 smoke scripts against
-   the intended escrow and application. They assert delivery, registration and
-   refunds. These live payment checks have not been run on `tp4`.
+   check the target RPC again before upgrading the SDK or releasing. This
+   read-only code-hash check does not replace transaction-based behavior checks.
+4. On 2026-11-07, transaction and local UI checks passed on `tp4`: the UI created
+   event 1, bought a 0.1 test-USDC ticket, confirmed the guest registration, and
+   reopened the QR through `/e/1` and `/p/1`. Event 0 was finalized and its 1 USDC
+   payout withdrawn to Intents. The ERC-191 registration and relayed-refund smoke
+   passed on event 2. The direct ticket smoke script timed out waiting for an RPC
+   receipt, but read-only chain views confirmed its registration and pool. Vercel,
+   hosted sign-in/check-in, and Upstash behavior remain unchecked.
 5. Before enabling mainnet cross-chain payments, verify 1Click credits the
    guest's Intents account, the wallet signs registration and the escrow records it.
    Repeat with ERC-191 through the app relayer. Verify that a rejected registration
