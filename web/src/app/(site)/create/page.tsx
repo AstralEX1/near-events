@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { events, toUnits, type EventMode, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
@@ -11,7 +12,9 @@ import { createRandomEventVisual, createRandomVisual, type EventVisualConfig } f
 import { rememberEventVisual } from "@/lib/event-visual-client";
 import { SignInOptions } from "@/components/SignIn";
 import { LOCAL_TZ, city, dayLabel, fromEpoch, gmtLabel, toEpoch } from "@/lib/time";
-import type { EventDetails, ImportedEvent } from "@/lib/eventImport";
+import { detectEventSource, IMPORT_ENDPOINT, locationProblem, type EventDetails, type ImportedEvent } from "@/lib/eventImport";
+import { createStep, integrationUrl, parseMode, startUrl, validAmount } from "@/lib/flow";
+import { StartStep } from "@/components/StartStep";
 
 
 const SLOTS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
@@ -22,14 +25,44 @@ interface When {
   tz: string;
 }
 
+export default function CreatePage() {
+  return (
+    <Suspense>
+      <CreateRoute />
+    </Suspense>
+  );
+}
+
+/** /create starts with how guests pay, then opens the detailed form. flow=widget is the Integrate flow. */
+function CreateRoute() {
+  const params = useSearchParams();
+  const step = createStep(params);
+  if (step === "form") return <CreateEvent />;
+  return <StartStep widget={step === "start-widget"} initial={{ mode: params.get("mode"), amount: params.get("amount"), link: params.get("import") }} />;
+}
+
 /** Create an event with its public details and escrow options. */
-export default function CreateEvent() {
+function CreateEvent() {
   const { accountId, send, staffToken } = useWallet();
-  const [form, setForm] = useState({ title: "", location: "", description: "", cover_url: "", deposit: "10", capacity: "50", cohosts: "", mode: "Deposit" as EventMode });
+  const router = useRouter();
+  const params = useSearchParams();
+  const integrate = params.get("flow") === "widget";
+  const importOnArrival = integrate ? params.get("import") : null;
+  const [form, setForm] = useState({
+    title: "",
+    location: "",
+    description: "",
+    cover_url: "",
+    deposit: params.get("amount") ?? "10",
+    capacity: "50",
+    cohosts: "",
+    mode: parseMode(params.get("mode")) ?? ("Deposit" as EventMode),
+  });
   const [when, setWhen] = useState<When | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importUrl, setImportUrl] = useState("");
-  const [importing, setImporting] = useState(false);
+  const [importing, setImporting] = useState(Boolean(importOnArrival));
+  const [arrivalError, setArrivalError] = useState<string | null>(null);
   const [imported, setImported] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +74,7 @@ export default function CreateEvent() {
   const [savingDetails, setSavingDetails] = useState(false);
   const [visualSaveError, setVisualSaveError] = useState<string | null>(null);
   const [savingVisual, setSavingVisual] = useState(false);
+  const [savesDone, setSavesDone] = useState(false);
   // Like Luma, the form is open to everyone; signing in is asked for on "Create Event".
   const [askSignIn, setAskSignIn] = useState(false);
   useEffect(() => {
@@ -92,40 +126,53 @@ export default function CreateEvent() {
 
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  const importEvent = async () => {
+  const importEvent = async (link: string, onArrival = false) => {
     setImporting(true);
     setError(null);
     try {
-      const isBaliSquad = (() => {
-        try {
-          const value = importUrl.trim();
-          const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`);
-          return ["balisquad.com", "www.balisquad.com"].includes(url.hostname);
-        } catch {
-          return false;
-        }
-      })();
-      const source = isBaliSquad ? "BaliSquad" : "Luma";
-      const endpoint = isBaliSquad ? "/api/balisquad/import" : "/api/luma/import";
-      const r = await fetch(`${endpoint}?url=${encodeURIComponent(importUrl)}`);
+      const source = detectEventSource(link) ?? "Luma";
+      const r = await fetch(`${IMPORT_ENDPOINT[source]}?url=${encodeURIComponent(link)}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Import failed");
       const event = j as ImportedEvent;
       setForm((f) => ({ ...f, title: event.title, location: event.location, description: event.description, cover_url: event.cover_url ?? "" }));
-      if (isBaliSquad) setEventVisual(createRandomVisual("paradise"));
+      if (source === "BaliSquad") setEventVisual(createRandomVisual("paradise"));
       setWhen((w) => ({ tz: w?.tz ?? LOCAL_TZ, start: event.starts_at, end: event.ends_at }));
       setImported(source);
       setImportOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      if (onArrival) setArrivalError(message);
+      else setError(message);
     } finally {
       setImporting(false);
     }
   };
 
+  // Integrate flow: the link came from the start step, so import it right away, once.
+  const arrivalImportStarted = useRef(false);
+  useEffect(() => {
+    if (!importOnArrival || arrivalImportStarted.current) return;
+    arrivalImportStarted.current = true;
+    void importEvent(importOnArrival, true);
+  }, [importOnArrival]);
+
+  // Integrate flow ends in the event's Integration tab, once its details are saved.
+  const saved = Boolean(created) && savesDone && !savingDetails && !savingVisual && !detailsSaveError && !visualSaveError;
+  useEffect(() => {
+    if (integrate && saved && created) router.replace(integrationUrl(created.id));
+  }, [integrate, saved, created, router]);
+
+  const amountOk = validAmount(form.deposit);
+  const seats = Number(form.capacity);
+  const seatsOk = Number.isInteger(seats) && seats >= 1 && seats <= 300;
+  const missing = !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? "Set the capacity: 1 to 300" : undefined;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!when) return;
+    if (!when || missing) return;
+    const badLocation = locationProblem(form.location);
+    if (badLocation) return setError(badLocation);
     if (!accountId) return setAskSignIn(true);
     if (when.end <= when.start) return setError("The event has to end after it starts.");
     setBusy(true);
@@ -143,7 +190,6 @@ export default function CreateEvent() {
       const rawCoverUrl = form.cover_url.trim();
       const coverUrl = rawCoverUrl ? safeImageUrl(rawCoverUrl) : null;
       if (rawCoverUrl && !coverUrl) throw new Error("Use a public HTTP or HTTPS image link for the cover image.");
-      if (encoder.encode(location).length > 1000) throw new Error("Location is too long. Shorten it and try again.");
       if (encoder.encode(description).length > 10_000) throw new Error("Event details are too long. Shorten them and try again.");
       const submittedAt = Date.now();
       // Theme, image, font and random-seed choices are presentation data; save them off-chain below.
@@ -223,6 +269,7 @@ export default function CreateEvent() {
           setSavingDetails(false);
         }
       }
+      setSavesDone(true);
     } catch (err) {
       setError(transactionSent
         ? "The event may already be created. Refresh before trying again to avoid creating a duplicate."
@@ -261,6 +308,18 @@ export default function CreateEvent() {
     }
   };
 
+  if (arrivalError) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-3">
+        <p className="text-sm text-warn break-words">{arrivalError}</p>
+        <Link href={startUrl({ mode: form.mode, amount: form.deposit, link: importOnArrival ?? undefined }, true)} className="btn btn-ghost inline-flex">
+          Back
+        </Link>
+      </div>
+    );
+  }
+  if (importOnArrival && !imported && importing) return <p className="max-w-2xl mx-auto text-sm text-muted" role="status">Importing…</p>;
+  if (created && integrate && !detailsSaveError && !visualSaveError) return <p className="max-w-2xl mx-auto text-sm text-muted" role="status">Opening integration…</p>;
   if (created) return <Created event={created} visual={createdVisual} coverUrl={createdDetails?.cover_url} detailsSaveError={detailsSaveError} savingDetails={savingDetails} onRetry={retryDetailsSave} visualSaveError={visualSaveError} savingVisual={savingVisual} onRetryVisual={retryVisualSave} />;
 
   return (
@@ -289,7 +348,7 @@ export default function CreateEvent() {
                 value={importUrl}
                 onChange={(e) => setImportUrl(e.target.value)}
               />
-              <button type="button" className="btn btn-primary !py-1.5 text-sm" disabled={!importUrl.trim() || importing} onClick={importEvent}>
+              <button type="button" className="btn btn-primary !py-1.5 text-sm" disabled={!importUrl.trim() || importing} onClick={() => importEvent(importUrl)}>
                 {importing ? "Importing…" : "Import"}
               </button>
             </div>
@@ -313,12 +372,16 @@ export default function CreateEvent() {
           <div className="space-y-3">
             <label className="block space-y-1.5">
               <span className="label">Location (optional)</span>
-              <textarea
-                rows={3}
-                className="lu-field w-full px-3 py-2 text-sm resize-y"
+              <input
+                className="lu-field w-full px-3 py-2 text-sm"
+                inputMode="url"
+                autoComplete="off"
                 value={form.location}
-                onChange={(e) => set("location")(e.target.value)}
-                placeholder="Venue or address"
+                onChange={(e) => {
+                  setError(null);
+                  set("location")(e.target.value);
+                }}
+                placeholder="Google Maps link"
               />
             </label>
             <label className="block space-y-1.5">
@@ -342,7 +405,6 @@ export default function CreateEvent() {
               />
               {safeImageUrl(form.cover_url) && <img src={safeImageUrl(form.cover_url)!} alt="Custom cover image preview" referrerPolicy="no-referrer" className="w-full max-h-56 rounded-xl object-cover" />}
             </label>
-            <p className="text-xs text-muted">The title cover and theme background stay separate. Paradise uses a Bali photo for the page background. Visual settings, location, details, and cover image are stored off-chain.</p>
           </div>
 
           <div className="space-y-2 pt-1">
@@ -371,6 +433,7 @@ export default function CreateEvent() {
                 icon="M4 8a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4zM14 6v12"
                 label={form.mode === "Ticket" ? "Ticket price" : "Deposit"}
                 value={`${form.deposit} USDC`}
+                attention={!amountOk}
                 title={form.mode === "Ticket" ? "Ticket price" : "Deposit"}
                 help={
                   form.mode === "Ticket"
@@ -398,6 +461,7 @@ export default function CreateEvent() {
                 icon="M16 19v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9.5 10a3 3 0 100-6 3 3 0 000 6zM21 19v-1a4 4 0 00-3-3.9M16 4.1a3 3 0 010 5.8"
                 label="Capacity"
                 value={form.capacity}
+                attention={!seatsOk}
                 title="Max capacity"
                 help="Up to 300 guests. Registration closes when it's full."
               >
@@ -416,12 +480,9 @@ export default function CreateEvent() {
           </div>
 
           {error && <p className="text-sm text-warn break-words">{error}</p>}
-          <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy}>
-            {busy ? "Confirm in your wallet…" : "Create Event"}
+          <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy || !!missing} title={missing}>
+            {busy ? "Confirm in your wallet…" : integrate ? "Integrate" : "Create Event"}
           </button>
-          <p className="text-xs text-muted/80">
-            One event gives you a full Near Me page, a quick checkout link, and a button code for your site. Manage guests and check-in in the event admin.
-          </p>
       </form>
       {askSignIn && <SignInDialog onClose={() => setAskSignIn(false)} />}
     </>
@@ -605,14 +666,14 @@ function TzBox({ tz, at, onChange }: { tz: string; at: number; onChange: (tz: st
   );
 }
 
-function OptionRow({ icon, label, value, title, help, children }: { icon: string; label: string; value: string; title: string; help: string; children: ReactNode }) {
+function OptionRow({ icon, label, value, title, help, attention, children }: { icon: string; label: string; value: string; title: string; help: string; attention?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <button type="button" className="lu-row lu-hover text-left" onClick={() => setOpen(true)}>
         <Icon d={icon} className="text-muted" />
         <span className="flex-1">{label}</span>
-        <span className="text-muted font-medium">{value}</span>
+        <span className={`font-medium ${attention ? "text-warn" : "text-muted"}`}>{value}</span>
         <Icon d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4" size={14} className="text-muted" />
       </button>
       {open && (
@@ -644,11 +705,9 @@ function Created({ event, visual, coverUrl, detailsSaveError, savingDetails, onR
   onRetryVisual: () => void;
 }) {
   const [origin, setOrigin] = useState("");
-  const [copiedCode, setCopiedCode] = useState(false);
   useEffect(() => setOrigin(window.location.origin), []);
   const page = `${origin}/e/${event.id}`;
   const checkout = `${origin}/p/${event.id}`;
-  const buttonCode = `<script src="${origin}/embed.js" async></script>\n<near-event event="${event.id}" mode="button"></near-event>`;
   return (
     <div className="max-w-xl mx-auto space-y-6">
       <div className="flex gap-4 items-center">
@@ -656,7 +715,6 @@ function Created({ event, visual, coverUrl, detailsSaveError, savingDetails, onR
         <div>
           <div className="text-sm text-good font-medium">✓ Event created</div>
           <h1 className="text-2xl font-semibold tracking-tight">{event.metadata.title}</h1>
-          <p className="text-sm text-muted mt-1">Your event page, quick checkout, and host controls are ready.</p>
         </div>
       </div>
 
@@ -680,39 +738,16 @@ function Created({ event, visual, coverUrl, detailsSaveError, savingDetails, onR
       {savingVisual && <p className="text-sm text-muted">Saving the event look off-chain…</p>}
 
       <div className="space-y-3">
-        <Way
-          title="Event page on Near Me"
-          text="Share this link. Registration, payment and check-in all happen here."
-          value={page}
-        />
-        <Way
-          title="Quick checkout link"
-          text="Use this in a message, or put it behind any button on your site."
-          value={checkout}
-        />
-        <div className="card p-4 space-y-3">
-          <div>
-            <div className="font-medium">Checkout button for your site</div>
-            <p className="text-sm text-muted mt-1">This opens the quick checkout. Guests can return to the same button for their QR pass or payout.</p>
-          </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-bg p-3 text-xs">{buttonCode}</pre>
-          <button
-            type="button"
-            className="btn btn-ghost !py-1.5 text-sm self-start"
-            disabled={!origin}
-            onClick={() => navigator.clipboard.writeText(buttonCode).then(() => {
-              setCopiedCode(true);
-              setTimeout(() => setCopiedCode(false), 1500);
-            })}
-          >
-            {copiedCode ? "Copied" : "Copy button code"}
-          </button>
-        </div>
+        <Way title="Event page" value={page} />
+        <Way title="Quick checkout link" value={checkout} />
       </div>
 
       <div className="flex flex-wrap gap-3">
         <Link href={`/e/${event.id}`} className="btn btn-primary">
           Open event page
+        </Link>
+        <Link href={integrationUrl(event.id)} className="btn btn-ghost">
+          Add to your site
         </Link>
         <Link href={`/e/${event.id}/manage`} className="btn btn-ghost">
           Manage guests &amp; check-in
@@ -752,20 +787,11 @@ async function saveVisual(eventId: number, visual: EventVisualConfig, token: str
   if (!response.ok) throw new Error(json.error ?? "Could not save event visual");
 }
 
-function Way({
-  title,
-  text,
-  value,
-}: {
-  title: string;
-  text: string;
-  value: string;
-}) {
+function Way({ title, value }: { title: string; value: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="card p-4 space-y-2">
       <div className="font-medium">{title}</div>
-      <p className="text-sm text-muted">{text}</p>
       <div className="flex gap-2">
         <code className="flex-1 min-w-0 truncate text-xs bg-bg rounded-lg px-3 py-2 border border-border">{value}</code>
         <button

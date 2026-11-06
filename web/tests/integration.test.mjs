@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { detectEventSource, isGoogleMapsLink, locationProblem, lumaLocation, schemaOrgLocation } from "../src/lib/eventImport.ts";
+import { createStep, formUrl, integrationUrl, startUrl, validAmount } from "../src/lib/flow.ts";
 import { aiPrompt, buttonCode, checkoutLink, eventPageLink } from "../src/lib/integration.ts";
 
 test("detectEventSource recognises Luma and BaliSquad links only", () => {
@@ -101,4 +102,37 @@ test("aiPrompt has the real values, no placeholders, and describes the event's m
   assert.match(aiPrompt(target, "Deposit"), /refundable USDC deposit/);
   assert.match(aiPrompt(target, "Ticket"), /buying a USDC ticket/);
   assert.doesNotMatch(aiPrompt(target, "Ticket"), /deposit/i);
+});
+
+const step = (query) => createStep(new URLSearchParams(query));
+const LINK = "https://lu.ma/abc123";
+
+test("createStep keeps deep links and asks for the choice when it is missing", () => {
+  assert.equal(step(""), "start-create");
+  assert.equal(step("mode=Deposit"), "start-create");
+  assert.equal(step("mode=Nope&amount=10"), "start-create");
+  assert.equal(step("mode=Ticket&amount=0.01"), "start-create");
+  assert.equal(step("mode=Ticket&amount=25"), "form");
+  assert.equal(step("mode=Ticket&amount=25&step=start"), "start-create");
+  assert.equal(step("from=3"), "form");
+  assert.equal(step(`flow=widget&mode=Deposit&amount=10&import=${LINK}`), "form");
+  assert.equal(step(`flow=widget&amount=10&import=${LINK}`), "start-widget");
+  assert.equal(step("flow=widget&mode=Deposit&amount=10"), "start-widget");
+  assert.equal(step("flow=widget&mode=Deposit&amount=10&import=https://example.com/x"), "start-widget");
+});
+
+test("validAmount matches the form's minimum and USDC decimals", () => {
+  for (const ok of ["0.1", "10", "10.5", "1.123456", ".5", "5."]) assert.equal(validAmount(ok), true, ok);
+  for (const bad of ["", "0", "0.09", "abc", "1e3", "-5", "1.1234567", null]) assert.equal(validAmount(bad), false, String(bad));
+});
+
+test("flow URLs round-trip into the right step", () => {
+  const widget = formUrl({ mode: "Ticket", amount: "25", link: LINK });
+  const params = new URL(widget, "https://x.example").searchParams;
+  assert.equal(createStep(params), "form");
+  assert.equal(params.get("import"), LINK);
+  assert.equal(formUrl({ mode: "Deposit", amount: "10" }), "/create?mode=Deposit&amount=10");
+  assert.equal(step(new URL(startUrl({ mode: "Deposit", amount: "10" }, false), "https://x.example").search), "start-create");
+  assert.equal(startUrl({}, true), "/widget");
+  assert.equal(integrationUrl(7), "/e/7/manage?tab=integration");
 });
