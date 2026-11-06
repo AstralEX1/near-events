@@ -122,9 +122,9 @@ fn overpayment_is_returned_and_friend_can_pay() {
     let (mut c, id) = setup(10);
     let msg = format!(r#"{{"action":"register","event_id":{},"guest":"{}"}}"#, id, accounts(3));
     let refund = pay(&mut c, &accounts(2), 12 * USDC, &msg);
-    // Paid for someone else: no bounce, the extra goes to the guest's balance.
-    assert_eq!(refund, 0);
-    assert_eq!(c.balance_of(accounts(3)).0, 2 * USDC);
+    // Only the price is consumed. Change goes back to the payer.
+    assert_eq!(refund, 2 * USDC);
+    assert_eq!(c.balance_of(accounts(3)).0, 0);
     assert_eq!(c.get_guest_status(id, accounts(3)), Some(GuestStatus::Registered));
     assert_eq!(c.get_guest_status(id, accounts(2)), None);
     assert_eq!(c.get_guests(id, None, None)[0].paid_by, accounts(2));
@@ -152,26 +152,28 @@ fn rejects_other_tokens() {
 }
 
 #[test]
-#[should_panic(expected = "Amount is less than the deposit")]
 fn rejects_underpayment() {
     let (mut c, id) = setup(10);
-    pay(&mut c, &accounts(2), USDC, &format!(r#"{{"action":"register","event_id":{}}}"#, id));
+    let msg = format!(r#"{{"action":"register","event_id":{id}}}"#);
+    assert_eq!(pay(&mut c, &accounts(2), USDC, &msg), USDC);
 }
 
 #[test]
-#[should_panic(expected = "Already registered")]
 fn rejects_double_registration() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
-    register(&mut c, id, &accounts(2));
+    let msg = format!(r#"{{"action":"register","event_id":{id}}}"#);
+    assert_eq!(pay(&mut c, &accounts(2), 10 * USDC, &msg), 10 * USDC);
+    assert_eq!(c.get_event(id).unwrap().guest_count, 1);
 }
 
 #[test]
-#[should_panic(expected = "Event is full")]
 fn rejects_when_full() {
     let (mut c, id) = setup(1);
     register(&mut c, id, &accounts(2));
-    register(&mut c, id, &accounts(3));
+    let msg = format!(r#"{{"action":"register","event_id":{id}}}"#);
+    assert_eq!(pay(&mut c, &accounts(3), 10 * USDC, &msg), 10 * USDC);
+    assert_eq!(c.get_event(id).unwrap().guest_count, 1);
 }
 
 #[test]
@@ -192,12 +194,12 @@ fn cohost_cannot_finalize() {
 }
 
 #[test]
-#[should_panic(expected = "Event is closed")]
 fn no_registration_after_finalize() {
     let (mut c, id) = setup(10);
     ctx(&accounts(0), one_yocto());
     c.finalize(id, vec![]);
-    register(&mut c, id, &accounts(2));
+    let msg = format!(r#"{{"action":"register","event_id":{id}}}"#);
+    assert_eq!(pay(&mut c, &accounts(2), 10 * USDC, &msg), 10 * USDC);
 }
 
 #[test]
@@ -205,6 +207,28 @@ fn no_registration_after_finalize() {
 fn abandoned_refund_waits_for_grace_period() {
     let (mut c, id) = setup(10);
     c.refund_if_abandoned(id);
+}
+
+#[test]
+fn host_can_edit_event_details_before_start() {
+    let (mut c, id) = setup(10);
+    ctx(&accounts(0), one_yocto());
+    c.update_event(id, "Renamed meetup".into(), 2_100_000, 3_100_000);
+    let event = c.get_event(id).unwrap();
+    assert!(event.metadata_editable);
+    assert_eq!(event.metadata.title, "Renamed meetup");
+    assert_eq!(event.metadata.starts_at, 2_100_000);
+    assert!(event.metadata.location.is_empty());
+    ctx_at(&accounts(0), one_yocto(), 2_100_000_000_000);
+    assert!(!c.get_event(id).unwrap().metadata_editable);
+}
+
+#[test]
+#[should_panic(expected = "Only the host")]
+fn cohost_cannot_edit_event_details() {
+    let (mut c, id) = setup(10);
+    ctx(&accounts(1), one_yocto());
+    c.update_event(id, "Renamed meetup".into(), 2_100_000, 3_100_000);
 }
 
 #[test]
@@ -231,32 +255,54 @@ fn create_event_fails_clearly_when_the_storage_pool_is_empty() {
 }
 
 #[test]
-#[should_panic(expected = "storage pool is empty")]
-fn registration_fails_clearly_when_the_storage_pool_is_empty() {
+fn one_event_cannot_consume_another_events_storage() {
     let (mut c, id) = setup(10);
+    c.events.flush();
+    c.open_events.flush();
     testing_env!(VMContextBuilder::new()
         .current_account_id(contract_account())
-        .predecessor_account_id(usdc())
-        .account_balance(NearToken::from_yoctonear(0))
+        .predecessor_account_id(accounts(1))
+        .storage_usage(env::storage_usage())
+        .account_balance(NearToken::from_yoctonear(bytes_cost(env::storage_usage() + c.reserved_bytes)))
         .build());
-    c.ft_on_transfer(accounts(2), U128(10 * USDC), format!(r#"{{"action":"register","event_id":{id}}}"#));
+    assert_eq!(c.storage_pool().0, 0);
+    let reserve = c.reserved_bytes;
+    register(&mut c, id, &accounts(2));
+    assert_eq!(c.reserved_bytes, reserve - STORAGE_BYTES_PER_GUEST);
+    ctx(&accounts(0), one_yocto());
+    c.cancel(id);
+    assert_eq!(c.reserved_bytes, 0);
+    assert_eq!(c.balance_of(accounts(2)).0, 10 * USDC);
 }
 
 #[test]
-fn third_party_payment_with_an_empty_storage_pool_stays_on_the_guest_balance() {
-    let (mut c, id) = setup(10);
+#[should_panic(expected = "storage pool is empty")]
+fn open_event_reservations_cannot_be_reused() {
+    let (mut c, _) = setup(10);
+    c.events.flush();
+    c.open_events.flush();
+    let used = env::storage_usage();
+    let second = EVENT_RECORD_BYTES + SEAT_BYTES + BALANCE_BYTES;
     testing_env!(VMContextBuilder::new()
         .current_account_id(contract_account())
-        .predecessor_account_id(usdc())
-        .account_balance(NearToken::from_yoctonear(0))
+        .predecessor_account_id(accounts(1))
+        .storage_usage(used)
+        .account_balance(NearToken::from_yoctonear(bytes_cost(used + second)))
         .build());
-    let msg = format!(r#"{{"action":"register","event_id":{id},"guest":"{}"}}"#, accounts(3));
-    match c.ft_on_transfer(accounts(2), U128(10 * USDC), msg) {
-        PromiseOrValue::Value(v) => assert_eq!(v.0, 0),
-        _ => panic!("expected value"),
+    c.create_event(meta(), U128(10 * USDC), 1, None, None);
+}
+
+#[test]
+fn dust_for_unknown_guests_cannot_create_balance_keys() {
+    let (mut c, _) = setup(10);
+    let reserve = c.reserved_bytes;
+    for i in 0..16 {
+        let guest: AccountId = format!("guest{i}.testnet").parse().unwrap();
+        let msg = format!(r#"{{"action":"register","event_id":99,"guest":"{guest}"}}"#);
+        assert_eq!(pay(&mut c, &accounts(2), 1, &msg), 1);
+        assert!(!c.balances.contains_key(&guest));
     }
-    assert_eq!(c.get_guest_status(id, accounts(3)), None);
-    assert_eq!(c.balance_of(accounts(3)).0, 10 * USDC);
+    assert_eq!(c.reserved_bytes, reserve);
 }
 
 #[test]
@@ -362,7 +408,7 @@ fn cleanup_deletes_guest_records_and_frees_storage_but_keeps_payouts() {
     assert_eq!(view.attended_count, 1);
     assert!(c.get_guests(id, None, None).is_empty());
     assert_eq!(c.get_guest_status(id, g0.clone()), None);
-    assert!(c.get_guest_events(g0.clone()).is_empty());
+    assert!(c.get_guest_events(g0.clone(), None, None).is_empty());
     assert_eq!(c.balance_of(g0).0, payout, "payouts are untouched");
 }
 
@@ -378,7 +424,7 @@ fn cleanup_keeps_a_guests_other_events() {
     let closed_at = c.get_event(first).unwrap().closed_at;
     ctx_at(&accounts(5), NearToken::from_yoctonear(0), (closed_at + CLEANUP_DELAY_MS) * 1_000_000);
     c.cleanup_event(first, None);
-    assert_eq!(c.get_guest_events(accounts(2)), vec![second]);
+    assert_eq!(c.get_guest_events(accounts(2), None, None), vec![second]);
     assert_eq!(c.get_guest_status(second, accounts(2)), Some(GuestStatus::Registered));
 }
 
@@ -412,15 +458,15 @@ fn self_overpayment_is_returned() {
 }
 
 #[test]
-fn intents_payment_for_full_event_goes_to_guest_balance() {
+fn intents_payment_for_full_event_refunds_to_verifier() {
     let (mut c, id) = setup(1);
     register(&mut c, id, &accounts(2));
     let intents: AccountId = "intents.near".parse().unwrap();
     let msg = format!(r#"{{"action":"register","event_id":{},"guest":"{}"}}"#, id, accounts(3));
     let refund = pay(&mut c, &intents, 10 * USDC, &msg);
-    assert_eq!(refund, 0);
+    assert_eq!(refund, 10 * USDC);
     assert_eq!(c.get_guest_status(id, accounts(3)), None);
-    assert_eq!(c.balance_of(accounts(3)).0, 10 * USDC);
+    assert_eq!(c.balance_of(accounts(3)).0, 0);
 }
 
 #[test]
@@ -452,7 +498,7 @@ fn relayer_can_push_payout_to_owners_intents_account() {
 #[test]
 #[should_panic(expected = "Only the owner or the relayer")]
 fn stranger_cannot_payout_to_intents() {
-    let (mut c, id) = setup(10);
+    let (mut c, id) = setup_with_relayer(10, accounts(4));
     let evm: AccountId = "0x1234567890abcdef1234567890abcdef12345678".parse().unwrap();
     let intents: AccountId = "intents.near".parse().unwrap();
     let msg = format!(r#"{{"action":"register","event_id":{},"guest":"{}"}}"#, id, evm);
@@ -505,7 +551,7 @@ fn host_refunds_one_guest_and_last_guest_takes_the_seat() {
     assert_eq!(e.guest_count, 2);
     assert_eq!(c.balance_of(accounts(2)).0, 10 * USDC);
     assert_eq!(c.get_guest_status(id, accounts(2)), None);
-    assert!(c.get_guest_events(accounts(2)).is_empty());
+    assert!(c.get_guest_events(accounts(2), None, None).is_empty());
     let left: Vec<_> = c.get_guests(id, None, None).into_iter().map(|g| g.account_id).collect();
     assert_eq!(left, vec![accounts(4), accounts(3)]);
 
@@ -571,56 +617,54 @@ fn cohost_cannot_finalize_a_contract_hosted_event() {
 }
 
 #[test]
-fn third_party_short_payment_is_kept_for_the_guest() {
+fn third_party_short_payment_returns_to_payer() {
     let (mut c, id) = setup(10);
     let intents: AccountId = "intents.near".parse().unwrap();
     let msg = format!(r#"{{"action":"register","event_id":{id},"guest":"{}"}}"#, accounts(3));
     let refund = pay(&mut c, &intents, USDC, &msg);
-    assert_eq!(refund, 0);
+    assert_eq!(refund, USDC);
     assert_eq!(c.get_guest_status(id, accounts(3)), None);
-    assert_eq!(c.balance_of(accounts(3)).0, USDC);
+    assert_eq!(c.balance_of(accounts(3)).0, 0);
 
     let friend_msg = format!(r#"{{"action":"register","event_id":{id},"guest":"{}"}}"#, accounts(4));
     let refund = pay(&mut c, &accounts(2), 4 * USDC, &friend_msg);
-    assert_eq!(refund, 0);
+    assert_eq!(refund, 4 * USDC);
     assert_eq!(c.get_guest_status(id, accounts(4)), None);
-    assert_eq!(c.balance_of(accounts(4)).0, 4 * USDC);
+    assert_eq!(c.balance_of(accounts(4)).0, 0);
 }
 
 #[test]
-fn third_party_payment_for_a_missing_or_closed_event_is_kept_for_the_guest() {
+fn third_party_payment_for_missing_or_closed_event_returns_to_payer() {
     let (mut c, id) = setup(10);
     let missing = format!(r#"{{"action":"register","event_id":99,"guest":"{}"}}"#, accounts(3));
     let refund = pay(&mut c, &accounts(2), 10 * USDC, &missing);
-    assert_eq!(refund, 0);
-    assert_eq!(c.balance_of(accounts(3)).0, 10 * USDC);
+    assert_eq!(refund, 10 * USDC);
+    assert_eq!(c.balance_of(accounts(3)).0, 0);
 
     ctx(&accounts(0), one_yocto());
     c.finalize(id, vec![]);
     let closed = format!(r#"{{"action":"register","event_id":{id},"guest":"{}"}}"#, accounts(4));
     let refund = pay(&mut c, &accounts(2), 10 * USDC, &closed);
-    assert_eq!(refund, 0);
+    assert_eq!(refund, 10 * USDC);
     assert_eq!(c.get_guest_status(id, accounts(4)), None);
-    assert_eq!(c.balance_of(accounts(4)).0, 10 * USDC);
+    assert_eq!(c.balance_of(accounts(4)).0, 0);
 }
 
 #[test]
-#[should_panic(expected = "Event not found")]
 fn self_payment_for_a_missing_event_still_refunds() {
-    let (mut c, id) = setup(10);
-    let _ = id;
-    pay(&mut c, &accounts(2), 10 * USDC, r#"{"action":"register","event_id":99}"#);
+    let (mut c, _) = setup(10);
+    assert_eq!(pay(&mut c, &accounts(2), 10 * USDC, r#"{"action":"register","event_id":99}"#), 10 * USDC);
 }
 
 #[test]
-fn second_payment_for_someone_already_registered_is_kept_on_their_balance() {
+fn second_payment_for_registered_guest_returns_to_payer() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(3));
     let msg = format!(r#"{{"action":"register","event_id":{id},"guest":"{}"}}"#, accounts(3));
     let refund = pay(&mut c, &accounts(2), 10 * USDC, &msg);
-    assert_eq!(refund, 0);
+    assert_eq!(refund, 10 * USDC);
     assert_eq!(c.get_guest_status(id, accounts(3)), Some(GuestStatus::Registered));
-    assert_eq!(c.balance_of(accounts(3)).0, 10 * USDC);
+    assert_eq!(c.balance_of(accounts(3)).0, 0);
     assert_eq!(c.get_event(id).unwrap().guest_count, 1);
 }
 
@@ -835,7 +879,7 @@ fn withdraw_schedules_a_token_transfer_and_a_callback() {
 
 #[test]
 fn payout_to_intents_names_the_owner_in_the_token_message() {
-    let (mut c, id) = setup(10);
+    let (mut c, id) = setup_with_relayer(10, accounts(4));
     let evm: AccountId = "0x1234567890abcdef1234567890abcdef12345678".parse().unwrap();
     let intents: AccountId = "intents.near".parse().unwrap();
     let msg = format!(r#"{{"action":"register","event_id":{id},"guest":"{evm}"}}"#);
@@ -1020,13 +1064,15 @@ fn views_paginate_and_unknown_balances_are_zero() {
     assert_eq!(c.get_events_count(), 1);
     assert!(c.get_event(99).is_none());
     assert!(c.get_events(Some(5), Some(10)).is_empty());
+    assert!(c.get_events(Some(u64::MAX), None).is_empty());
+    assert!(c.get_event(1u64 << 32).is_none());
     assert_eq!(c.get_events(Some(0), Some(1_000)).len(), 1);
     assert_eq!(c.get_guests(id, Some(1), Some(1)).len(), 1);
     assert_eq!(c.get_guests(id, Some(1), Some(1))[0].account_id, accounts(3));
     assert!(c.get_guests(id, Some(50), Some(10)).is_empty());
     let unknown: AccountId = "unknown.testnet".parse().unwrap();
     assert_eq!(c.balance_of(unknown).0, 0);
-    assert_eq!(c.get_guest_events(accounts(2)), vec![id]);
+    assert_eq!(c.get_guest_events(accounts(2), None, None), vec![id]);
 }
 
 #[test]
@@ -1049,24 +1095,24 @@ fn pause_stops_new_events() {
 }
 
 #[test]
-#[should_panic(expected = "Near Events is paused")]
-fn pause_bounces_a_guests_own_payment() {
+fn pause_refunds_a_guests_own_payment() {
     let (mut c, id) = setup(10);
     ctx(&accounts(0), one_yocto());
     c.set_paused(true);
-    register(&mut c, id, &accounts(2));
+    let msg = format!(r#"{{"action":"register","event_id":{id}}}"#);
+    assert_eq!(pay(&mut c, &accounts(2), 10 * USDC, &msg), 10 * USDC);
 }
 
 #[test]
-fn pause_keeps_a_payment_for_someone_else_and_payouts_still_work() {
+fn pause_refunds_a_payment_for_someone_else_and_payouts_still_work() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
     c.set_paused(true);
     assert!(c.is_paused());
     let msg = format!(r#"{{"action":"register","event_id":{},"guest":"{}"}}"#, id, accounts(3));
-    assert_eq!(pay(&mut c, &accounts(4), 10 * USDC, &msg), 0);
-    assert_eq!(c.balance_of(accounts(3)).0, 10 * USDC);
+    assert_eq!(pay(&mut c, &accounts(4), 10 * USDC, &msg), 10 * USDC);
+    assert_eq!(c.balance_of(accounts(3)).0, 0);
     assert_eq!(c.get_guest_status(id, accounts(3)), None);
     ctx(&accounts(0), one_yocto());
     c.finalize(id, vec![accounts(2)]);
@@ -1085,22 +1131,21 @@ fn stranger_cannot_pause() {
 }
 
 #[test]
-#[should_panic(expected = "Event not found")]
-fn dust_payment_for_a_new_name_is_rejected() {
+fn dust_payment_for_a_new_name_is_refunded() {
     let (mut c, _) = setup(10);
     let msg = r#"{"action":"register","event_id":99,"guest":"made-up.testnet"}"#;
-    pay(&mut c, &accounts(4), MIN_DEPOSIT - 1, msg);
+    assert_eq!(pay(&mut c, &accounts(4), MIN_DEPOSIT - 1, msg), MIN_DEPOSIT - 1);
 }
 
 #[test]
-fn dust_payment_tops_up_an_existing_balance() {
+fn dust_payment_cannot_top_up_an_existing_balance() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
     c.finalize(id, vec![accounts(2)]);
     let msg = format!(r#"{{"action":"register","event_id":99,"guest":"{}"}}"#, accounts(2));
-    assert_eq!(pay(&mut c, &accounts(4), 1, &msg), 0);
-    assert_eq!(c.balance_of(accounts(2)).0, 10 * USDC + 1);
+    assert_eq!(pay(&mut c, &accounts(4), 1, &msg), 1);
+    assert_eq!(c.balance_of(accounts(2)).0, 10 * USDC);
 }
 
 fn function_calls() -> Vec<(String, Vec<u8>, u64, u128)> {
@@ -1250,13 +1295,13 @@ fn ticket_refund_guest_returns_the_full_ticket() {
 }
 
 #[test]
-fn ticket_short_payment_from_intents_stays_with_the_guest() {
+fn ticket_short_payment_returns_to_verifier() {
     let (mut c, id) = setup_tickets(10);
     let msg = format!(r#"{{"action":"register","event_id":{id},"guest":"{}"}}"#, accounts(2));
     let refund = pay(&mut c, &"intents.near".parse().unwrap(), TICKET - 1, &msg);
-    assert_eq!(refund, 0);
+    assert_eq!(refund, TICKET - 1);
     assert_eq!(c.get_guest_status(id, accounts(2)), None);
-    assert_eq!(c.balance_of(accounts(2)).0, TICKET - 1);
+    assert_eq!(c.balance_of(accounts(2)).0, 0);
 }
 
 #[test]

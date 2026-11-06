@@ -6,6 +6,7 @@ import { events, formatUsdc, usdc, type EventView } from "@/lib/near";
 import { HAS_INTENTS } from "@/lib/config";
 import { CashOut } from "@/components/CashOut";
 import { useWallet } from "@/lib/wallet";
+import { oneClickStatus } from "@/lib/oneclickClient";
 import { intentsUsdcBalance } from "@/lib/intents";
 import { Avatar, Cover, shortAccount } from "@/components/ui";
 
@@ -14,20 +15,21 @@ export default function Me() {
   const [balance, setBalance] = useState<bigint>(0n);
   const [wallet, setWallet] = useState<bigint>(0n);
   const [inIntents, setInIntents] = useState<bigint | null>(null);
+  const [cashOutStatus, setCashOutStatus] = useState("");
   const [mine, setMine] = useState<EventView[]>([]);
 
   const load = useCallback(async () => {
     if (!accountId) return;
-    const [b, w, ids, all] = await Promise.all([
+    const [b, w, all] = await Promise.all([
       events.balance(accountId),
       usdc.balance(accountId).catch(() => "0"),
-      events.guestEvents(accountId),
       events.list(),
     ]);
     setBalance(BigInt(b));
-    if (HAS_INTENTS) intentsUsdcBalance(accountId).then(setInIntents).catch(() => {});
+    if (HAS_INTENTS) intentsUsdcBalance(accountId).then(setInIntents).catch(() => setInIntents(null));
     setWallet(BigInt(w));
-    setMine(all.filter((e) => ids.includes(e.id) || e.host === accountId || e.cohosts.includes(accountId)));
+    const statuses = await events.guestStatuses(accountId, all.map((e) => e.id));
+    setMine(all.filter((e, i) => statuses[i] || e.host === accountId || e.cohosts.includes(accountId)));
   }, [accountId]);
 
   useEffect(() => {
@@ -55,6 +57,14 @@ export default function Me() {
         </div>
       </div>
 
+      {HAS_INTENTS && <button className="btn btn-ghost" onClick={async () => {
+        const address = sessionStorage.getItem(`near-me:cashout:${accountId}`);
+        if (!address) { setCashOutStatus("No pending withdrawal saved in this tab."); return; }
+        const status = await oneClickStatus(address);
+        setCashOutStatus(status ? `Withdrawal: ${status.toLowerCase().replaceAll("_", " ")}` : "Status unavailable. Check again shortly.");
+        await load().catch(() => {});
+      }}>Check last withdrawal</button>}
+      {cashOutStatus && <p role="status">{cashOutStatus}</p>}
       <div className="card p-5 space-y-4">
         <div>
           <div className="label">Near Me balance</div>
@@ -62,7 +72,7 @@ export default function Me() {
           <p className="text-sm text-muted mt-1">Payouts and refunds land here. Withdraw them through NEAR Intents to any chain or wallet.</p>
         </div>
         {balance > 0n && <CashOut accountId={accountId} kind={kind} balance={balance} onDone={load} />}
-        {kind === "evm" && balance === 0n && inIntents !== null && inIntents > 0n && (
+        {inIntents !== null && inIntents > 0n && (
           <CashOut accountId={accountId} kind={kind} balance={inIntents} onDone={load} fromIntents />
         )}
       </div>

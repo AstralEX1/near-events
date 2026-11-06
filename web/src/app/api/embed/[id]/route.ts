@@ -6,7 +6,8 @@ const CORS = { "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max
 export async function GET(_req: Request, ctx: RouteContext<"/api/embed/[id]">) {
   const id = Number((await ctx.params).id);
   if (!Number.isInteger(id) || id < 0) return Response.json({ error: "Bad event id" }, { status: 400, headers: CORS });
-  const e = await events.get(id).catch(() => null);
+  const e = await events.get(id).catch(() => undefined);
+  if (e === undefined) return Response.json({ error: "Could not load event" }, { status: 502, headers: { ...CORS, "Cache-Control": "no-store" } });
   if (!e) return Response.json({ error: "Event not found" }, { status: 404, headers: CORS });
   return Response.json(
     {
@@ -14,7 +15,6 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/embed/[id]">) {
       title: e.metadata.title,
       starts_at: e.metadata.starts_at,
       ends_at: e.metadata.ends_at,
-      location: e.metadata.location,
       status: e.status,
       deposit_usdc: formatUsdc(e.deposit),
       mode: e.mode ?? "Deposit",

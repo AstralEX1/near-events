@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { events, formatUsdc, type EventView, type GuestStatus } from "@/lib/near";
+import { events, formatUsdc, isTicket, type EventView, type GuestStatus } from "@/lib/near";
 import { Avatar, Cover, StatusPill, shortAccount } from "@/components/ui";
 import { Timeline } from "@/components/Timeline";
 
@@ -23,19 +23,16 @@ export default function Profile() {
 
   useEffect(() => {
     (async () => {
-      const [ids, all] = await Promise.all([events.guestEvents(account).catch((): number[] => []), events.list()]);
-      const mine = all.filter((e) => ids.includes(e.id));
-      // One at a time: the public RPC rate-limits bursts.
-      const statuses: (GuestStatus | null)[] = [];
-      for (const e of mine) statuses.push(await events.guestStatus(e.id, account).catch(() => null));
-      setRows(mine.map((event, i) => ({ event, status: statuses[i] })));
+      const all = await events.list();
+      const statuses = await events.guestStatuses(account, all.map((e) => e.id));
+      setRows(all.flatMap((event, i) => statuses[i] ? [{ event, status: statuses[i] }] : []));
       setHosting(all.filter((e) => e.host === account || e.cohosts.includes(account)));
     })();
   }, [account]);
 
   const closed = rows?.filter((r) => r.event.status === "Finalized") ?? [];
   const came = closed.filter((r) => r.status === "Attended");
-  const earned = came.reduce((sum, r) => sum + BigInt(r.event.payout_per_attendee) - BigInt(r.event.deposit), 0n);
+  const earned = came.filter((r) => !isTicket(r.event)).reduce((sum, r) => sum + BigInt(r.event.payout_per_attendee) - BigInt(r.event.deposit), 0n);
 
   return (
     <div className="space-y-8">

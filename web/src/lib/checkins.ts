@@ -5,7 +5,7 @@
 // UPSTASH_REDIS_REST_TOKEN are set (needed on Vercel, whose disk is wiped),
 // otherwise a JSON file in .data/ for local runs.
 import "server-only";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { EVENTS_CONTRACT } from "./config";
 
@@ -19,6 +19,14 @@ const KEY = (eventId: number) => `checkins:${EVENTS_CONTRACT}:${eventId}`;
 const redisUrl = () => process.env.UPSTASH_REDIS_REST_URL?.replace(/\/$/, "");
 const redisToken = () => process.env.UPSTASH_REDIS_REST_TOKEN;
 
+function usesRedis(): boolean {
+  const url = redisUrl();
+  const token = redisToken();
+  if (url && token) return true;
+  if (process.env.VERCEL || url || token) throw new Error("Check-in storage is not configured");
+  return false;
+}
+
 async function redis<T>(command: (string | number)[]): Promise<T> {
   const res = await fetch(redisUrl()!, {
     method: "POST",
@@ -27,7 +35,7 @@ async function redis<T>(command: (string | number)[]): Promise<T> {
     cache: "no-store",
   });
   const json = await res.json();
-  if (!res.ok || json.error) throw new Error(`Check-in storage failed: ${json.error ?? res.status}`);
+  if (!res.ok || json.error) throw new Error("Check-in storage request failed");
   return json.result as T;
 }
 
@@ -39,8 +47,9 @@ let lock: Promise<unknown> = Promise.resolve();
 async function loadFile(): Promise<Record<string, CheckIns>> {
   try {
     return JSON.parse(await readFile(FILE, "utf8"));
-  } catch {
-    return {};
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw error;
   }
 }
 
@@ -49,7 +58,9 @@ function updateFile<T>(fn: (s: Record<string, CheckIns>) => T): Promise<T> {
     const s = await loadFile();
     const out = fn(s);
     await mkdir(path.dirname(FILE), { recursive: true });
-    await writeFile(FILE, JSON.stringify(s, null, 2));
+    const temp = `${FILE}.${process.pid}.tmp`;
+    await writeFile(temp, JSON.stringify(s, null, 2));
+    await rename(temp, FILE);
     return out;
   });
   lock = run.catch(() => {});
@@ -59,7 +70,7 @@ function updateFile<T>(fn: (s: Record<string, CheckIns>) => T): Promise<T> {
 // ------------------------------------------------------------------ api
 
 export async function listCheckIns(eventId: number): Promise<CheckIns> {
-  if (redisUrl() && redisToken()) {
+  if (usesRedis()) {
     const flat = await redis<string[]>(["HGETALL", KEY(eventId)]);
     const out: CheckIns = {};
     for (let i = 0; i + 1 < flat.length; i += 2) out[flat[i]] = JSON.parse(flat[i + 1]);
@@ -70,7 +81,7 @@ export async function listCheckIns(eventId: number): Promise<CheckIns> {
 
 /** Marks (`on`) or unmarks a guest. Safe to repeat. */
 export async function setCheckIn(eventId: number, account: string, on: boolean, by: string): Promise<void> {
-  if (redisUrl() && redisToken()) {
+  if (usesRedis()) {
     if (on) await redis(["HSET", KEY(eventId), account, JSON.stringify({ at: Date.now(), by })]);
     else await redis(["HDEL", KEY(eventId), account]);
     return;

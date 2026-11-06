@@ -6,7 +6,8 @@
 // relayer submits them to intents.near, paying the gas.
 import { baseEncode } from "near-api-js";
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "./config";
-import { view } from "./near";
+import { events, view } from "./near";
+import type { Call } from "./wallet";
 
 interface Eip1193 {
   request(args: { method: string; params?: unknown[] }): Promise<unknown>;
@@ -90,6 +91,23 @@ export async function registerFromIntents(address: string, eventId: number, depo
   });
 }
 
+export function withdrawIntentsCall(receiverId: string, amount: string, msg?: string): Call {
+  if (!INTENTS_CONTRACT) throw new Error("NEAR Intents is not configured.");
+  return {
+    receiverId: INTENTS_CONTRACT, methodName: "ft_withdraw",
+    args: { token: USDC_CONTRACT, receiver_id: receiverId, amount, msg: msg ?? null },
+    deposit: 1n, gas: 200_000_000_000_000n,
+  };
+}
+
+export async function confirmRegistration(eventId: number, accountId: string) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (await events.guestStatus(eventId, accountId)) return;
+    if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  throw new Error("Your place has not been confirmed. Check the event and your balance before trying again.");
+}
+
 /**
  * Moves USDC from the wallet's Intents balance to another Intents account:
  * a 1Click deposit address (quote with depositType INTENTS, which 1Click then
@@ -119,6 +137,7 @@ async function signAndRelay(address: string, intent: Record<string, unknown>): P
 
   const res = await fetch("/api/intents/execute", {
     method: "POST",
+    signal: AbortSignal.timeout(60_000),
     body: JSON.stringify({ standard: "erc191", payload, signature: `secp256k1:${baseEncode(sig)}` }),
   });
   const json = await res.json();
@@ -126,8 +145,8 @@ async function signAndRelay(address: string, intent: Record<string, unknown>): P
 }
 
 /** Asks the relayer to move this account's payout into its Intents balance. */
-export async function pushPayoutToIntents(accountId: string): Promise<void> {
-  const res = await fetch("/api/intents/payout", { method: "POST", body: JSON.stringify({ accountId }) });
+export async function pushPayoutToIntents(accountId: string, amount: string): Promise<void> {
+  const res = await fetch("/api/intents/payout", { method: "POST", body: JSON.stringify({ accountId, amount }) });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error ?? "Payout failed");
 }

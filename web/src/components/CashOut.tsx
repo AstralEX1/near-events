@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { EVENTS_CONTRACT } from "@/lib/config";
+import { EVENTS_CONTRACT, INTENTS_CONTRACT } from "@/lib/config";
 import { formatUsdc, toUnits } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
-import { pushPayoutToIntents, transferFromIntents } from "@/lib/intents";
+import { intentsUsdcBalance, pushPayoutToIntents, transferFromIntents, withdrawIntentsCall } from "@/lib/intents";
 import { oneClickQuote, oneClickTokens, registerUsdcFor, USDC_ASSET, waitForSwap, type Quote } from "@/lib/oneclickClient";
 import type { OneClickToken } from "@/lib/oneclick";
 
@@ -30,7 +30,7 @@ export function CashOut({
   kind: string | null;
   balance: bigint;
   onDone: () => Promise<void> | void;
-  /** EVM only: the USDC already sits in the wallet's Intents balance. */
+  /** The USDC already sits in the wallet's Intents balance. */
   fromIntents?: boolean;
   startOpen?: boolean;
 }) {
@@ -46,6 +46,8 @@ export function CashOut({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const evm = kind === "evm";
+  const [submitted, setSubmitted] = useState(false);
+  const [pushed, setPushed] = useState(false);
 
   useEffect(() => {
     if (!open || tokens.length) return;
@@ -110,15 +112,26 @@ export function CashOut({
       check();
       const to = recipient.trim();
       if (evm) {
-        if (!fromIntents) {
+        if (!fromIntents && !pushed) {
           setStage("Moving your payout into NEAR Intents…");
-          await pushPayoutToIntents(accountId);
+          await pushPayoutToIntents(accountId, units.toString());
+          setPushed(true);
         }
         if (to !== accountId) {
           setStage("Sign in your wallet…");
           await transferFromIntents(accountId, to, units.toString());
         }
+      } else if (fromIntents) {
+        if (to === accountId) throw new Error("These funds are already in your NEAR Intents account.");
+        const before = await intentsUsdcBalance(to);
+        await send([{
+          receiverId: INTENTS_CONTRACT!, methodName: "mt_transfer",
+          args: { receiver_id: to, token_id: USDC_ASSET, amount: units.toString() },
+          deposit: 1n, gas: 80_000_000_000_000n,
+        }]);
+        if (await intentsUsdcBalance(to) < before + units) throw new Error("The Intents transfer is not confirmed. Check the balances before retrying.");
       } else {
+        const before = await intentsUsdcBalance(to);
         setStage("Confirm in your wallet…");
         await send([
           {
@@ -129,6 +142,7 @@ export function CashOut({
             gas: 200_000_000_000_000n,
           },
         ]);
+        if (await intentsUsdcBalance(to) < before + units) throw new Error("The payout is not confirmed. Check the balances before retrying.");
       }
       await finish(`Sent ${formatUsdc(units)} USDC to ${to} in NEAR Intents.`);
     });
@@ -137,35 +151,46 @@ export function CashOut({
     step(async () => {
       const addr = quote?.depositAddress;
       if (!quote || !addr) throw new Error("Get a fresh quote first.");
-      if (evm) {
-        if (!fromIntents) {
-          setStage("Moving your payout into NEAR Intents…");
-          await pushPayoutToIntents(accountId);
+      if (!submitted) {
+        if (quote.depositMemo) throw new Error("This route requires a deposit memo. Choose another route.");
+        if (evm) {
+          if (!fromIntents && !pushed) {
+            setStage("Moving your payout into NEAR Intents…");
+            await pushPayoutToIntents(accountId, quote.amountIn);
+            setPushed(true);
+          }
+          setStage("Sign in your wallet…");
+          await transferFromIntents(accountId, addr, quote.amountIn);
+        } else {
+          setStage("Confirm in your wallet…");
+          await send([
+            registerUsdcFor(addr),
+            fromIntents ? withdrawIntentsCall(addr, quote.amountIn) : {
+              receiverId: EVENTS_CONTRACT,
+              methodName: "withdraw",
+              args: { amount: quote.amountIn, receiver_id: addr, to_intents: false },
+              deposit: 1n,
+              gas: 200_000_000_000_000n,
+            },
+          ]);
         }
-        setStage("Sign in your wallet…");
-        await transferFromIntents(accountId, addr, quote.amountIn);
-      } else {
-        setStage("Confirm in your wallet…");
-        await send([
-          registerUsdcFor(addr),
-          {
-            receiverId: EVENTS_CONTRACT,
-            methodName: "withdraw",
-            args: { amount: quote.amountIn, receiver_id: addr, to_intents: false },
-            deposit: 1n,
-            gas: 200_000_000_000_000n,
-          },
-        ]);
+        setSubmitted(true);
+        try { sessionStorage.setItem(`near-me:cashout:${accountId}`, addr); } catch { /* Optional. */ }
       }
       setStage("NEAR Intents is sending it…");
-      await waitForSwap(addr, (s) => setStage(`NEAR Intents: ${s.toLowerCase().replaceAll("_", " ")}…`));
+      try {
+        await waitForSwap(addr, (s) => setStage(`NEAR Intents: ${s.toLowerCase().replaceAll("_", " ")}…`));
+      } catch (error) {
+        throw new Error(`${error instanceof Error ? error.message : error} Check your Intents balance in My account before retrying.`);
+      }
+      try { sessionStorage.removeItem(`near-me:cashout:${accountId}`); } catch { /* Optional. */ }
       await finish(`Sent ${quote.amountOutFormatted} ${token?.symbol} on ${token?.blockchain} to ${recipient.trim()}.`);
     });
 
   if (!open)
     return (
       <button className="btn btn-primary w-full" onClick={() => setOpen(true)}>
-        Withdraw {formatUsdc(balance)} USDC
+        Withdraw {formatUsdc(balance)} USDC {fromIntents ? "from Intents" : ""}
       </button>
     );
 
@@ -179,10 +204,12 @@ export function CashOut({
         step="0.01"
         placeholder={`Amount (all: ${formatUsdc(balance)} USDC)`}
         value={amount}
+        disabled={busy || submitted || pushed}
         onChange={(e) => (setAmount(e.target.value), setQuote(null))}
       />
       <select
         className="input"
+        disabled={busy || submitted || pushed}
         value={assetId}
         onChange={(e) => {
           setAssetId(e.target.value);
@@ -200,6 +227,7 @@ export function CashOut({
       <input
         className="input font-mono text-sm"
         placeholder={`Your ${where}`}
+        disabled={busy || submitted || pushed}
         value={recipient}
         onChange={(e) => (setRecipient(e.target.value), setQuote(null))}
       />
@@ -220,7 +248,7 @@ export function CashOut({
             </b>
           </div>
           <button className="btn btn-primary w-full" disabled={busy} onClick={confirm}>
-            {busy ? stage ?? "Working…" : "Confirm withdrawal"}
+            {busy ? stage ?? "Working…" : submitted ? "Check withdrawal" : "Confirm withdrawal"}
           </button>
         </div>
       )}

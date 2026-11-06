@@ -14,12 +14,10 @@
 //! NEAR account, into their NEAR Intents balance (`intents.near`, from where
 //! 1Click takes it to any chain).
 //!
-//! Intents-first entry: a guest with USDC in NEAR Intents signs an
-//! `ft_withdraw` intent with `receiver_id` = this contract and
-//! `msg` = `{"action":"register","event_id":N,"guest":"<their account>"}`.
-//! Such transfers lose the token's refund protection, so when someone other
-//! than the guest pays, a failed or partial registration is credited to the
-//! guest's internal balance instead of bouncing.
+//! Intents registrations withdraw from the guest's own verifier balance.
+//! The token resolver returns unused USDC to the sender, and the verifier
+//! credits its original withdrawal owner. Never send solver-owned swaps
+//! directly to the escrow.
 //!
 //! An event runs in one of two modes, never both. `Deposit` (the default) is
 //! the Kickback pool above. `Ticket` is a plain paid ticket: the price waits in
@@ -42,9 +40,12 @@ use near_sdk::{
     Promise, PromiseOrValue,
 };
 
-/// Upper bound for one guest seat (guest record, index entry, guest's event
-/// list, payout balance entry). Used to check the storage pool has room.
-pub const STORAGE_BYTES_PER_GUEST: u64 = 500;
+/// Storage for one registration and its indexes. Each seat also reserves
+/// a separate balance entry for settlement.
+pub const STORAGE_BYTES_PER_GUEST: u64 = 1_024;
+const BALANCE_BYTES: u64 = 256;
+const SEAT_BYTES: u64 = STORAGE_BYTES_PER_GUEST + BALANCE_BYTES;
+const MAX_HISTORY_PAGE: u32 = 100;
 /// Upper bound for one event record: max-length text, 10 co-hosts, the vector
 /// slot and the host's open-event counter.
 const EVENT_RECORD_BYTES: u64 = 16_384;
@@ -57,7 +58,7 @@ pub const MIN_DEPOSIT: u128 = 100_000;
 /// delete them with `cleanup_event`.
 pub const CLEANUP_DELAY_MS: u64 = 7 * 24 * 60 * 60 * 1000;
 const MAX_CLEANUP_BATCH: u32 = 100;
-/// Upper bound so `finalize` / `cancel` stay well within the gas limit.
+/// Maximum settlement size. Sandbox exercises this exact capacity.
 pub const MAX_CAPACITY: u32 = 300;
 /// After `ends_at` + this grace period, anyone can refund an unfinalized event.
 pub const ABANDON_GRACE_MS: u64 = 30 * 24 * 60 * 60 * 1000;
@@ -82,6 +83,7 @@ enum StorageKey {
     GuestEvents,
     Balances,
     OpenEvents,
+    AccountHistory { account: AccountId },
 }
 
 #[near(serializers = [borsh, json])]
@@ -141,6 +143,7 @@ pub struct Event {
     /// Guest records still in storage. Equals `guest_count` until
     /// `cleanup_event` deletes them after the event closed.
     pub stored_guests: u32,
+    reserved_seats: u32,
 }
 
 #[near(serializers = [json])]
@@ -149,6 +152,7 @@ pub struct EventView {
     pub host: AccountId,
     pub cohosts: Vec<AccountId>,
     pub metadata: EventMetadata,
+    pub metadata_editable: bool,
     /// What each guest pays (deposit or ticket price, see `mode`).
     pub deposit: U128,
     pub mode: EventMode,
@@ -177,6 +181,7 @@ pub struct GuestView {
 #[near(serializers = [borsh])]
 pub struct GuestRecord {
     pub index: u32,
+    history_index: u32,
     pub status: GuestStatus,
     pub registered_at: u64,
     pub paid_by: AccountId,
@@ -186,8 +191,7 @@ pub struct GuestRecord {
 #[near(serializers = [json])]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum TransferMsg {
-    /// Take a seat. `guest` defaults to the sender, so anyone (or 1Click on
-    /// a guest's behalf) can pay for a seat.
+    /// Take a seat. `guest` defaults to the sender, who can also pay for another guest.
     Register { event_id: u64, guest: Option<AccountId> },
 }
 
@@ -196,6 +200,13 @@ pub enum TransferMsg {
 trait FungibleToken {
     fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
     fn ft_transfer_call(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>, msg: String) -> U128;
+}
+
+#[near(serializers = [borsh])]
+#[derive(Clone, Copy, Default)]
+struct Balance {
+    available: u128,
+    pending: u128,
 }
 
 #[near(contract_state)]
@@ -207,8 +218,9 @@ pub struct Contract {
     events: Vector<Event>,
     guests: LookupMap<(u64, AccountId), GuestRecord>,
     guest_index: LookupMap<(u64, u32), AccountId>,
-    guest_events: LookupMap<AccountId, Vec<u64>>,
-    balances: LookupMap<AccountId, u128>,
+    guest_events: LookupMap<AccountId, Vector<u64>>,
+    balances: LookupMap<AccountId, Balance>,
+    reserved_bytes: u64,
     /// Open events per host (entry removed at 0).
     open_events: LookupMap<AccountId, u32>,
     /// Optional account allowed to call `payout_to_intents` for other users (web relayer).
@@ -221,6 +233,7 @@ pub struct Contract {
 #[near]
 impl Contract {
     #[init]
+    #[private]
     pub fn new(usdc: AccountId, intents: Option<AccountId>, relayer: Option<AccountId>) -> Self {
         Self {
             usdc,
@@ -234,6 +247,7 @@ impl Contract {
             relayer,
             owner: env::predecessor_account_id(),
             paused: false,
+            reserved_bytes: 0,
         }
     }
 
@@ -266,7 +280,11 @@ impl Contract {
         let host = env::predecessor_account_id();
         let cohosts = cohosts.unwrap_or_default();
         let mode = mode.unwrap_or_default();
+        let mut metadata = metadata;
         validate_metadata(&metadata);
+        metadata.description.clear();
+        metadata.location.clear();
+        metadata.cover_url = None;
         require!(deposit.0 >= MIN_DEPOSIT, "Deposit must be at least 0.1 USDC");
         require!(capacity > 0 && capacity <= MAX_CAPACITY, "Capacity out of range");
         require!(cohosts.len() <= MAX_COHOSTS, "Too many co-hosts");
@@ -276,7 +294,9 @@ impl Contract {
             format!("A host can have at most {} open events. Finalize or cancel one first", MAX_OPEN_EVENTS_PER_HOST)
         );
         // The whole event, full house included, must fit in the storage pool.
-        self.require_storage_pool(EVENT_RECORD_BYTES + STORAGE_BYTES_PER_GUEST * capacity as u64);
+        let reserve = SEAT_BYTES * u64::from(capacity) + BALANCE_BYTES;
+        self.require_storage_pool(EVENT_RECORD_BYTES + reserve);
+        self.reserved_bytes += reserve;
 
         let id = self.events.len() as u64;
         self.events.push(Event {
@@ -293,11 +313,38 @@ impl Contract {
             created_at: env::block_timestamp_ms(),
             closed_at: 0,
             stored_guests: 0,
+            reserved_seats: capacity,
         });
         self.open_events.insert(host.clone(), open + 1);
 
         emit("event_created", json!({ "event_id": id, "host": host, "deposit": deposit, "mode": mode }));
         id
+    }
+
+    #[payable]
+    pub fn update_event(&mut self, event_id: u64, title: String, starts_at: u64, ends_at: u64) {
+        near_sdk::assert_one_yocto();
+        let now = env::block_timestamp_ms();
+        let event = self.event(event_id);
+        require!(env::predecessor_account_id() == event.host, "Only the host");
+        require!(event.status == EventStatus::Open, "Event is closed");
+        require!(now < event.metadata.starts_at, "Event has already started");
+        require!(starts_at > now, "Event must start in the future");
+
+        let metadata = EventMetadata {
+            title,
+            starts_at,
+            ends_at,
+            description: String::new(),
+            location: String::new(),
+            cover_url: None,
+        };
+        validate_metadata(&metadata);
+        let growth = metadata.title.len().saturating_sub(event.metadata.title.len());
+        if growth > 0 {
+            self.require_storage_pool(growth as u64);
+        }
+        self.event_mut(event_id).metadata = metadata;
     }
 
     /// Takes one guest off the list and returns their deposit to their balance,
@@ -324,7 +371,8 @@ impl Contract {
             self.guests.get_mut(&(event_id, moved)).unwrap().index = record.index;
         }
         self.guest_index.remove(&(event_id, last));
-        self.forget_guest_event(&account_id, event_id);
+        self.forget_guest_event(&account_id, record.history_index);
+        self.reserved_bytes -= BALANCE_BYTES;
         let event = self.event_mut(event_id);
         event.guest_count -= 1;
         event.stored_guests -= 1;
@@ -429,8 +477,8 @@ impl Contract {
                 .guest_index
                 .remove(&(event_id, i))
                 .unwrap_or_else(|| env::panic_str("Missing guest index"));
-            self.guests.remove(&(event_id, account.clone()));
-            self.forget_guest_event(&account, event_id);
+            let record = self.guests.remove(&(event_id, account.clone())).expect("Missing guest");
+            self.forget_guest_event(&account, record.history_index);
         }
         let left = stored - batch;
         self.event_mut(event_id).stored_guests = left;
@@ -483,8 +531,13 @@ impl Contract {
             Err(_) => 0,
         };
         let unsent = amount.0 - sent;
+        let balance = self.balances.get_mut(&owner).expect("Missing pending withdrawal");
+        balance.pending -= amount.0;
+        balance.available += unsent;
+        if balance.available == 0 && balance.pending == 0 {
+            self.balances.remove(&owner);
+        }
         if unsent > 0 {
-            self.credit(&owner, unsent);
             emit("withdraw_failed", json!({ "account_id": owner, "amount": U128(unsent) }));
         }
         U128(sent)
@@ -512,9 +565,9 @@ impl Contract {
         self.relayer.clone()
     }
 
-    /// NEAR (yocto) the contract can still spend on storage.
+    /// Unreserved NEAR (yocto) available for new storage commitments.
     pub fn storage_pool(&self) -> U128 {
-        U128(free_storage_balance())
+        U128(self.unreserved_storage())
     }
 
     /// Open events of a host, against `MAX_OPEN_EVENTS_PER_HOST`.
@@ -523,13 +576,21 @@ impl Contract {
     }
 
     pub fn get_event(&self, event_id: u64) -> Option<EventView> {
-        self.events.get(event_id as u32).map(|e| view_event(event_id, e))
+        self.events.get(u32::try_from(event_id).ok()?).map(|e| view_event(event_id, e))
     }
 
     pub fn get_events(&self, from_index: Option<u64>, limit: Option<u64>) -> Vec<EventView> {
         let from = from_index.unwrap_or(0);
         let limit = limit.unwrap_or(50).min(100);
-        (from..(from + limit).min(self.events.len() as u64))
+        (from..from.saturating_add(limit).min(self.events.len() as u64))
+            .map(|id| view_event(id, &self.events[id as u32]))
+            .collect()
+    }
+
+    pub fn get_recent_events(&self, limit: Option<u64>) -> Vec<EventView> {
+        let limit = limit.unwrap_or(50).min(100);
+        let end = u64::from(self.events.len());
+        (end.saturating_sub(limit)..end).rev()
             .map(|id| view_event(id, &self.events[id as u32]))
             .collect()
     }
@@ -560,8 +621,16 @@ impl Contract {
         self.guests.get(&(event_id, account_id)).map(|r| r.status)
     }
 
-    pub fn get_guest_events(&self, account_id: AccountId) -> Vec<u64> {
-        self.guest_events.get(&account_id).cloned().unwrap_or_default()
+    pub fn get_guest_statuses(&self, account_id: AccountId, event_ids: Vec<u64>) -> Vec<Option<GuestStatus>> {
+        require!(event_ids.len() <= MAX_HISTORY_PAGE as usize, "Too many events");
+        event_ids.into_iter().map(|id| self.get_guest_status(id, account_id.clone())).collect()
+    }
+
+    pub fn get_guest_events(&self, account_id: AccountId, from_index: Option<u32>, limit: Option<u32>) -> Vec<u64> {
+        let Some(history) = self.guest_events.get(&account_id) else { return vec![] };
+        let from = from_index.unwrap_or_default();
+        let to = from.saturating_add(limit.unwrap_or(MAX_HISTORY_PAGE).min(MAX_HISTORY_PAGE)).min(history.len());
+        (from..to).map(|index| history[index]).collect()
     }
 
     pub fn balance_of(&self, account_id: AccountId) -> U128 {
@@ -571,58 +640,28 @@ impl Contract {
 
 #[near]
 impl FungibleTokenReceiver for Contract {
-    /// Returns the amount to refund to the sender. Any panic refunds everything.
+    /// Returns the unused amount to the token resolver.
     fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128> {
         require!(env::predecessor_account_id() == self.usdc, "Only USDC is accepted");
         let msg: TransferMsg =
             serde_json::from_str(&msg).unwrap_or_else(|_| env::panic_str("Invalid msg"));
         match msg {
             TransferMsg::Register { event_id, guest } => {
-                // A relayed payment (intents.near, 1Click) must name the guest,
+                // A relayed payment from the verifier must name the guest,
                 // otherwise the relay itself would take the seat.
                 if Some(&sender_id) == self.intents.as_ref() {
                     require!(guest.is_some(), "Payments via NEAR Intents must name the guest");
                 }
                 let guest = guest.unwrap_or_else(|| sender_id.clone());
-                let third_party = guest != sender_id;
-                if self.paused {
-                    return self.keep_for_guest_or_reject(third_party, event_id, &guest, amount, "Near Events is paused");
+                let deposit = self.get_event_deposit(event_id);
+                if let Some(deposit) = deposit {
+                    if !self.paused && amount.0 >= deposit && self.can_register(event_id, &guest) {
+                        self.register(event_id, guest, sender_id);
+                        return PromiseOrValue::Value(U128(amount.0 - deposit));
+                    }
                 }
-                // Missing event and a short payment used to panic. A panic makes
-                // the token send the USDC back to `sender_id`. When that sender
-                // is intents.near or 1Click, the refund often never reaches the
-                // guest. Keep it on the guest's balance instead.
-                let Some(deposit) = self
-                    .events
-                    .get(u32::try_from(event_id).unwrap_or(u32::MAX))
-                    .map(|event| event.deposit)
-                else {
-                    return self.keep_for_guest_or_reject(third_party, event_id, &guest, amount, "Event not found");
-                };
-                if amount.0 < deposit {
-                    return self.keep_for_guest_or_reject(
-                        third_party,
-                        event_id,
-                        &guest,
-                        amount,
-                        "Amount is less than the deposit",
-                    );
-                }
-                if !third_party {
-                    self.register(event_id, guest, sender_id);
-                    return PromiseOrValue::Value(U128(amount.0 - deposit));
-                }
-                let leftover = if self.can_register(event_id, &guest) {
-                    self.register(event_id, guest.clone(), sender_id);
-                    amount.0 - deposit
-                } else {
-                    return self.keep_for_guest_or_reject(true, event_id, &guest, amount, "Registration failed");
-                };
-                // The seat's storage already covers the guest's balance entry.
-                if leftover > 0 {
-                    self.credit(&guest, leftover);
-                }
-                PromiseOrValue::Value(U128(0))
+                emit("register_failed", json!({ "event_id": event_id, "guest": guest, "amount": amount }));
+                PromiseOrValue::Value(amount)
             }
         }
     }
@@ -651,48 +690,29 @@ impl Contract {
         );
     }
 
-    /// A payment made for someone else never bounces: the USDC stays on that
-    /// guest's balance. The guest pays for their own seat, so a bad payment
-    /// still refunds through the token.
-    fn keep_for_guest_or_reject(
-        &mut self,
-        third_party: bool,
-        event_id: u64,
-        guest: &AccountId,
-        amount: U128,
-        reason: &str,
-    ) -> PromiseOrValue<U128> {
-        if !third_party {
-            env::panic_str(reason);
-        }
-        // A new balance entry costs the contract storage. Without a floor anyone
-        // could create thousands of them with dust payments to made-up names.
-        // Real payments are at least a deposit, so they are never caught here.
-        // No storage-pool check: keeping a real payment matters more.
-        if self.balance(guest) == 0 {
-            require!(amount.0 >= MIN_DEPOSIT, reason);
-        }
-        self.credit(guest, amount.0);
-        emit("register_failed", json!({ "event_id": event_id, "guest": guest, "amount": amount }));
-        PromiseOrValue::Value(U128(0))
+    fn get_event_deposit(&self, event_id: u64) -> Option<u128> {
+        self.events.get(u32::try_from(event_id).ok()?).map(|event| event.deposit)
     }
 
-    /// Panics with a clear message when the contract cannot pay for `bytes`
-    /// more storage. Without this the call fails later with a NEAR runtime
-    /// error that says nothing to the user.
+    fn unreserved_storage(&self) -> u128 {
+        free_storage_balance().saturating_sub(bytes_cost(self.reserved_bytes))
+    }
+
     fn require_storage_pool(&self, bytes: u64) {
         require!(
-            free_storage_balance() >= bytes_cost(bytes),
+            self.unreserved_storage() >= bytes_cost(bytes),
             "Near Events storage pool is empty, please try again later"
         );
     }
 
-    fn forget_guest_event(&mut self, account: &AccountId, event_id: u64) {
-        if let Some(list) = self.guest_events.get_mut(account) {
-            list.retain(|e| *e != event_id);
-            if list.is_empty() {
-                self.guest_events.remove(account);
-            }
+    fn forget_guest_event(&mut self, account: &AccountId, index: u32) {
+        let history = self.guest_events.get_mut(account).expect("Missing guest history");
+        history.swap_remove(index);
+        history.flush();
+        if history.is_empty() {
+            self.guest_events.remove(account);
+        } else if let Some(&moved_event) = history.get(index) {
+            self.guests.get_mut(&(moved_event, account.clone())).expect("Missing guest").history_index = index;
         }
     }
 
@@ -701,6 +721,10 @@ impl Contract {
         event.status = status;
         event.closed_at = env::block_timestamp_ms();
         let host = event.host.clone();
+        let release = SEAT_BYTES * u64::from(event.reserved_seats)
+            + BALANCE_BYTES * (u64::from(event.guest_count) + 1);
+        event.reserved_seats = 0;
+        self.reserved_bytes -= release;
         let open = self.open_events.get(&host).copied().unwrap_or(1);
         if open <= 1 {
             self.open_events.remove(&host);
@@ -726,7 +750,9 @@ impl Contract {
         let amount = amount.map(|a| a.0).unwrap_or(balance);
         require!(amount > 0, "Nothing to withdraw");
         require!(amount <= balance, "Not enough balance");
-        self.set_balance(&owner, balance - amount);
+        let entry = self.balances.get_mut(&owner).expect("Missing balance");
+        entry.available -= amount;
+        entry.pending += amount;
         emit(
             "withdraw",
             json!({ "account_id": owner, "receiver_id": receiver, "amount": U128(amount), "to_intents": to_intents }),
@@ -755,7 +781,9 @@ impl Contract {
         let event = self.event(event_id);
         event.status == EventStatus::Open
             && event.guest_count < event.capacity
-            && free_storage_balance() >= bytes_cost(STORAGE_BYTES_PER_GUEST)
+            && (!guest.as_str().starts_with("0x") || guest.as_str().len() != 42
+                || (self.intents.is_some() && self.relayer.is_some()))
+            && (event.reserved_seats > 0 || self.unreserved_storage() >= bytes_cost(SEAT_BYTES))
             && !self.guests.contains_key(&(event_id, guest.clone()))
     }
 
@@ -764,23 +792,41 @@ impl Contract {
         require!(event.status == EventStatus::Open, "Event is closed");
         require!(event.guest_count < event.capacity, "Event is full");
         require!(!self.guests.contains_key(&(event_id, guest.clone())), "Already registered");
-        self.require_storage_pool(STORAGE_BYTES_PER_GUEST);
-
+        require!(
+            !guest.as_str().starts_with("0x") || guest.as_str().len() != 42
+                || (self.intents.is_some() && self.relayer.is_some()),
+            "Keyless registration requires Intents and a relayer"
+        );
+        let prepaid = event.reserved_seats > 0;
         let index = event.guest_count;
+        if prepaid {
+            self.reserved_bytes -= STORAGE_BYTES_PER_GUEST;
+        } else {
+            self.require_storage_pool(SEAT_BYTES);
+            self.reserved_bytes += BALANCE_BYTES;
+        }
+        let history = self.guest_events.entry(guest.clone())
+            .or_insert_with(|| Vector::new(StorageKey::AccountHistory { account: guest.clone() }));
+        let history_index = history.len();
+        history.push(event_id);
+        history.flush();
         self.guests.insert(
             (event_id, guest.clone()),
             GuestRecord {
                 index,
+                history_index,
                 status: GuestStatus::Registered,
                 registered_at: env::block_timestamp_ms(),
                 paid_by: paid_by.clone(),
             },
         );
         self.guest_index.insert((event_id, index), guest.clone());
-        self.guest_events.entry(guest.clone()).or_default().push(event_id);
         let event = self.event_mut(event_id);
         event.guest_count += 1;
         event.stored_guests += 1;
+        if prepaid {
+            event.reserved_seats -= 1;
+        }
 
         emit("register", json!({ "event_id": event_id, "guest": guest, "paid_by": paid_by }));
     }
@@ -797,20 +843,13 @@ impl Contract {
     }
 
     fn balance(&self, account: &AccountId) -> u128 {
-        self.balances.get(account).copied().unwrap_or(0)
-    }
-
-    fn set_balance(&mut self, account: &AccountId, amount: u128) {
-        if amount == 0 {
-            self.balances.remove(account);
-        } else {
-            self.balances.insert(account.clone(), amount);
-        }
+        self.balances.get(account).map_or(0, |balance| balance.available)
     }
 
     fn credit(&mut self, account: &AccountId, amount: u128) {
-        let balance = self.balance(account);
-        self.set_balance(account, balance + amount);
+        if amount > 0 {
+            self.balances.entry(account.clone()).or_default().available += amount;
+        }
     }
 }
 
@@ -841,6 +880,7 @@ fn view_event(id: u64, e: &Event) -> EventView {
         host: e.host.clone(),
         cohosts: e.cohosts.clone(),
         metadata: e.metadata.clone(),
+        metadata_editable: e.status == EventStatus::Open && env::block_timestamp_ms() < e.metadata.starts_at,
         deposit: U128(e.deposit),
         mode: e.mode,
         price: U128(e.deposit),

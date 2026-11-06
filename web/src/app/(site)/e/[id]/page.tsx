@@ -9,8 +9,6 @@ import { Avatar, AvatarStack, Cover, DateBadge, StatusPill, formatWhen, shortAcc
 import { RegistrationCard } from "@/components/Registration";
 import { GuestGrid } from "@/components/EventParts";
 import { EVENTS_CONTRACT, EXPLORER_URL } from "@/lib/config";
-import { Themed } from "@/components/Themed";
-import { decodeTheme } from "@/lib/theme";
 import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
 
 /**
@@ -42,11 +40,9 @@ export default function EventPage() {
 
   const going = guests.map((g) => g.account_id);
 
-  // Luma's layout in the host's chosen theme: cover, hosts and who's going on
-  // the left; title, time, place, the registration card and the description on the right.
+  // Cover, hosts and who's going on the left; title, time and registration on the right.
   return (
-    <Themed theme={decodeTheme(event.metadata.cover_url)}>
-      <div className="grid gap-8 md:grid-cols-[330px_1fr] items-start max-w-[928px] mx-auto">
+    <div className="grid gap-8 md:grid-cols-[330px_1fr] items-start max-w-[928px] mx-auto">
         <aside className="space-y-6">
           <Cover event={event} className="aspect-square w-full rounded-2xl shadow-sm [&>span]:hidden" />
           <div>
@@ -91,20 +87,10 @@ export default function EventPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 shrink-0 rounded-lg lu-field flex items-center justify-center text-muted">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M12 21s-7-6.2-7-11.5A7 7 0 0119 9.5C19 14.8 12 21 12 21zM12 12a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
-                </svg>
-              </div>
-              <div className="text-sm">
-                <div className="font-medium">{event.metadata.location || "Location TBA"}</div>
-                <div className="text-muted">
-                  {isTicket(event)
-                    ? `${formatUsdc(event.deposit)} USDC ticket`
-                    : `${formatUsdc(event.deposit)} USDC deposit · pool ${formatUsdc(event.total_pool)} USDC`}
-                </div>
-              </div>
+            <div className="text-sm text-muted">
+              {isTicket(event)
+                ? `${formatUsdc(event.deposit)} USDC ticket`
+                : `${formatUsdc(event.deposit)} USDC deposit · pool ${formatUsdc(event.total_pool)} USDC`}
             </div>
           </div>
 
@@ -115,17 +101,9 @@ export default function EventPage() {
             </div>
           </div>
 
-          {event.metadata.description && (
-            <div>
-              <div className="label pb-2 mb-3 border-b border-border">About event</div>
-              <p className="whitespace-pre-wrap leading-relaxed">{event.metadata.description}</p>
-            </div>
-          )}
-
           {event.status !== "Open" && <GuestGrid event={event} guests={guests} me={accountId} />}
         </section>
       </div>
-    </Themed>
   );
 }
 

@@ -11,15 +11,12 @@ export const RPC_URL =
 export const EXPLORER_URL = NETWORK === "mainnet" ? "https://nearblocks.io" : "https://testnet.nearblocks.io";
 /** Testnet USDC comes from the Tidepool faucet. */
 export const HAS_FAUCET = NETWORK === "testnet";
+export const TEST_EVM_FAUCET_LIMIT = 20_000_000n;
 export const USDC_DECIMALS = 6;
 /** NEAR Intents verifier: intents.near on mainnet, Tidepool's copy on testnet. */
 export const INTENTS_CONTRACT: string | null =
   process.env.NEXT_PUBLIC_INTENTS_CONTRACT ?? (NETWORK === "mainnet" ? "intents.near" : "verifier.tidepool-sandbox.testnet");
 /** Every payment and payout goes through NEAR Intents when a verifier is set. */
 export const HAS_INTENTS = !!INTENTS_CONTRACT;
-/**
- * 1Click can register a guest in the same swap (customRecipientMsg → the
- * escrow's ft_transfer_call). Mainnet 1Click does this; Tidepool drops the
- * message and sends a plain ft_transfer, which would strand the deposit.
- */
-export const ONECLICK_REGISTERS = NETWORK === "mainnet";
+/** Live swaps fund the signed-in guest's Intents balance before registration. */
+export const LIVE_EVENT_SWAPS = NETWORK === "mainnet";

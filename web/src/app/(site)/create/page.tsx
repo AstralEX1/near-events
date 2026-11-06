@@ -6,8 +6,6 @@ import { events, toUnits, type EventMode, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { Cover } from "@/components/ui";
-import { Themed } from "@/components/Themed";
-import { COLORS, FONTS, THEMES, decodeTheme, defaultTheme, encodeTheme, shuffleTheme, themeCover, themeStyle, type FontKey, type Theme, type ThemeName } from "@/lib/theme";
 import { SignInOptions } from "@/components/SignIn";
 import { LOCAL_TZ, city, dayLabel, fromEpoch, gmtLabel, toEpoch } from "@/lib/time";
 
@@ -20,23 +18,15 @@ interface When {
   tz: string;
 }
 
-/**
- * Create an event the way Luma lays it out: cover and theme on the left; on
- * the right the name typed big, a Start/End block with its time zone, place,
- * description, then the options as one stack of rows. A Luma link fills it
- * all in, so a host can move registration here in one paste.
- */
+/** Create an event with its title, time, and escrow options. */
 export default function CreateEvent() {
   const { accountId, send } = useWallet();
-  const [form, setForm] = useState({ title: "", description: "", location: "", deposit: "10", capacity: "50", cohosts: "", mode: "Deposit" as EventMode });
+  const [form, setForm] = useState({ title: "", deposit: "10", capacity: "50", cohosts: "", mode: "Deposit" as EventMode });
   const [when, setWhen] = useState<When | null>(null);
-  const [theme, setTheme] = useState<Theme>(defaultTheme("minimal"));
-  const [themeOpen, setThemeOpen] = useState(false);
   const [lumaOpen, setLumaOpen] = useState(false);
   const [lumaUrl, setLumaUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState<string | null>(null);
-  const [picker, setPicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<EventView | null>(null);
@@ -55,14 +45,11 @@ export default function CreateEvent() {
       setForm((f) => ({
         ...f,
         title: e.metadata.title,
-        description: e.metadata.description,
-        location: e.metadata.location,
         deposit: String(Number(e.deposit) / 1e6),
         mode: e.mode ?? "Deposit",
         capacity: String(e.capacity),
         cohosts: e.cohosts.join(", "),
       }));
-      setTheme(decodeTheme(e.metadata.cover_url));
     });
   }, []);
 
@@ -82,10 +69,9 @@ export default function CreateEvent() {
       const r = await fetch(`/api/luma/import?url=${encodeURIComponent(lumaUrl)}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Import failed");
-      setForm((f) => ({ ...f, title: j.title, description: j.description, location: j.location }));
+      setForm((f) => ({ ...f, title: j.title }));
       setWhen((w) => ({ tz: w?.tz ?? LOCAL_TZ, start: new Date(j.starts_at).getTime(), end: new Date(j.ends_at).getTime() }));
-      if (j.cover_url) setTheme((t) => ({ ...t, image: j.cover_url }));
-      setImported(j.luma_url);
+      setImported(lumaUrl.trim());
       setLumaOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -104,6 +90,10 @@ export default function CreateEvent() {
     try {
       const capacity = Number(form.capacity);
       const title = form.title.trim();
+      const encoder = new TextEncoder();
+      if (encoder.encode(title).length > 120) {
+        throw new Error("Title is too long. Shorten it and try again.");
+      }
       await send([
         {
           receiverId: EVENTS_CONTRACT,
@@ -111,9 +101,9 @@ export default function CreateEvent() {
           args: {
             metadata: {
               title,
-              description: form.description.trim(),
-              location: form.location.trim(),
-              cover_url: encodeTheme(theme),
+              description: "",
+              location: "",
+              cover_url: null,
               starts_at: when.start,
               ends_at: when.end,
             },
@@ -136,60 +126,11 @@ export default function CreateEvent() {
 
   if (created) return <Created event={created} />;
 
-  const preview = { id: 0, metadata: { title: form.title || "Event", cover_url: encodeTheme(theme) } } as EventView;
-
   return (
-    <Themed theme={theme}>
-      <form onSubmit={submit} className="max-w-[928px] mx-auto grid gap-8 md:grid-cols-[330px_1fr] items-start pb-40">
-        {/* Left: cover, then theme + shuffle. */}
-        <div className="space-y-4 md:sticky md:top-20">
-          <div className="relative">
-            <Cover event={preview} className="aspect-square w-full rounded-2xl [&>span]:hidden ring-[0.5px] ring-black/10" />
-            <button
-              type="button"
-              aria-label={theme.image ? "Change image" : "Add image"}
-              onClick={() => setPicker(!picker)}
-              className="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-[var(--text)] text-[var(--bg)] flex items-center justify-center ring-2 ring-[var(--bg)] hover:scale-105 transition-transform"
-            >
-              <Icon d="M4 16l4.5-4.5 3 3L16 10l4 4M4 5h16v14H4z" />
-            </button>
-          </div>
-          {picker && (
-            <div className="lu-field p-3 space-y-2">
-              <input
-                autoFocus
-                className="w-full bg-transparent outline-none text-sm"
-                type="url"
-                maxLength={200}
-                placeholder="Paste an image link (https://…)"
-                value={theme.image ?? ""}
-                onChange={(e) => setTheme((t) => ({ ...t, image: e.target.value.trim() || null }))}
-              />
-              <p className="text-xs text-muted">Leave empty to use the theme’s own cover.</p>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setThemeOpen(!themeOpen)} className="lu-field lu-hover flex-1 flex items-center gap-3 p-2 text-left">
-              <span className="w-12 h-9 rounded-md overflow-hidden shrink-0" style={{ ...themeStyle(theme).vars, background: themeStyle(theme).background }}>
-                <span className="block w-5 h-3.5 m-1.5 rounded-sm" style={{ background: themeCover(theme) }} />
-              </span>
-              <span className="flex-1 min-w-0">
-                <span className="block text-xs text-muted">Theme</span>
-                <span className="block font-medium truncate">{THEMES[theme.name].label}</span>
-              </span>
-              <Icon d="M8 9l4-4 4 4M8 15l4 4 4-4" className="text-muted" />
-            </button>
-            <button type="button" aria-label="Shuffle theme" onClick={() => setTheme(shuffleTheme(theme))} className="lu-field lu-hover w-[54px] flex items-center justify-center">
-              <Icon d="M4 7h3l10 10h3M4 17h3l3-3M14 10l3-3h3M18 4l3 3-3 3M18 14l3 3-3 3" />
-            </button>
-          </div>
-        </div>
-
-        {/* Right: the event itself. */}
-        <div className="min-w-0 space-y-4">
+    <>
+      <form onSubmit={submit} className="max-w-2xl mx-auto space-y-4 pb-40">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="lu-chip">
-              <span className="w-4 h-4 rounded-full" style={{ background: theme.color }} />
               {accountId ? <span className="truncate max-w-44">{accountId}</span> : "Your events"}
             </span>
             <div className="flex items-center gap-2">
@@ -229,40 +170,6 @@ export default function CreateEvent() {
           />
 
           {when && <WhenBlock when={when} onChange={setWhen} />}
-
-          <ExpandRow
-            icon="M12 21s-7-6.2-7-11.5A7 7 0 0119 9.5C19 14.8 12 21 12 21zM12 12a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"
-            title="Add Event Location"
-            hint="Offline location or virtual link"
-            value={form.location}
-          >
-            {(close) => (
-              <input
-                autoFocus
-                className="w-full bg-transparent outline-none"
-                maxLength={300}
-                value={form.location}
-                onChange={(e) => set("location")(e.target.value)}
-                onBlur={close}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), close())}
-                placeholder="Address, venue or link"
-              />
-            )}
-          </ExpandRow>
-
-          <ExpandRow icon="M5 6h14M5 10h14M5 14h9M5 18h6" title="Add Description" value={form.description} multiline>
-            {(close) => (
-              <textarea
-                autoFocus
-                className="w-full bg-transparent outline-none min-h-28 resize-y"
-                maxLength={2000}
-                value={form.description}
-                onChange={(e) => set("description")(e.target.value)}
-                onBlur={close}
-                placeholder="Who should come, what happens, what to bring"
-              />
-            )}
-          </ExpandRow>
 
           <div className="space-y-2 pt-1">
             <div className="text-sm font-medium text-muted">Event Options</div>
@@ -344,11 +251,9 @@ export default function CreateEvent() {
               How the widget works
             </Link>
           </p>
-        </div>
-        {themeOpen && <ThemeBar theme={theme} onChange={setTheme} onClose={() => setThemeOpen(false)} />}
       </form>
       {askSignIn && <SignInDialog onClose={() => setAskSignIn(false)} />}
-    </Themed>
+    </>
   );
 }
 
@@ -529,34 +434,6 @@ function TzBox({ tz, at, onChange }: { tz: string; at: number; onChange: (tz: st
   );
 }
 
-/** A quiet row ("Add Event Location") that turns into a field when you click it. */
-function ExpandRow({ icon, title, hint, value, multiline, children }: { icon: string; title: string; hint?: string; value: string; multiline?: boolean; children: (close: () => void) => ReactNode }) {
-  const [editing, setEditing] = useState(false);
-  if (editing)
-    return (
-      <div className="lu-field flex gap-3 px-3 py-2.5 items-start">
-        <Icon d={icon} className="text-muted mt-1" />
-        <div className="flex-1 min-w-0">{children(() => setEditing(false))}</div>
-      </div>
-    );
-  return (
-    <button type="button" onClick={() => setEditing(true)} className="lu-field lu-hover w-full flex gap-3 px-3 py-2 text-left items-start">
-      <Icon d={icon} className="text-muted mt-1" />
-      <span className="flex-1 min-w-0">
-        {value ? (
-          <span className={`block ${multiline ? "whitespace-pre-line line-clamp-4" : "truncate"}`}>{value}</span>
-        ) : (
-          <>
-            <span className="block text-muted">{title}</span>
-            {hint && <span className="block text-xs text-muted/80">{hint}</span>}
-          </>
-        )}
-      </span>
-    </button>
-  );
-}
-
-/** An option row with its value and a pencil; the editor opens in a small dialog. */
 function OptionRow({ icon, label, value, title, help, children }: { icon: string; label: string; value: string; title: string; help: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
@@ -580,120 +457,6 @@ function OptionRow({ icon, label, value, title, help, children }: { icon: string
         </div>
       )}
     </>
-  );
-}
-
-/** Opens from the Theme button, like Luma: themes, then color, font, light/dark, effect and shuffle. */
-function ThemeBar({ theme, onChange, onClose }: { theme: Theme; onChange: (t: Theme) => void; onClose: () => void }) {
-  const [open, setOpen] = useState<"color" | "font" | null>(null);
-  const pick = (name: ThemeName) => onChange({ ...defaultTheme(name), image: theme.image, emoji: theme.emoji });
-  return (
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/90 backdrop-blur shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
-      <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-4 overflow-x-auto">
-        <div className="flex gap-3 shrink-0" role="group" aria-label="Theme">
-          {(Object.keys(THEMES) as ThemeName[]).map((name) => {
-            const t = { ...defaultTheme(name), emoji: theme.emoji };
-            const { background, vars } = themeStyle(t);
-            const active = theme.name === name;
-            return (
-              <button key={name} type="button" onClick={() => pick(name)} className="flex flex-col items-center gap-1 shrink-0">
-                <span
-                  className={`block w-14 h-10 rounded-lg border overflow-hidden ${active ? "ring-2 ring-accent ring-offset-2 ring-offset-surface" : "border-border"}`}
-                  style={{ ...vars, background }}
-                >
-                  <span className="block w-6 h-4 m-1.5 rounded" style={{ background: themeCover(t) }} />
-                </span>
-                <span className={`text-[11px] ${active ? "font-semibold" : "text-muted"}`}>{THEMES[name].label}</span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="h-10 w-px bg-border shrink-0" />
-        <div className="relative shrink-0">
-          <button type="button" onClick={() => setOpen(open === "color" ? null : "color")} className="flex flex-col items-center gap-1">
-            <span className="w-8 h-8 rounded-full border border-border" style={{ background: theme.color }} />
-            <span className="text-[11px] text-muted">Color</span>
-          </button>
-          {open === "color" && (
-            <div className="absolute bottom-14 left-1/2 -translate-x-1/2 card p-2 flex gap-1.5 shadow-xl">
-              {COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  aria-label={`Color ${c}`}
-                  onClick={() => onChange({ ...theme, color: c })}
-                  className={`w-7 h-7 rounded-full ${theme.color === c ? "ring-2 ring-offset-2 ring-offset-surface ring-text" : ""}`}
-                  style={{ background: c }}
-                />
-              ))}
-              <input type="color" aria-label="Custom color" value={theme.color} onChange={(e) => onChange({ ...theme, color: e.target.value })} className="w-7 h-7" />
-            </div>
-          )}
-        </div>
-        <div className="relative shrink-0">
-          <button type="button" onClick={() => setOpen(open === "font" ? null : "font")} className="flex flex-col items-center gap-1">
-            <span className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-sm" style={{ fontFamily: FONTS[theme.font].css }}>
-              Ag
-            </span>
-            <span className="text-[11px] text-muted">Font</span>
-          </button>
-          {open === "font" && (
-            <div className="absolute bottom-14 left-1/2 -translate-x-1/2 card p-1 w-40 shadow-xl">
-              {(Object.keys(FONTS) as FontKey[]).map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => {
-                    onChange({ ...theme, font: f });
-                    setOpen(null);
-                  }}
-                  className={`block w-full text-left px-3 py-1.5 rounded-lg hover:bg-border/50 ${theme.font === f ? "font-semibold" : ""}`}
-                  style={{ fontFamily: FONTS[f].css }}
-                >
-                  {FONTS[f].label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={() => onChange({ ...theme, display: theme.display === "dark" ? "light" : "dark" })}
-          className="flex flex-col items-center gap-1 shrink-0"
-        >
-          <span className="w-8 h-8 rounded-full border border-border flex items-center justify-center">{theme.display === "dark" ? "☾" : "☀"}</span>
-          <span className="text-[11px] text-muted">Display</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange({ ...theme, effect: !theme.effect })}
-          className="flex flex-col items-center gap-1 shrink-0"
-          aria-pressed={theme.effect}
-        >
-          <span className={`w-8 h-8 rounded-full border flex items-center justify-center ${theme.effect ? "border-accent bg-accent-soft" : "border-border"}`}>✨</span>
-          <span className="text-[11px] text-muted">Effect</span>
-        </button>
-        <button type="button" onClick={() => onChange(shuffleTheme(theme))} className="flex flex-col items-center gap-1 shrink-0">
-          <span className="w-8 h-8 rounded-full border border-border flex items-center justify-center">🎲</span>
-          <span className="text-[11px] text-muted">Shuffle</span>
-        </button>
-        {theme.name === "emoji" && (
-          <label className="flex flex-col items-center gap-1 shrink-0">
-            <input
-              className="w-10 h-8 rounded-full border border-border bg-transparent text-center"
-              value={theme.emoji}
-              maxLength={4}
-              onChange={(e) => onChange({ ...theme, emoji: [...e.target.value].slice(-1).join("") || "🎉" })}
-              aria-label="Emoji"
-            />
-            <span className="text-[11px] text-muted">Emoji</span>
-          </label>
-        )}
-        <button type="button" onClick={onClose} className="btn btn-primary !py-2 text-sm ml-auto shrink-0 sticky right-0 shadow-[-12px_0_12px_var(--surface)]">
-          Done
-        </button>
-      </div>
-    </div>
   );
 }
 

@@ -3,7 +3,7 @@
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { events, type EventView, type GuestStatus } from "@/lib/near";
-import { embedVars, readEmbedStyle, readThen, type EmbedMessage } from "@/lib/embed";
+import { embedQuery, embedVars, readEmbedStyle, readThen, type EmbedMessage } from "@/lib/embed";
 import { useWallet } from "@/lib/wallet";
 import { Cover, formatWhen } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
@@ -19,16 +19,21 @@ export default function EmbedJoin() {
   const style = readEmbedStyle(q);
   const { accountId, ready } = useWallet();
   const [event, setEvent] = useState<EventView | null | undefined>(undefined);
+  const [loadError, setLoadError] = useState(false);
   const [status, setStatus] = useState<GuestStatus | null>(null);
   const told = useRef(false);
   const then = readThen(q, accountId, id);
 
   const load = useCallback(async () => {
     const [e, s] = await Promise.all([
-      events.get(id).catch(() => null),
+      events.get(id).catch(() => undefined),
       accountId ? events.guestStatus(id, accountId).catch(() => null) : Promise.resolve(null),
     ]);
-    setEvent(e);
+    if (e === undefined) setLoadError(true);
+    else {
+      setEvent(e);
+      setLoadError(false);
+    }
     setStatus(s);
   }, [id, accountId]);
 
@@ -48,7 +53,7 @@ export default function EmbedJoin() {
   return (
     <div className="embed min-h-screen bg-bg p-4" style={embedVars(style)}>
       <div className="max-w-md mx-auto space-y-4">
-        {event === undefined && <p className="text-muted text-sm">Loading…</p>}
+        {event === undefined && <p className="text-muted text-sm">{loadError ? "Could not load event. Check your connection and reload." : "Loading…"}</p>}
         {event === null && <p>Event not found.</p>}
         {event && (
           <>
@@ -57,11 +62,10 @@ export default function EmbedJoin() {
               <div className="min-w-0">
                 <h1 className="embed-title text-xl font-semibold leading-snug">{event.metadata.title}</h1>
                 <div className="text-sm text-muted truncate">{formatWhen(event.metadata.starts_at, event.metadata.ends_at)}</div>
-                <div className="text-sm text-muted truncate">{event.metadata.location}</div>
               </div>
             </div>
             {ready ? (
-              <RegistrationCard event={event} myStatus={status} onChange={load} />
+              <RegistrationCard event={event} myStatus={status} onChange={load} embedReturnTo={`/embed/e/${id}/join${embedQuery(q)}`} />
             ) : (
               <p className="text-muted text-sm">Loading sign-in…</p>
             )}

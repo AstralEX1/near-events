@@ -20,13 +20,8 @@ fn wasm(package: &str) -> &'static [u8] {
 
 fn build_wasm(package: &str) -> Vec<u8> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
-    // Release uses `panic = "abort"`, which turns a contract panic into a bare
-    // unreachable trap in this sandbox. Unwind keeps the panic text so the
-    // tests can tell a refused init from a broken call. The published profile
-    // is unchanged.
     let status = Command::new("cargo")
-        .args(["build", "-p", package, "--release", "--target", "wasm32-unknown-unknown"])
-        .env("CARGO_PROFILE_RELEASE_PANIC", "unwind")
+        .args(["build", "--locked", "-p", package, "--release", "--target", "wasm32-unknown-unknown"])
         .current_dir(&root)
         .status()
         .expect("cargo build");
@@ -59,6 +54,7 @@ async fn escrow_balance(events: &Contract, account: &AccountId) -> anyhow::Resul
 }
 
 async fn mint(token: &Contract, caller: &Account, account: &AccountId, amount: u128) -> anyhow::Result<()> {
+    storage_deposit(token, caller, account).await?;
     caller
         .call(token.id(), "mint")
         .args_json(json!({ "amount": amount.to_string(), "account_id": account }))
@@ -142,6 +138,11 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     expect_reject(&too_much, "Max 1000");
 
     let events = worker.dev_deploy(events_wasm).await?;
+    let untrusted = worker.dev_create_account().await?;
+    let rejected = untrusted.call(events.id(), "new")
+        .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null }))
+        .transact().await?;
+    assert!(rejected.is_failure(), "a third party initialized the escrow");
     events
         .call("new")
         .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null }))
@@ -234,8 +235,7 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     .await?
     .into_result()?;
 
-    // A friend sends less than the deposit for someone else. The token must
-    // not bounce that USDC back to the friend; it sits on the guest's balance.
+    // A short third-party payment returns to the friend without opening a balance.
     let late: AccountId = "late.testnet".parse().unwrap();
     let short = 4 * 1_000_000;
     let friend_before = token_balance(&usdc, friend.id()).await?;
@@ -248,8 +248,8 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     )
     .await?
     .into_result()?;
-    assert_eq!(token_balance(&usdc, friend.id()).await?, friend_before - short);
-    assert_eq!(escrow_balance(&events, &late).await?, short);
+    assert_eq!(token_balance(&usdc, friend.id()).await?, friend_before);
+    assert_eq!(escrow_balance(&events, &late).await?, 0);
     let late_status: Option<String> = events
         .view("get_guest_status")
         .args_json(json!({ "event_id": event_id, "account_id": late }))
@@ -427,76 +427,98 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
 
     // Direct callback forgery was already checked. Gas for a wider event is
     // measured below so a full room cannot brick finalize.
-    measure_finalize_gas(&worker, &usdc, &events, &host).await?;
+    measure_full_event_gas(&worker, &usdc, &events, &host, events_wasm).await?;
 
     Ok(())
 }
 
-async fn measure_finalize_gas(
+async fn measure_full_event_gas(
     worker: &Worker<Sandbox>,
     usdc: &Contract,
     events: &Contract,
     host: &Account,
+    escrow_wasm: &[u8],
 ) -> anyhow::Result<()> {
-    let guests = 20u64;
-    let now_ms = worker.view_block().await?.timestamp() / 1_000_000;
-    let event_id: u64 = host
-        .call(events.id(), "create_event")
-        .args_json(json!({
-            "metadata": {
-                "title": "Gas",
-                "description": "",
-                "location": "",
-                "cover_url": null,
-                "starts_at": now_ms,
-                "ends_at": now_ms + 60_000
-            },
-            "deposit": "1000000",
-            "capacity": guests,
-            "cohosts": null
-        }))
-        .transact()
-        .await?
-        .json()?;
-
-    let mut accounts = Vec::new();
-    for i in 0..guests {
-        let account = worker.dev_create_account().await?;
-        mint(usdc, host, account.id(), 1_000_000).await?;
-        transfer_call(
-            &account,
-            usdc.id(),
-            events.id(),
-            1_000_000,
-            json!({ "action": "register", "event_id": event_id }),
-        )
-        .await?
-        .into_result()?;
-        accounts.push(account.id().clone());
-        let _ = i;
+    let mut guests = Vec::new();
+    for _ in 0..300 {
+        guests.push(worker.dev_create_account().await?);
     }
-    let finalized = host
-        .call(events.id(), "finalize")
-        .args_json(json!({ "event_id": event_id, "attended": accounts }))
-        .deposit(yocto(1))
-        .gas(Gas::from_tgas(300))
-        .transact()
-        .await?
-        .into_result()?;
-    let burned = finalized.total_gas_burnt.as_gas();
-    let per_guest = burned / guests;
-    // A function call can spend 300 TGas. Leave headroom for the host
-    // transaction itself. 300 seats at this per-guest cost must fit.
-    let projected = per_guest.saturating_mul(300);
-    assert!(
-        projected < 250_000_000_000_000,
-        "finalize used {burned} gas for {guests} guests ({per_guest} each); 300 seats would need {projected}"
-    );
+    for batch in guests.chunks(16) {
+        let mut tasks = tokio::task::JoinSet::new();
+        for guest in batch.iter().cloned() {
+            let usdc = usdc.clone();
+            tasks.spawn(async move { mint(&usdc, &guest, guest.id(), 3_000_000).await });
+        }
+        while let Some(result) = tasks.join_next().await {
+            result??;
+        }
+    }
+
+    for operation in ["finalize", "cancel", "refund_if_abandoned"] {
+        // Each settlement starts without balance entries for these guests.
+        let target = if operation == "finalize" {
+            events.clone()
+        } else {
+            let contract = worker.dev_deploy(escrow_wasm).await?;
+            contract.call("new")
+                .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null }))
+                .transact().await?.into_result()?;
+            storage_deposit(usdc, host, contract.id()).await?;
+            contract
+        };
+        let now = worker.view_block().await?.timestamp() / 1_000_000;
+        let start = if operation == "refund_if_abandoned" {
+            now - 31 * 24 * 60 * 60 * 1000
+        } else {
+            now
+        };
+        let event_id: u64 = host.call(target.id(), "create_event")
+            .args_json(json!({
+                "metadata": {
+                    "title": "Full event gas check", "description": "", "location": "", "cover_url": null,
+                    "starts_at": start, "ends_at": start + 60_000
+                },
+                "deposit": "1000000", "capacity": guests.len()
+            }))
+            .transact().await?.json()?;
+        for batch in guests.chunks(16) {
+            let mut tasks = tokio::task::JoinSet::new();
+            for guest in batch.iter().cloned() {
+                let usdc = usdc.id().clone();
+                let receiver = target.id().clone();
+                tasks.spawn(async move {
+                    let used: String = transfer_call(
+                        &guest, &usdc, &receiver, 1_000_000,
+                        json!({ "action": "register", "event_id": event_id }),
+                    ).await?.json()?;
+                    anyhow::ensure!(used == "1000000", "registration payment was not accepted");
+                    Ok::<(), anyhow::Error>(())
+                });
+            }
+            while let Some(result) = tasks.join_next().await {
+                result??;
+            }
+        }
+
+        let args = if operation == "finalize" {
+            let accounts: Vec<_> = guests.iter().map(|guest| guest.id()).collect();
+            json!({ "event_id": event_id, "attended": accounts })
+        } else {
+            json!({ "event_id": event_id })
+        };
+        let deposit = if operation == "refund_if_abandoned" { 0 } else { 1 };
+        let result = host.call(target.id(), operation)
+            .args_json(args)
+            .deposit(yocto(deposit)).gas(Gas::from_tgas(300))
+            .transact().await?.into_result()?;
+        let gas = result.total_gas_burnt.as_gas();
+        eprintln!("300-guest {operation} used {gas} gas");
+        assert!(gas < 250_000_000_000_000, "300-guest {operation} used {gas} gas");
+        assert_eq!(escrow_balance(&target, guests.last().unwrap().id()).await?, 1_000_000);
+    }
     Ok(())
 }
 
-/// Ticket mode on the real runtime: buy, cancel-free close after the start,
-/// host withdraws the ticket money as USDC.
 #[tokio::test]
 async fn sandbox_ticket_cycle() -> anyhow::Result<()> {
     let worker = near_workspaces::sandbox().await?;

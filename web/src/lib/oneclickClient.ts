@@ -2,7 +2,7 @@
 
 // Browser side of NEAR Intents 1Click. Every request goes through our
 // /api/oneclick proxy, so the API key stays on the server.
-import { EVENTS_CONTRACT, USDC_CONTRACT } from "./config";
+import { USDC_CONTRACT } from "./config";
 import type { Call } from "./wallet";
 import type { OneClickToken } from "./oneclick";
 
@@ -16,6 +16,7 @@ export interface Quote {
   amountOutFormatted: string;
   timeEstimate?: number;
   deadline?: string;
+  quoteId?: string;
 }
 
 /** USDC on NEAR as 1Click names it. */
@@ -27,7 +28,7 @@ const STORAGE_DEPOSIT = 1_250_000_000_000_000_000_000n;
 let tokenList: Promise<OneClickToken[]> | null = null;
 
 export function oneClickTokens(): Promise<OneClickToken[]> {
-  tokenList ??= fetch("/api/oneclick/tokens")
+  tokenList ??= fetch("/api/oneclick/tokens", { signal: AbortSignal.timeout(12_000) })
     .then((r) => r.json())
     .then((t: OneClickToken[] | { error: string }) => {
       if (!Array.isArray(t)) throw new Error(t.error);
@@ -43,6 +44,7 @@ export function oneClickTokens(): Promise<OneClickToken[]> {
 export async function oneClickQuote(body: Record<string, unknown>): Promise<Quote> {
   const r = await fetch("/api/oneclick/quote", {
     method: "POST",
+    signal: AbortSignal.timeout(15_000),
     body: JSON.stringify({ slippageTolerance: 100, referral: "near-events", deadline: new Date(Date.now() + 60 * 60_000).toISOString(), ...body }),
   });
   const json = await r.json();
@@ -52,47 +54,48 @@ export async function oneClickQuote(body: Record<string, unknown>): Promise<Quot
 
 export type SwapStatus = "PENDING_DEPOSIT" | "KNOWN_DEPOSIT_TX" | "PROCESSING" | "SUCCESS" | "INCOMPLETE_DEPOSIT" | "REFUNDED" | "FAILED";
 
-export async function oneClickStatus(depositAddress: string): Promise<SwapStatus | null> {
-  const r = await fetch(`/api/oneclick/status?depositAddress=${encodeURIComponent(depositAddress)}`)
-    .then((x) => x.json())
-    .catch(() => null);
-  return r?.status ?? null;
-}
-
-/** Waits until 1Click settles the swap. Resolves on SUCCESS, throws on refund/failure/timeout. */
-export async function waitForSwap(depositAddress: string, onStatus?: (s: SwapStatus) => void, timeoutMs = 10 * 60_000) {
-  const end = Date.now() + timeoutMs;
-  while (Date.now() < end) {
-    const s = await oneClickStatus(depositAddress);
-    if (s) onStatus?.(s);
-    if (s === "SUCCESS") return;
-    if (s === "REFUNDED") throw new Error("NEAR Intents refunded the payment. Nothing was charged.");
-    if (s === "FAILED" || s === "INCOMPLETE_DEPOSIT") throw new Error(`NEAR Intents payment ${s.toLowerCase().replace("_", " ")}.`);
-    await new Promise((r) => setTimeout(r, 4000));
+export async function oneClickStatus(depositAddress: string, memo?: string, signal?: AbortSignal): Promise<SwapStatus | null> {
+  const query = new URLSearchParams({ depositAddress });
+  if (memo) query.set("memo", memo);
+  const deadline = AbortSignal.timeout(10_000);
+  try {
+    const res = await fetch(`/api/oneclick/status?${query}`, {
+      signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
+    });
+    return res.ok ? (await res.json()).status ?? null : null;
+  } catch {
+    return null;
   }
-  throw new Error("NEAR Intents is still processing. Check back in a few minutes.");
 }
 
-/**
- * Quote for an RSVP deposit paid from a NEAR account: 1Click delivers exactly
- * the deposit in USDC to the escrow with a register message naming the guest.
- */
-export function registerQuote(opts: { originAsset: string; eventId: number; deposit: string; guest: string; refundTo: string; refundType?: "ORIGIN_CHAIN" | "INTENTS"; dry?: boolean }) {
-  return oneClickQuote({
-    dry: opts.dry ?? false,
-    swapType: "EXACT_OUTPUT",
-    // USDC → USDC has no price risk; 1Click pads amountIn by the slippage.
-    ...(opts.originAsset === USDC_ASSET ? { slippageTolerance: 10 } : {}),
-    originAsset: opts.originAsset,
-    depositType: "ORIGIN_CHAIN",
-    destinationAsset: USDC_ASSET,
-    amount: opts.deposit,
-    refundTo: opts.refundTo,
-    refundType: opts.refundType ?? "ORIGIN_CHAIN",
-    recipient: EVENTS_CONTRACT,
-    recipientType: "DESTINATION_CHAIN",
-    customRecipientMsg: JSON.stringify({ action: "register", event_id: opts.eventId, guest: opts.guest }),
-  });
+/** Resolves only after delivery. A timeout means the swap may still settle. */
+export async function waitForSwap(
+  depositAddress: string, onStatus?: (s: SwapStatus) => void,
+  options: { memo?: string; signal?: AbortSignal; timeoutMs?: number } = {},
+) {
+  const signal = AbortSignal.any([AbortSignal.timeout(options.timeoutMs ?? 10 * 60_000), ...(options.signal ? [options.signal] : [])]);
+  let delay = 4000;
+  while (!signal.aborted) {
+    const status = await oneClickStatus(depositAddress, options.memo, signal);
+    if (signal.aborted) break;
+    if (status) onStatus?.(status);
+    if (status === "SUCCESS") return;
+    if (status === "REFUNDED") throw new Error("1Click refunded the swap to the refund destination.");
+    if (status === "FAILED" || status === "INCOMPLETE_DEPOSIT") {
+      throw new Error(`1Click status: ${status.toLowerCase().replaceAll("_", " ")}. Check this payment before sending again.`);
+    }
+    await new Promise<void>((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", finish);
+        resolve();
+      };
+      const timer = setTimeout(finish, delay);
+      signal.addEventListener("abort", finish, { once: true });
+    });
+    delay = Math.min(delay * 2, 20_000);
+  }
+  throw new Error("The swap may still be processing. Check the existing payment before sending again.");
 }
 
 /** The NEAR wallet calls that pay a 1Click deposit address with a NEP-141 token. */

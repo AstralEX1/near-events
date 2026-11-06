@@ -24,23 +24,21 @@ Hackathon track focus: Real-World Money (USDC, NEAR Intents, gasless onboarding)
 
 | What | Account |
 |---|---|
-| Event escrow (the web app's default: deposits or paid tickets, check-in off-chain, `finalize` with the attendee list) | [`escrow-tp3.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-tp3.nearevents-11022103.testnet) |
+| Event escrow (the web app's default) | [`escrow-tp3.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-tp3.nearevents-11022103.testnet) |
 | Test USDC (Tidepool faucet) | [`usdc.tidepool-sandbox.testnet`](https://testnet.nearblocks.io/address/usdc.tidepool-sandbox.testnet) |
-| Older escrow code with on-chain check-in (kept for history): `escrow-tp2` (tickets), `escrow-tp` and `escrow-v3` (deposit only, our own test USDC `usdc-nearevents-11022103.testnet`) | not used by the app |
 
 NEAR Intents itself has no testnet. On testnet the Intents paths run on
 [Tidepool](https://www.usetidepool.tech/docs), a 1Click sandbox with the official
 Intents verifier (`verifier.tidepool-sandbox.testnet`) and its own test USDC
-(`usdc.tidepool-sandbox.testnet`). Tidepool drops the message that lets 1Click
-register a guest in the same swap, so on testnet the RSVP is a direct test-USDC
-transfer; cash-out through 1Click and into Intents accounts works there. Paying
-and registering in one swap works on mainnet only (`NEXT_PUBLIC_NETWORK=mainnet`).
+(`usdc.tidepool-sandbox.testnet`). The testnet UI uses a direct test-USDC transfer for NEAR wallets and the
+Tidepool verifier for EVM wallets. On mainnet, 1Click funds the guest’s Intents
+account first, and the guest confirms registration separately.
 
 ## Try it
 
 ```bash
 cd web
-cp .env.example .env.local      # testnet defaults; relayer vars are optional
+cp .env.example .env.local      # relayer settings are required for FastAuth and EVM actions
 npm install
 npm run dev                     # http://localhost:3000
 ```
@@ -61,6 +59,9 @@ npm run dev                     # http://localhost:3000
 7. Press Withdraw on the event page or `/me`: send the payout through NEAR
    Intents to any chain (via 1Click) or to any NEAR Intents account.
 
+The app reads and writes events through one escrow: `escrow-tp3.nearevents-11022103.testnet`.
+Older escrow deployments are not queried or supported by the app.
+
 Without a browser, the whole cycle runs from a script (uses your own testnet
 accounts from `~/.near-credentials`; Tidepool's faucet tops the guest up with test USDC):
 
@@ -79,7 +80,7 @@ Any business can take deposit-backed registrations on its own site with two line
 
 ```html
 <script src="https://YOUR-NEAR-ME-HOST/embed.js" async></script>
-<near-event event="6" accent="#ff401f"></near-event>
+<near-event event="YOUR_EVENT_ID" accent="#ff401f"></near-event>
 ```
 
 Hosts get a code builder with live preview at `/widget`; there is an iframe
@@ -98,7 +99,7 @@ host / co-host ── create_event / finalize(attended) ──► escrow contrac
                                    (any chain via 1Click, or any Intents account)
 ```
 
-Contract: `contracts/events/src/lib.rs` (91 unit tests in `tests.rs`).
+Contract: `contracts/events/src/lib.rs` (unit tests in `tests.rs`).
 
 **EVM wallet flow (mainnet):** the guest signs an ERC-191 intent
 `ft_withdraw {token: USDC, receiver_id: escrow, msg: register}`; `/api/intents/execute`
@@ -108,8 +109,9 @@ checks it is only a Near Me registration and submits it to `intents.near`
 | Method | Who | What |
 |---|---|---|
 | `create_event(metadata, deposit, capacity, cohosts)` | anyone (caller = host) | free: the contract pays storage from its own balance; max 5 open events per host, capacity ≤ 300, deposit ≥ 0.1 USDC; up to 10 co-hosts, fixed after creation |
-| `ft_transfer_call` → `ft_on_transfer` | guest / friend / 1Click / intents.near | `{"action":"register","event_id":N,"guest":"..."}` |
-| `refund_guest` | host (+1 yocto) | refund one guest who has not been checked in |
+| `ft_transfer_call` → `ft_on_transfer` | guest / friend / verifier | `{"action":"register","event_id":N,"guest":"..."}` |
+| `update_event(event_id, title, starts_at, ends_at)` | host (+1 yocto) | update the event details before it starts, on the audit candidate |
+| `refund_guest` | host (+1 yocto) | refund one guest and free their seat while the event is open |
 | `finalize(event_id, attended)` | host (+1 yocto) | `attended` = guests checked in at the door (kept off-chain on our server until now). Deposit: pool ÷ attendees, remainder to host, empty list → full refund. Ticket: all ticket money to the host after the start |
 | `set_paused(paused)` | owner = the account that ran `new` (+1 yocto) | stops new events and registrations; payouts, refunds and withdrawals keep working |
 | `cancel`, `refund_if_abandoned` | host (+1 yocto) / anyone after 30 days | refund every guest deposit |
@@ -119,23 +121,30 @@ checks it is only a Near Me registration and submits it to `intents.near`
 
 Views include `storage_pool` (NEAR left for free event creation) and `open_events_of(account)`.
 
-Init: `new(usdc, intents, relayer)`. `relayer` may be `null` until the web
-relayer account is set. Privileged mutators require exactly 1 yoctoNEAR.
+Init is private and runs atomically with deploy. Set `relayer` at initialization
+for an escrow accepting EVM guests. Privileged mutators require exactly 1 yoctoNEAR.
 
-Safety notes: only the configured USDC is accepted; a payment made for someone
-else (friend, 1Click, intents.near) never bounces, because a refund might not
-reach the guest; it lands on the guest's balance instead. Capacity is capped at
-300 so payout fits in one transaction. The pool is only the guests' deposits.
+Pay from another chain by funding your own NEAR Intents balance through 1Click,
+then confirm registration. A declined registration returns the unused amount to
+the payment sender through NEP-141. The Intents verifier can recredit the original
+withdrawal owner. **Never use plain `ft_transfer` to send USDC to the escrow.**
+It creates neither a registration nor a recoverable credit.
+
+The escrow reserves storage for open seats and future refunds. The deploy
+instructions explain how to move to this storage layout.
 
 ## Build and test
 
 ```bash
 cd contracts
-cargo test -p near-events                       # 91 unit tests
-cargo test -p test-usdc                         # faucet guards
-cargo test -p near-events-sandbox               # local NEAR sandbox
-cd events && cargo near build non-reproducible-wasm
+cargo test --locked -p near-events -p test-usdc
+cargo test --locked -p near-events-sandbox
+cargo near build non-reproducible-wasm --locked --manifest-path events/Cargo.toml
 ```
+
+Use the last command for local development. For a release, build the committed
+snapshot using `cargo near build reproducible-wasm --manifest-path events/Cargo.toml`
+and verify its hash against the deployed account. See [deployment and release checks](docs/DEPLOY.md).
 
 ## Built with
 

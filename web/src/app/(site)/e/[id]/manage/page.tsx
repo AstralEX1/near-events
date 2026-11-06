@@ -10,6 +10,7 @@ import { useWallet } from "@/lib/wallet";
 import { Avatar, StatusPill, shortAccount } from "@/components/ui";
 import { QrScanner } from "@/components/Qr";
 import { Overview } from "./Overview";
+import { LOCAL_TZ, fromEpoch, toEpoch } from "@/lib/time";
 
 type Tab = "overview" | "guests" | "registration";
 const TABS: { id: Tab; label: string }[] = [
@@ -56,9 +57,12 @@ function ManageEvent() {
   };
 
   const load = useCallback(async () => {
-    const [e, g, marks] = await Promise.all([events.get(id), events.guests(id), checkIns.list(id).catch((): Record<string, unknown> => ({}))]);
+    const e = await events.get(id);
+    if (!e) throw new Error("Event not found.");
+    const g = await events.guests(id);
     // Door check-ins live on our server until finalize puts them on-chain.
-    if (e && e.status === "Open") {
+    if (e.status === "Open") {
+      const marks = await checkIns.list(id);
       const withMarks = g.map((x): GuestView => (marks[x.account_id] ? { ...x, status: "Attended" } : x));
       setGuests(withMarks);
       setEvent({ ...e, attended_count: withMarks.filter((x) => x.status === "Attended").length });
@@ -70,7 +74,9 @@ function ManageEvent() {
   }, [id]);
 
   useEffect(() => {
-    load();
+    setEvent(null);
+    setError(null);
+    load().catch((e: Error) => setError(e.message));
   }, [load]);
 
   useEffect(() => setOrigin(window.location.origin), []);
@@ -84,7 +90,7 @@ function ManageEvent() {
     });
   }, [guests, query]);
 
-  if (!event) return <p className="text-muted px-1">Loading…</p>;
+  if (!event) return <p className="text-muted px-1" role="status">{error ?? "Loading…"}</p>;
 
   const isHost = accountId === event.host;
   const isStaff = isHost || (!!accountId && event.cohosts.includes(accountId));
@@ -127,7 +133,6 @@ function ManageEvent() {
       setBusy(false);
     }
   };
-  const attendedList = guests.filter((g) => g.status === "Attended").map((g) => g.account_id);
 
   const onScan = (text: string) => {
     const account = text.replace(/^near:/, "").trim().toLowerCase();
@@ -166,17 +171,28 @@ function ManageEvent() {
   const ticket = isTicket(event);
   // Ticket money is released only once the event has started (the contract enforces it too).
   const ticketTooEarly = ticket && Date.now() < event.metadata.starts_at;
-  const finalizeEvent = () => {
+  const finalizeEvent = async () => {
     if (ticketTooEarly) return setError("Ticket money is released once the event has started. You can close the event after that.");
-    run(
-      "finalize",
-      { event_id: id, attended: attendedList },
-      ticket
-        ? `Close the event and take the ticket money?\n\n${event.guest_count} tickets · ${formatUsdc(pool)} USDC to you.\n\nThis cannot be undone.`
-        : event.attended_count === 0
+    setBusy(true);
+    setError(null);
+    try {
+      const fresh = await events.get(id);
+      if (!fresh || fresh.status !== "Open") throw new Error("This event is closed or unavailable.");
+      const [currentGuests, marks] = await Promise.all([events.guests(id), checkIns.list(id)]);
+      if (currentGuests.length !== fresh.guest_count) throw new Error("Guest list changed. Try closing the event again.");
+      const attended = currentGuests.filter((g) => marks[g.account_id]).map((g) => g.account_id);
+      const currentPool = BigInt(fresh.total_pool);
+      const confirmation = ticket
+        ? `Close the event and take the ticket money?\n\n${fresh.guest_count} tickets · ${formatUsdc(currentPool)} USDC to you.\n\nThis cannot be undone.`
+        : attended.length === 0
           ? "Nobody was checked in, so every deposit goes back to its guest. Close the event?"
-          : `Close the event and pay out?\n\n${event.attended_count} of ${event.guest_count} came.\nPool: ${formatUsdc(pool)} USDC.\nEach attendee gets ${formatUsdc(share)} USDC.\n\nThis cannot be undone.`,
-    );
+          : `Close the event and pay out?\n\n${attended.length} of ${fresh.guest_count} came.\nPool: ${formatUsdc(currentPool)} USDC.\nEach attendee gets ${formatUsdc(currentPool / BigInt(attended.length))} USDC.\n\nThis cannot be undone.`;
+      await run("finalize", { event_id: id, attended }, confirmation);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   };
   const paid = guests.length;
   const checkedIn = guests.filter((g) => g.status === "Attended").length;
@@ -225,21 +241,31 @@ function ManageEvent() {
       {error && <p className="text-sm text-warn break-words card p-3">{error}</p>}
 
       {tab === "overview" && (
-        <Overview
-          event={event}
-          guests={guests}
-          origin={origin}
-          isHost={isHost}
-          busy={busy}
-          onGuests={() => setTab("guests")}
-          onCheckIn={() => {
-            setTab("guests");
-            setScanning(true);
-            setScanNote(null);
-          }}
-          onFinalize={finalizeEvent}
-          onCancel={() => run("cancel", { event_id: id }, ticket ? "Cancel the event and refund every ticket?" : "Cancel the event and refund every guest deposit?")}
-        />
+        <>
+          <Overview
+            event={event}
+            guests={guests}
+            origin={origin}
+            isHost={isHost}
+            busy={busy}
+            onGuests={() => setTab("guests")}
+            onCheckIn={() => {
+              setTab("guests");
+              setScanning(true);
+              setScanNote(null);
+            }}
+            onFinalize={finalizeEvent}
+            onCancel={() => run("cancel", { event_id: id }, ticket ? "Cancel the event and refund every ticket?" : "Cancel the event and refund every guest deposit?")}
+          />
+          {isHost && event.metadata_editable && (
+            <EventMetadataEditor
+              key={`${event.metadata.title}:${event.metadata.starts_at}:${event.metadata.ends_at}`}
+              event={event}
+              busy={busy}
+              onUpdate={(title, starts_at, ends_at) => run("update_event", { event_id: id, title, starts_at, ends_at })}
+            />
+          )}
+        </>
       )}
 
       {tab === "guests" && (
@@ -289,6 +315,65 @@ function ManageEvent() {
         />
       )}
     </div>
+  );
+}
+
+function EventMetadataEditor({
+  event,
+  busy,
+  onUpdate,
+}: {
+  event: EventView;
+  busy: boolean;
+  onUpdate: (title: string, starts_at: number, ends_at: number) => void;
+}) {
+  const initialStart = fromEpoch(event.metadata.starts_at, LOCAL_TZ);
+  const initialEnd = fromEpoch(event.metadata.ends_at, LOCAL_TZ);
+  const initialStartValue = `${initialStart.date}T${initialStart.time}`;
+  const initialEndValue = `${initialEnd.date}T${initialEnd.time}`;
+  const [title, setTitle] = useState(event.metadata.title);
+  const [start, setStart] = useState(initialStartValue);
+  const [end, setEnd] = useState(initialEndValue);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) return setError("Add an event name.");
+    if (new TextEncoder().encode(normalizedTitle).length > 120) {
+      return setError("Title is too long. Shorten it and try again.");
+    }
+    const starts_at = start === initialStartValue ? event.metadata.starts_at : toEpoch(start.slice(0, 10), start.slice(11, 16), LOCAL_TZ);
+    const ends_at = end === initialEndValue ? event.metadata.ends_at : toEpoch(end.slice(0, 10), end.slice(11, 16), LOCAL_TZ);
+    if (starts_at <= Date.now()) return setError("The new start time must be in the future.");
+    if (ends_at < starts_at) return setError("The end time cannot be before the start time.");
+    setError(null);
+    onUpdate(normalizedTitle, starts_at, ends_at);
+  };
+
+  return (
+    <form onSubmit={submit} className="card p-4 space-y-3">
+      <h2 className="font-medium">Edit event</h2>
+      <label className="block space-y-1 text-sm">
+        <span>Event name</span>
+        <input className="input" required maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} />
+      </label>
+      <p className="text-xs text-muted">Times use your local time ({LOCAL_TZ.replaceAll("_", " ")}).</p>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <label className="block space-y-1 text-sm">
+          <span>Starts</span>
+          <input className="input" type="datetime-local" required value={start} onChange={(e) => setStart(e.target.value)} />
+        </label>
+        <label className="block space-y-1 text-sm">
+          <span>Ends</span>
+          <input className="input" type="datetime-local" required value={end} onChange={(e) => setEnd(e.target.value)} />
+        </label>
+      </div>
+      {error && <p role="alert" className="text-sm text-warn">{error}</p>}
+      <button type="submit" className="btn btn-primary" disabled={busy}>
+        {busy ? "Saving…" : "Save changes"}
+      </button>
+    </form>
   );
 }
 
@@ -350,7 +435,7 @@ function GuestsTab({
             {paid} Going
             <span className="text-lg font-medium text-muted ml-2">· {checkedIn} in</span>
           </div>
-          {checkedIn > 0 && <p className="text-sm text-muted mt-1">~{formatUsdc(share)} USDC each if you close now</p>}
+          {!ticket && checkedIn > 0 && <p className="text-sm text-muted mt-1">~{formatUsdc(share)} USDC each if you close now</p>}
         </div>
 
         <div className="grid sm:grid-cols-3 gap-3">

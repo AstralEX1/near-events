@@ -90,12 +90,17 @@ async function startDraft(chat: number) {
 const PROMPTS: Record<Draft["step"], string> = {
   title: "What’s the event called?",
   when: "When does it start? For example <code>2026-11-14 19:00</code> (your local time).",
-  place: "Where? An address or “Online”.",
+  place: "Location details are no longer collected. How much is the deposit per guest in USDC?",
   deposit: "Deposit per guest in USDC? For example <code>10</code>.",
   capacity: "How many spots? (max 300)",
 };
 
 async function continueDraft(chat: number, d: Draft, text: string) {
+  if (d.step === "place") {
+    await updateStore((s) => void (s.drafts[chat] = { step: "deposit", title: d.title, startsAt: d.startsAt, deposit: d.deposit }));
+    return say(chat, PROMPTS.deposit);
+  }
+
   let next: Draft["step"] | null = null;
   if (d.step === "title") {
     if (text.length > 120) return say(chat, "Please keep it under 120 characters.");
@@ -106,9 +111,6 @@ async function continueDraft(chat: number, d: Draft, text: string) {
     if (!m) return say(chat, `I didn’t get that. ${PROMPTS.when}`);
     // Kept as wall-clock time; the confirm page reads it in the host's own time zone.
     d.startsAt = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
-    next = "place";
-  } else if (d.step === "place") {
-    d.location = text.slice(0, 300);
     next = "deposit";
   } else if (d.step === "deposit") {
     const n = Number(text.replace(",", "."));
@@ -124,7 +126,6 @@ async function continueDraft(chat: number, d: Draft, text: string) {
       t: chatToken(chat),
       title: d.title!,
       start,
-      place: d.location ?? "",
       deposit: d.deposit!,
       cap: String(n),
     });
@@ -132,7 +133,7 @@ async function continueDraft(chat: number, d: Draft, text: string) {
     const l = linkOrButton("Confirm and create", url);
     return say(
       chat,
-      `<b>${esc(d.title!)}</b>\n${start.replace("T", " ")} · ${esc(d.location ?? "")}\n${d.deposit} USDC deposit · ${n} spots\n\nOne last step: confirm it with your Google account or NEAR wallet. The event belongs to you; I only get permission to check guests in.${l.text}`,
+      `<b>${esc(d.title!)}</b>\n${start.replace("T", " ")}\n${d.deposit} USDC deposit · ${n} spots\n\nOne last step: confirm it with your Google account or NEAR wallet. The event belongs to you; I only get permission to check guests in.${l.text}`,
       l.buttons,
     );
   }
@@ -166,7 +167,7 @@ async function listEvents(chat: number) {
 function eventText(e: EventView) {
   const when = new Date(e.metadata.starts_at).toISOString().slice(0, 16).replace("T", " ");
   const status = e.status === "Open" ? "" : e.status === "Finalized" ? " · paid out" : " · cancelled";
-  return `<b>${esc(e.metadata.title)}</b> (#${e.id})${status}\n${when} UTC · ${esc(e.metadata.location)}\n${e.guest_count}/${e.capacity} registered · ${e.attended_count} checked in · pool ${formatUsdc(e.total_pool)} USDC`;
+  return `<b>${esc(e.metadata.title)}</b> (#${e.id})${status}\n${when} UTC\n${e.guest_count}/${e.capacity} registered · ${e.attended_count} checked in · pool ${formatUsdc(e.total_pool)} USDC`;
 }
 
 function sendEvent(chat: number, e: EventView) {

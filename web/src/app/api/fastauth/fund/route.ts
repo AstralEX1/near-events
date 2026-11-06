@@ -1,4 +1,4 @@
-import { rateLimited } from "@/lib/ratelimit";
+import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { NETWORK } from "@/lib/config";
 import { accountExists, relayer } from "@/lib/relayer";
 
@@ -15,6 +15,7 @@ export async function POST(req: Request) {
   }
   if (await accountExists(accountId)) return Response.json({ funded: false, exists: true });
   try {
+    if (await paidRequestLimited(req, "fund", accountId)) return Response.json({ error: "Funding quota unavailable or exceeded" }, { status: 429 });
     await relayer().transfer({ receiverId: accountId, amount: STARTER_NEAR });
     return Response.json({ funded: true, exists: true });
   } catch (e) {

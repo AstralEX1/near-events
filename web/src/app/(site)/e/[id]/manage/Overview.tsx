@@ -59,9 +59,8 @@ export function Overview({ event, guests, origin, isHost, busy, onGuests, onChec
           <ShareLinks title={event.metadata.title} url={pageUrl} />
         </div>
         <div className="flex flex-col gap-4 min-w-0 md:pt-1">
-          <h2 className="text-lg font-semibold">When &amp; Where</h2>
+          <h2 className="text-lg font-semibold">When</h2>
           <WhenRow event={event} />
-          <WhereRow location={event.metadata.location} />
           <PriceRow event={event} />
         </div>
       </section>
@@ -229,30 +228,6 @@ function WhenRow({ event }: { event: EventView }) {
 
 function RowIcon({ children }: { children: ReactNode }) {
   return <span className="w-11 h-11 shrink-0 rounded-lg border border-border bg-surface inline-flex items-center justify-center text-muted">{children}</span>;
-}
-
-function WhereRow({ location }: { location: string }) {
-  if (location) {
-    return (
-      <div className="flex gap-3">
-        <RowIcon>
-          <PinIcon />
-        </RowIcon>
-        <div className="min-w-0 self-center font-medium break-words">{location}</div>
-      </div>
-    );
-  }
-  return (
-    <div className="flex gap-3">
-      <RowIcon>
-        <AlertIcon />
-      </RowIcon>
-      <div className="min-w-0">
-        <div className="font-medium text-warn">Location Missing</div>
-        <p className="text-sm text-muted">The event page has no address, and it can&rsquo;t be edited after creation. Tell guests where to go when you share the link.</p>
-      </div>
-    </div>
-  );
 }
 
 function PriceRow({ event }: { event: EventView }) {

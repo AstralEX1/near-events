@@ -1,8 +1,9 @@
 // Full Near Me cycle on testnet with every payment through NEAR Intents
-// (Tidepool's 1Click sandbox): create → deposit via 1Click → check in →
+// (Tidepool's 1Click sandbox): create → fund guest Intents → register → check in →
 // finalize → withdraw to another chain via 1Click → withdraw into an Intents account.
 // Keys are read from ~/.near-credentials (never printed).
 // Env: EVENTS_CONTRACT, HOST_ACCOUNT, GUEST_ACCOUNT, optional EVM_ADDRESS (payout on Base Sepolia).
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { Account, JsonRpcProvider, parseNearAmount } from "near-api-js";
@@ -27,19 +28,23 @@ const view = (method, args = {}, contractId = EVENTS) => provider.callFunction({
 const call = (who, contractId, methodName, args, deposit = 0n, gas = 100n * TGAS) =>
   who.callFunction({ contractId, methodName, args, deposit, gas });
 const api = async (path, body) => {
-  const r = await fetch(`${API}${path}`, body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {});
+  const r = await fetch(`${API}${path}`, {
+    ...(body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(12_000),
+  });
   const j = await r.json();
   if (!r.ok) throw new Error(`${path}: ${JSON.stringify(j)}`);
   return j;
 };
 const deadline = () => new Date(Date.now() + 30 * 60_000).toISOString();
-const wait = async (addr) => {
+const requireDelivery = async (addr) => {
   for (let i = 0; i < 60; i++) {
     const s = (await api(`/v0/status?depositAddress=${addr}`)).status;
-    if (["SUCCESS", "REFUNDED", "FAILED"].includes(s)) return s;
+    if (s === "SUCCESS") return;
+    if (["REFUNDED", "FAILED", "INCOMPLETE_DEPOSIT"].includes(s)) throw new Error(`Swap failed: ${s}`);
     await new Promise((r) => setTimeout(r, 3000));
   }
-  return "TIMEOUT";
+  throw new Error("Timed out waiting for the existing swap");
 };
 const payAddress = async (who, token, addr, amount) => {
   await call(who, token, "storage_deposit", { account_id: addr, registration_only: true }, BigInt(parseNearAmount("0.00125")), 30n * TGAS);
@@ -62,28 +67,39 @@ console.log("1. event", eventId);
 // rejects same-asset quotes (mainnet 1Click allows USDC → USDC), so pay in USDT.
 const faucet = await fetch(`${API}/v0/faucet`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accountId: GUEST, mode: "wallet" }) });
 console.log("2. faucet", faucet.status, "guest USDC", await view("ft_balance_of", { account_id: GUEST }, USDC));
+const intentsBalance = async (account_id) => BigInt(await view("mt_balance_of", { account_id, token_id: USDC_ASSET }, VERIFIER));
+const beforeFunding = await intentsBalance(GUEST);
 const { quote } = await api("/v0/quote", {
   dry: false, swapType: "EXACT_OUTPUT", slippageTolerance: 100, originAsset: `nep141:${USDT}`, depositType: "ORIGIN_CHAIN",
   destinationAsset: USDC_ASSET, amount: DEPOSIT, refundTo: GUEST, refundType: "ORIGIN_CHAIN",
-  recipient: EVENTS, recipientType: "DESTINATION_CHAIN",
-  customRecipientMsg: JSON.stringify({ action: "register", event_id: eventId, guest: GUEST }), deadline: deadline(),
+  recipient: GUEST, recipientType: "INTENTS", deadline: deadline(),
 });
 console.log("   quote amountIn", quote.amountIn, "→", quote.depositAddress);
 await payAddress(guest, USDT, quote.depositAddress, quote.amountIn);
-console.log("   1Click status", await wait(quote.depositAddress), "guest status", await view("get_guest_status", { event_id: eventId, account_id: GUEST }));
+await requireDelivery(quote.depositAddress);
+assert.ok(await intentsBalance(GUEST) >= beforeFunding + BigInt(DEPOSIT), "1Click did not credit the guest");
+const sent = await call(guest, VERIFIER, "ft_withdraw", {
+  token: USDC, receiver_id: EVENTS, amount: DEPOSIT,
+  msg: JSON.stringify({ action: "register", event_id: eventId, guest: GUEST }),
+}, 1n, 200n * TGAS);
+assert.equal(sent, DEPOSIT, "Verifier did not deliver the registration payment");
+assert.equal(await view("get_guest_status", { event_id: eventId, account_id: GUEST }), "Registered");
 
-// Tidepool ignores customRecipientMsg and delivers with a plain ft_transfer,
-// so the USDC reaches the escrow without registering anyone. Mainnet 1Click
-// honours it. To exercise the rest of the cycle, register directly here.
-if ((await view("get_guest_status", { event_id: eventId, account_id: GUEST })) === null) {
-  console.log("   Tidepool dropped the register msg; registering directly to test payouts");
-  await call(guest, USDC, "ft_transfer_call", { receiver_id: EVENTS, amount: DEPOSIT, msg: JSON.stringify({ action: "register", event_id: eventId }) }, 1n, 100n * TGAS);
-}
+// A duplicate must return to the withdrawing Intents account, without a new escrow credit.
+await call(guest, USDC, "ft_transfer_call", { receiver_id: VERIFIER, amount: DEPOSIT, msg: GUEST }, 1n);
+const beforeDuplicate = await intentsBalance(GUEST);
+const unused = await call(guest, VERIFIER, "ft_withdraw", {
+  token: USDC, receiver_id: EVENTS, amount: DEPOSIT,
+  msg: JSON.stringify({ action: "register", event_id: eventId, guest: GUEST }),
+}, 1n, 200n * TGAS);
+assert.equal(unused, "0", "The duplicate must consume zero USDC");
+assert.equal(await intentsBalance(GUEST), beforeDuplicate);
+assert.equal(await view("balance_of", { account_id: GUEST }), "0");
 
 // 3. Check in and close.
 await call(host, EVENTS, "finalize", { event_id: eventId, attended: [GUEST] }, 1n, 300n * TGAS);
 const balance = await view("balance_of", { account_id: GUEST });
-console.log("3. finalized, guest balance", balance);
+assert.equal(balance, DEPOSIT);
 
 // 4. Half goes to Base Sepolia through 1Click, straight from the escrow.
 const half = (BigInt(balance) / 2n).toString();
@@ -93,11 +109,13 @@ const out = (await api("/v0/quote", {
   refundTo: GUEST, refundType: "INTENTS", recipient: EVM, recipientType: "DESTINATION_CHAIN", deadline: deadline(),
 })).quote;
 await call(guest, USDC, "storage_deposit", { account_id: out.depositAddress, registration_only: true }, BigInt(parseNearAmount("0.00125")), 30n * TGAS);
-await call(guest, EVENTS, "withdraw", { amount: out.amountIn, receiver_id: out.depositAddress, to_intents: false }, 1n, 200n * TGAS);
-console.log("4. cash-out to Base", out.amountOutFormatted, "USDC →", EVM, ":", await wait(out.depositAddress));
+assert.equal(await call(guest, EVENTS, "withdraw", { amount: out.amountIn, receiver_id: out.depositAddress, to_intents: false }, 1n, 200n * TGAS), out.amountIn);
+await requireDelivery(out.depositAddress);
 
 // 5. The rest goes into the host's NEAR Intents account (like a near.com wallet).
 const before = BigInt(await view("mt_balance_of", { account_id: HOST, token_id: USDC_ASSET }, VERIFIER));
 await call(guest, EVENTS, "withdraw", { amount: null, receiver_id: HOST, to_intents: true }, 1n, 200n * TGAS);
 const after = BigInt(await view("mt_balance_of", { account_id: HOST, token_id: USDC_ASSET }, VERIFIER));
-console.log("5. into Intents account", HOST, "+", (after - before).toString(), "guest balance now", await view("balance_of", { account_id: GUEST }));
+assert.equal(after - before, BigInt(balance) - BigInt(out.amountIn));
+assert.equal(await view("balance_of", { account_id: GUEST }), "0");
+console.log("Tidepool delivery, registration, duplicate refund and cash-out passed");

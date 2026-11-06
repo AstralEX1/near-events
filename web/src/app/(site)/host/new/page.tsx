@@ -22,7 +22,6 @@ export default function ConfirmEvent() {
 
   const title = q.get("title") ?? "";
   const startWall = q.get("start") ?? ""; // "2026-11-14T19:00", the host's local time
-  const place = q.get("place") ?? "";
   const deposit = q.get("deposit") ?? "";
   const capacity = Number(q.get("cap") ?? "0");
   const token = q.get("t") ?? "";
@@ -47,7 +46,7 @@ export default function ConfirmEvent() {
             metadata: {
               title,
               description: "",
-              location: place,
+              location: "",
               cover_url: null,
               starts_at: starts!.getTime(),
               ends_at: starts!.getTime() + 3 * 3600_000,
@@ -79,7 +78,6 @@ export default function ConfirmEvent() {
         <h1 className="text-2xl font-semibold tracking-tight mt-1">{title}</h1>
         <p className="text-muted mt-1">
           {starts!.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-          {place && ` · ${place}`}
         </p>
         <p className="mt-2">
           <b>{deposit} USDC</b> deposit · {capacity} spots

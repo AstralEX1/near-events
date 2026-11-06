@@ -2,9 +2,10 @@
 // Keys are read from ~/.near-credentials (never printed); the new account's key is saved there too.
 // Env: DEPLOYER, NEW_ACCOUNT (prefix), USDC_CONTRACT, RELAYER_ACCOUNT, WASM,
 // optional INTENTS_CONTRACT (e.g. verifier.tidepool-sandbox.testnet) and NEAR_AMOUNT (default 5)
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { Account, JsonRpcProvider, KeyPair, parseNearAmount } from "near-api-js";
+import { actions, baseEncode, Account, JsonRpcProvider, KeyPair, parseNearAmount } from "near-api-js";
 
 const env = (k) => process.env[k] ?? (() => { throw new Error(`Set ${k}`); })();
 const [DEPLOYER, PREFIX, USDC, RELAYER, WASM] = ["DEPLOYER", "NEW_ACCOUNT", "USDC_CONTRACT", "RELAYER_ACCOUNT", "WASM"].map(env);
@@ -21,8 +22,24 @@ writeFileSync(
   { mode: 0o600 },
 );
 const contract = new Account(id, provider, key.toString());
-await contract.deployContract(new Uint8Array(readFileSync(WASM)));
-await contract.callFunction({ contractId: id, methodName: "new", args: { usdc: USDC, intents: process.env.INTENTS_CONTRACT || null, relayer: RELAYER }, gas: 100_000_000_000_000n });
+const intents = process.env.INTENTS_CONTRACT || null;
+const wasm = readFileSync(WASM);
+const expectedHash = baseEncode(createHash("sha256").update(wasm).digest());
+await contract.signAndSendTransaction({
+  receiverId: id,
+  actions: [
+    actions.deployContract(wasm),
+    actions.functionCall("new", { usdc: USDC, intents, relayer: RELAYER }, 100_000_000_000_000n, 0n),
+  ],
+  waitUntil: "FINAL",
+  throwOnFailure: true,
+});
+const deployed = await provider.viewAccount({ accountId: id });
+if (deployed.code_hash !== expectedHash) throw new Error("Deployed bytecode does not match the input WASM");
+for (const [method, expected] of Object.entries({ usdc: USDC, intents, relayer: RELAYER })) {
+  const actual = await provider.callFunction({ contractId: id, method, args: {} });
+  if (actual !== expected) throw new Error(`Unexpected contract configuration: ${method}`);
+}
 // The escrow must hold a USDC storage registration to receive deposits.
 await deployer.callFunction({ contractId: USDC, methodName: "storage_deposit", args: { account_id: id, registration_only: true }, deposit: BigInt(parseNearAmount("0.0125")), gas: 30_000_000_000_000n });
 console.log("deployed", id);

@@ -3,7 +3,7 @@
 // the host closes and gets the ticket money → host moves it into their NEAR
 // Intents account. Then a second event is cancelled and the ticket refunded.
 // Keys are read from ~/.near-credentials (never printed).
-// Env: EVENTS_CONTRACT (escrow-v4 code or later), HOST_ACCOUNT, GUEST_ACCOUNT.
+// Env: EVENTS_CONTRACT (the current escrow), HOST_ACCOUNT, GUEST_ACCOUNT.
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { Account, JsonRpcProvider } from "near-api-js";

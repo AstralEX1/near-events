@@ -9,9 +9,6 @@ export const isTicket = (e: { mode?: EventMode }) => e.mode === "Ticket";
 
 export interface EventMetadata {
   title: string;
-  description: string;
-  location: string;
-  cover_url: string | null;
   starts_at: number;
   ends_at: number;
 }
@@ -21,10 +18,10 @@ export interface EventView {
   host: string;
   cohosts: string[];
   metadata: EventMetadata;
+  metadata_editable?: boolean;
   /** What each guest pays: the deposit, or the ticket price when `mode` is "Ticket". */
   deposit: string;
-  /** Missing on escrows older than escrow-v4: those are always "Deposit". */
-  mode?: EventMode;
+  mode: EventMode;
   capacity: number;
   status: EventStatus;
   guest_count: number;
@@ -49,6 +46,7 @@ export interface GuestView {
 export async function view<T>(method: string, args: object = {}, contractId = EVENTS_CONTRACT): Promise<T> {
   const res = await fetch(RPC_URL, {
     method: "POST",
+    signal: AbortSignal.timeout(12_000),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       jsonrpc: "2.0",
@@ -64,7 +62,7 @@ export async function view<T>(method: string, args: object = {}, contractId = EV
     }),
   });
   const json = await res.json();
-  if (json.error || json.result?.error) throw new Error(json.error?.data ?? json.result.error);
+  if (json.error || json.result?.error) throw new Error(JSON.stringify(json.error ?? json.result.error));
   return JSON.parse(new TextDecoder().decode(new Uint8Array(json.result.result)));
 }
 
@@ -78,7 +76,9 @@ export const events = {
   guests: (id: number) => view<GuestView[]>("get_guests", { event_id: id, from_index: 0, limit: 300 }),
   guestStatus: (id: number, account: string) =>
     view<GuestStatus | null>("get_guest_status", { event_id: id, account_id: account }),
-  guestEvents: (account: string) => view<number[]>("get_guest_events", { account_id: account }),
+  guestStatuses: (account: string, ids: number[]) => Promise.all(
+    ids.map((id) => view<GuestStatus | null>("get_guest_status", { event_id: id, account_id: account })),
+  ),
   balance: (account: string) => view<string>("balance_of", { account_id: account }),
   openEventsOf: (account: string) => view<number>("open_events_of", { account_id: account }),
 };

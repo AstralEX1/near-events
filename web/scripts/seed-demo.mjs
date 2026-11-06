@@ -33,6 +33,11 @@ const id = await account(HOST).callFunction({
   gas,
 });
 const guest = account(GUEST);
+const storage = await provider.callFunction({ contractId: USDC, method: "storage_balance_bounds", args: {} });
+await guest.callFunction({
+  contractId: USDC, methodName: "storage_deposit",
+  args: { account_id: guest.accountId, registration_only: true }, deposit: BigInt(storage.min), gas,
+});
 await guest.callFunction({ contractId: USDC, methodName: "mint", args: { amount: "5000000" }, gas });
 await guest.callFunction({
   contractId: USDC,

@@ -1,8 +1,9 @@
 # Put Near Me on your website
 
 Any business that runs events (a community, a coworking, a run club) can take
-deposit-backed registrations on its own site. The guest never leaves the page,
-the money sits in the Near Me contract, and there is no platform fee.
+deposit-backed registrations on its own site. The event card stays on the host
+page; registration opens in a Near Me window or tab (or the same tab if pop-ups
+are blocked). Deposits sit in the Near Me contract, and there is no platform fee.
 
 Using a coding agent? Send it the prompt in [AI_INSTALL.md](AI_INSTALL.md).
 

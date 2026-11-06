@@ -90,16 +90,7 @@ body:has(.embed-root) { background: transparent; }
 .embed .btn { border-radius: calc(var(--embed-radius) * 0.75); }
 .embed-title { font-family: var(--embed-display); }
 
-/* Event page themes (lib/theme.ts): the host's font for headings and body. */
-.themed { font-family: var(--theme-font); color: var(--text); }
-
-/* FallingEffect: one pass from above the top edge to below the bottom. */
-@keyframes fall {
-  to { transform: translateY(110vh) rotate(var(--rot)); opacity: 0.2; }
-}
-.fall { animation: fall linear forwards; }
-
-/* Event creator, laid out like Luma's: tinted fields instead of bordered cards, so they sit on any theme. */
+/* Event creator fields. */
 .lu-field { background: color-mix(in srgb, var(--text) 6%, transparent); border-radius: 0.75rem; }
 .lu-hover { transition: background-color 0.15s; cursor: pointer; }
 .lu-hover:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }

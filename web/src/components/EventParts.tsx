@@ -124,7 +124,6 @@ function googleCalendarUrl(event: EventView, url: string): string {
     details: isTicket(event)
       ? `Your ticket: ${formatUsdc(event.deposit)} USDC. Show your QR pass at the door.\n${url}`
       : `You put down ${formatUsdc(event.deposit)} USDC. Get checked in to get it back plus a share.\n${url}`,
-    location: event.metadata.location,
   });
   return `https://calendar.google.com/calendar/render?${q}`;
 }
@@ -142,7 +141,6 @@ function icsUrl(event: EventView, url: string): string {
     `DTSTART:${fmt(event.metadata.starts_at)}`,
     `DTEND:${fmt(event.metadata.ends_at)}`,
     `SUMMARY:${esc(event.metadata.title)}`,
-    `LOCATION:${esc(event.metadata.location)}`,
     `DESCRIPTION:${esc(isTicket(event) ? `Show your QR pass at the door. ${url}` : `Get checked in to get your deposit back plus a share. ${url}`)}`,
     "END:VEVENT",
     "END:VCALENDAR",

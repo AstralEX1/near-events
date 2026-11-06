@@ -21,14 +21,6 @@ const nextConfig: NextConfig = {
       { source: "/embed.js", headers: [{ key: "Access-Control-Allow-Origin", value: "*" }] },
     ];
   },
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
-  },
 };
 
 export default nextConfig;

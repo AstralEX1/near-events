@@ -31,10 +31,7 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
       <button
         className="btn btn-ghost w-full"
         disabled={!ready || busy}
-        onClick={() => {
-          onDone?.();
-          signIn();
-        }}
+        onClick={run(signIn)}
       >
         Connect a NEAR wallet
       </button>

@@ -19,13 +19,18 @@ export default function EmbedCard() {
   const q = useSearchParams();
   const style = readEmbedStyle(q);
   const [event, setEvent] = useState<EventView | null | undefined>(undefined);
+  const [loadError, setLoadError] = useState(false);
   const [guests, setGuests] = useState<string[]>([]);
   const [joined, setJoined] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
-    const [e, g] = await Promise.all([events.get(id).catch(() => null), events.guests(id).catch(() => [])]);
-    setEvent(e);
+    const [e, g] = await Promise.all([events.get(id).catch(() => undefined), events.guests(id).catch(() => [])]);
+    if (e === undefined) setLoadError(true);
+    else {
+      setEvent(e);
+      setLoadError(false);
+    }
     setGuests(g.map((x) => x.account_id));
   }, [id]);
 
@@ -65,7 +70,7 @@ export default function EmbedCard() {
 
   return (
     <div ref={root} className="embed p-px" style={embedVars(style)}>
-      {event === undefined && <div className="card p-4 text-sm text-muted">Loading…</div>}
+      {event === undefined && <div className="card p-4 text-sm text-muted">{loadError ? "Could not load this deposit. Check your connection and reload." : "Loading…"}</div>}
       {event === null && <div className="card p-4 text-sm text-muted">This deposit was not found.</div>}
       {event && (
         <div className="card p-4 space-y-3">

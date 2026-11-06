@@ -13,7 +13,6 @@ export function relayer(): Account {
 export const rpc = () => new JsonRpcProvider({ url: RPC_URL });
 
 export const FASTAUTH_CONTRACT = NETWORK === "mainnet" ? "fast-auth.near" : "fast-auth.testnet";
-export const MPC_CONTRACT = NETWORK === "mainnet" ? "v1.signer" : "v1.signer-prod.testnet";
 
 export async function accountExists(accountId: string): Promise<boolean> {
   try {

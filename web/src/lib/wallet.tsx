@@ -116,7 +116,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       } else if (saved === "email" || returningFromAuth0) {
         const id = await fastAuthRestore();
         if (!cancelled && id) remember("email", id);
-        const back = sessionStorage.getItem(RETURN_KEY);
+        const back = returningFromAuth0 ? sessionStorage.getItem(RETURN_KEY) : null;
         if (back) {
           sessionStorage.removeItem(RETURN_KEY);
           router.replace(back);

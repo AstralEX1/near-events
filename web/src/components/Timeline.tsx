@@ -30,7 +30,6 @@ export function Timeline({ items, empty }: { items: EventView[]; empty: string }
                       {new Date(e.metadata.starts_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
                     </div>
                     <div className="font-semibold text-lg leading-snug">{e.metadata.title}</div>
-                    {e.metadata.location && <div className="text-sm text-muted truncate">📍 {e.metadata.location}</div>}
                     <div className="text-sm pt-1">
                       {e.status === "Finalized" ? (
                         <span className="text-muted">

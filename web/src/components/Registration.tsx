@@ -4,23 +4,24 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, usdc, type EventView, type GuestStatus, isTicket } from "@/lib/near";
-import { EVENTS_CONTRACT, HAS_FAUCET, ONECLICK_REGISTERS, USDC_CONTRACT } from "@/lib/config";
+import { EVENTS_CONTRACT, HAS_FAUCET, LIVE_EVENT_SWAPS, TEST_EVM_FAUCET_LIMIT, USDC_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
-import { intentsUsdcBalance, registerFromIntents } from "@/lib/intents";
+import { confirmRegistration, intentsUsdcBalance, registerFromIntents } from "@/lib/intents";
 import { NextSteps, RulesBox } from "@/components/EventParts";
 import { CashOut } from "@/components/CashOut";
-import { payDepositAddress, registerQuote, USDC_ASSET, waitForSwap } from "@/lib/oneclickClient";
 
 /** Sign in, then put down the deposit. Used on the event page and in the embed popup. */
 export function RegistrationCard({
   event,
   myStatus,
   onChange,
+  embedReturnTo,
 }: {
   event: EventView;
   myStatus: GuestStatus | null;
   onChange: () => Promise<void>;
+  embedReturnTo?: string;
 }) {
   const { accountId, kind, send } = useWallet();
   const router = useRouter();
@@ -31,7 +32,7 @@ export function RegistrationCard({
   const [choosing, setChoosing] = useState(false);
   const [rules, setRules] = useState(false);
   const [stage, setStage] = useState<string | null>(null);
-
+  const paymentUrl = `/e/${event.id}/pay${embedReturnTo ? `?returnTo=${encodeURIComponent(embedReturnTo)}` : ""}`;
   const loadBalance = useCallback(async () => {
     if (accountId) setBalance(BigInt(await events.balance(accountId).catch(() => "0")));
   }, [accountId]);
@@ -54,35 +55,17 @@ export function RegistrationCard({
     }
   };
 
-  // Mainnet: the deposit goes through NEAR Intents (1Click). The wallet pays a
-  // 1Click address in USDC; 1Click delivers exactly the deposit to the escrow
-  // with a register message, so the swap registers the guest. No USDC on NEAR
-  // → the pay page takes any token from any chain.
-  const registerViaOneClick = async () => {
-    setStage("Getting a NEAR Intents quote…");
-    const quote = await registerQuote({ originAsset: USDC_ASSET, eventId: event.id, deposit: event.deposit, guest: accountId!, refundTo: accountId! });
-    if (!quote.depositAddress) throw new Error("NEAR Intents returned no deposit address. Try again.");
-    const have = BigInt(await usdc.balance(accountId!).catch(() => "0"));
-    if (have < BigInt(quote.amountIn)) {
-      router.push(`/e/${event.id}/pay`);
-      return;
-    }
-    setStage("Confirm in your wallet…");
-    await send(payDepositAddress(USDC_CONTRACT, quote.depositAddress, quote.amountIn));
-    setStage("NEAR Intents is delivering your payment…");
-    await waitForSwap(quote.depositAddress, (s) => setStage(`NEAR Intents: ${s.toLowerCase().replaceAll("_", " ")}…`));
-  };
-
-  // Testnet: Tidepool can't register in the swap (see ONECLICK_REGISTERS), so
-  // the test USDC from the Tidepool faucet goes straight to the escrow.
-  // Payouts still leave through NEAR Intents.
   const registerDirect = async () => {
     const deposit = BigInt(event.deposit);
     if (BigInt(await usdc.balance(accountId!).catch(() => "0")) < deposit) {
-      if (!HAS_FAUCET) throw new Error(`You need ${formatUsdc(deposit)} USDC on NEAR.`);
+      if (!HAS_FAUCET) {
+        router.push(paymentUrl);
+        return;
+      }
       setStage("Getting test USDC…");
       const r = await fetch("/api/faucet", { method: "POST", body: JSON.stringify({ accountId }) });
       if (!r.ok) throw new Error((await r.json()).error ?? "Faucet failed");
+      if (BigInt(await usdc.balance(accountId!)) < deposit) throw new Error("The test faucet did not cover this price.");
     }
     setStage("Confirm in your wallet…");
     await send([
@@ -93,9 +76,10 @@ export function RegistrationCard({
         deposit: 1n,
       },
     ]);
+    await confirmRegistration(event.id, accountId!);
   };
 
-  const register = () => run(ONECLICK_REGISTERS ? registerViaOneClick : registerDirect);
+  const register = () => run(registerDirect);
 
   useEffect(() => {
     if (kind === "evm" && accountId) intentsUsdcBalance(accountId).then(setIntentsBalance).catch(() => setIntentsBalance(0n));
@@ -105,13 +89,28 @@ export function RegistrationCard({
   // balance gets free test USDC first (the relayer deposits it into Intents).
   const registerViaIntents = () =>
     run(async () => {
-      if (HAS_FAUCET && (intentsBalance ?? 0n) < BigInt(event.deposit)) {
+      let available = await intentsUsdcBalance(accountId!);
+      if (available < BigInt(event.deposit) && !HAS_FAUCET) {
+        router.push(paymentUrl);
+        return;
+      }
+      if (available < BigInt(event.deposit)) {
+        if (BigInt(event.deposit) > TEST_EVM_FAUCET_LIMIT) {
+          throw new Error(`The test faucet tops up to ${formatUsdc(TEST_EVM_FAUCET_LIMIT)} USDC. You need ${formatUsdc(event.deposit)} USDC in Intents to register.`);
+        }
         setStage("Getting test USDC into NEAR Intents…");
         const r = await fetch("/api/faucet", { method: "POST", body: JSON.stringify({ accountId }) });
         if (!r.ok) throw new Error((await r.json()).error ?? "Faucet failed");
+        available = await intentsUsdcBalance(accountId!);
+        if (available < BigInt(event.deposit)) {
+          throw new Error(`The test faucet tops up to ${formatUsdc(TEST_EVM_FAUCET_LIMIT)} USDC. You need ${formatUsdc(event.deposit)} USDC in Intents to register.`);
+        }
       }
       setStage("Sign in your wallet…");
       await registerFromIntents(accountId!, event.id, event.deposit);
+      await confirmRegistration(event.id, accountId!).catch(() => {
+        throw new Error("Registration is not confirmed. Check your event and NEAR Intents balance before paying again.");
+      });
     });
 
   const price = `${formatUsdc(event.deposit)} USDC`;
@@ -129,6 +128,11 @@ export function RegistrationCard({
   } else if (event.status === "Finalized") {
     body = ticket ? (
       <p className="text-sm">This event is over. Thanks for coming.</p>
+    ) : event.attended_count === 0 && myStatus ? (
+      <div className="space-y-2">
+        <p className="text-sm">Nobody was checked in. Your deposit was credited to Near Me.</p>
+        {balance > 0n && <CashOut accountId={accountId!} kind={kind} balance={balance} onDone={loadBalance} startOpen />}
+      </div>
     ) : myStatus === "Attended" ? (
         balance > 0n ? (
           <div className="space-y-2">
@@ -175,7 +179,7 @@ export function RegistrationCard({
         {busy ? stage ?? "Sign in your wallet…" : `${action} · ${price}`}
       </button>
     ) : (
-      <Link href={`/e/${event.id}/pay`} className="btn btn-accent w-full">{action} · {price}</Link>
+      <Link href={paymentUrl} className="btn btn-accent w-full">{action} · {price}</Link>
     );
   } else {
     body = (
@@ -184,7 +188,7 @@ export function RegistrationCard({
           {busy ? stage ?? "Working…" : `${action} · ${price}`}
         </button>
         <p className="text-xs text-muted text-center">
-          {ONECLICK_REGISTERS ? "Paid through NEAR Intents. No USDC on NEAR? You can pay with any token from any chain." : "Testnet: free test USDC. Payouts go out through NEAR Intents."}
+          {LIVE_EVENT_SWAPS ? "Paid through NEAR Intents. No USDC on NEAR? You can pay with any token from any chain." : "Testnet: free test USDC. Payouts go out through NEAR Intents."}
         </p>
       </div>
     );
@@ -194,7 +198,11 @@ export function RegistrationCard({
   return (
     <div className="space-y-3">
       {body}
-      {error && <p className="text-sm text-warn break-words">{error}</p>}
+      {error && (
+          <p className="text-sm text-warn break-words">
+            {error} {accountId && <Link href="/me" className="underline">View your funds</Link>}
+          </p>
+        )}
       {open && (
         <p className="text-sm text-muted leading-relaxed">
           {ticket ? "Refunded if the host cancels." : "Come and get it back plus a share of the no-shows. No cancelling."}{" "}

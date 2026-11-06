@@ -1,0 +1,39 @@
+name: Verify Near Me
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install 1.97.1 --profile minimal --target wasm32-unknown-unknown
+      - run: cargo +1.97.1 test --locked -p near-events -p test-usdc
+      - run: cargo +1.97.1 test --locked -p near-events-sandbox
+        env:
+          RUSTUP_TOOLCHAIN: 1.97.1
+        timeout-minutes: 25
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: node --test tests/embed.test.mjs
+      - run: npm run build

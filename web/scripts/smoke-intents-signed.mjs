@@ -1,15 +1,18 @@
 // Testnet check of the Intents-native deposit (what EVM wallets use): the
 // guest's USDC sits in NEAR Intents (Tidepool verifier), the guest signs one
 // `ft_withdraw` intent to the escrow with a register msg, and the verifier's
-// ft_transfer_call registers them. Uses a throwaway raw_ed25519 implicit
-// account as the guest, so no wallet is needed. Keys never printed.
-// Env: EVENTS_CONTRACT, HOST_ACCOUNT, FUNDER_ACCOUNT (pays gas and the 1 USDC).
+// ft_transfer_call registers them. A throwaway EVM key signs ERC-191 and the
+// app relayer submits it. Env: EVENTS_CONTRACT, HOST_ACCOUNT, FUNDER_ACCOUNT, APP_URL.
+import assert from "node:assert/strict";
+import { secp256k1 } from "@noble/curves/secp256k1.js";
+import { keccak_256 } from "@noble/hashes/sha3.js";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { Account, JsonRpcProvider, KeyPair, parseNearAmount } from "near-api-js";
+import { Account, JsonRpcProvider, baseEncode } from "near-api-js";
 
 const env = (k) => process.env[k] ?? (() => { throw new Error(`Set ${k}`); })();
 const EVENTS = env("EVENTS_CONTRACT");
+const APP = env("APP_URL");
 const HOST = env("HOST_ACCOUNT");
 const FUNDER = env("FUNDER_ACCOUNT");
 const USDC = "usdc.tidepool-sandbox.testnet";
@@ -22,9 +25,9 @@ const funder = new Account(FUNDER, provider, key(FUNDER));
 const view = (method, args = {}, contractId = EVENTS) => provider.callFunction({ contractId, method, args });
 const call = (who, contractId, methodName, args, deposit = 0n, gas = 100n * TGAS) => who.callFunction({ contractId, methodName, args, deposit, gas });
 
-const kp = KeyPair.fromRandom("ed25519");
-const pub = kp.getPublicKey();
-const guest = Buffer.from(pub.data).toString("hex");
+const { secretKey } = secp256k1.keygen();
+const pub = secp256k1.getPublicKey(secretKey, false);
+const guest = `0x${Buffer.from(keccak_256(pub.subarray(1)).subarray(12)).toString("hex")}`;
 const DEPOSIT = "1000000";
 
 const now = Date.now();
@@ -49,10 +52,26 @@ const payload = JSON.stringify({
   nonce: nonce.toString("base64"),
   intents: [{ intent: "ft_withdraw", token: USDC, receiver_id: EVENTS, amount: DEPOSIT, msg: JSON.stringify({ action: "register", event_id: eventId, guest }) }],
 });
-const { signature } = kp.sign(new TextEncoder().encode(payload));
-const { baseEncode } = await import("near-api-js");
-const signed = { standard: "raw_ed25519", payload, public_key: pub.toString(), signature: `ed25519:${baseEncode(signature)}` };
-await call(funder, VERIFIER, "execute_intents", { signed: [signed] }, 0n, 300n * TGAS);
-console.log("3. guest status", await view("get_guest_status", { event_id: eventId, account_id: guest }));
+const bytes = Buffer.from(payload);
+const digest = keccak_256(Buffer.concat([Buffer.from(`\x19Ethereum Signed Message:\n${bytes.length}`), bytes]));
+const recovered = secp256k1.sign(digest, secretKey, { prehash: false, format: "recovered" });
+const signature = Buffer.concat([recovered.subarray(1), recovered.subarray(0, 1)]);
+const response = await fetch(new URL("/api/intents/execute", APP), {
+  method: "POST", body: JSON.stringify({ standard: "erc191", payload, signature: `secp256k1:${baseEncode(signature)}` }),
+  signal: AbortSignal.timeout(60_000),
+});
+if (!response.ok) throw new Error(`Relayer rejected ERC-191: HTTP ${response.status}`);
+for (let i = 0; i < 12; i++) {
+  if (await view("get_guest_status", { event_id: eventId, account_id: guest }) === "Registered") break;
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+}
+assert.equal(await view("get_guest_status", { event_id: eventId, account_id: guest }), "Registered");
 await call(host, EVENTS, "cancel", { event_id: eventId }, 1n, 300n * TGAS);
-console.log("4. cancelled, refund on guest balance", await view("balance_of", { account_id: guest }));
+assert.equal(await view("balance_of", { account_id: guest }), DEPOSIT);
+const payout = await fetch(new URL("/api/intents/payout", APP), {
+  method: "POST", body: JSON.stringify({ accountId: guest, amount: DEPOSIT }), signal: AbortSignal.timeout(60_000),
+});
+assert.ok(payout.ok, `Payout API failed: ${payout.status}`);
+assert.equal((await payout.json()).sent, DEPOSIT);
+assert.equal(await view("mt_balance_of", { account_id: guest, token_id: `nep141:${USDC}` }, VERIFIER), DEPOSIT);
+console.log("ERC-191 registration and relayed refund passed");

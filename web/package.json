@@ -2,6 +2,9 @@
   "name": "web",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.22.2"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,6 +14,8 @@
     "@fast-auth-near/browser-sdk": "^1.4.2",
     "@fast-auth-near/javascript-provider": "^1.4.1",
     "@hot-labs/near-connect": "^0.12.0",
+    "@noble/curves": "2.2.0",
+    "@noble/hashes": "2.2.0",
     "jsqr": "^1.4.0",
     "near-api-js": "^7.4.0",
     "near-api-js-v5": "npm:near-api-js@^5.1.1",
@@ -21,7 +26,7 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
-    "@tailwindcss/turbopack": "^4",
+    "@tailwindcss/postcss": "4.3.3",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19",

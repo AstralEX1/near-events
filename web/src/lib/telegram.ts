@@ -74,7 +74,6 @@ export interface Draft {
   step: "title" | "when" | "place" | "deposit" | "capacity";
   title?: string;
   startsAt?: number;
-  location?: string;
   deposit?: string;
 }
 

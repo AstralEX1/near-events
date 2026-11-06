@@ -41,12 +41,14 @@ impl Contract {
     }
 
     /// Mints test USDC to the caller (or `account_id`). Registers the account
-    /// for storage at the token's expense.
+    /// for storage if the caller attaches the standard storage deposit.
+    #[payable]
     pub fn mint(&mut self, amount: U128, account_id: Option<AccountId>) {
+        require!(amount.0 > 0, "Mint amount must be positive");
         require!(amount.0 <= FAUCET_LIMIT, "Max 1000 USDC per call");
         let account = account_id.unwrap_or_else(env::predecessor_account_id);
-        if !self.token.accounts.contains_key(&account) {
-            self.token.internal_register_account(&account);
+        if !self.token.accounts.contains_key(&account) || !env::attached_deposit().is_zero() {
+            self.token.storage_deposit(Some(account.clone()), Some(true));
         }
         self.token.internal_deposit(&account, amount.0);
         near_contract_standards::fungible_token::events::FtMint {
@@ -156,6 +158,7 @@ mod tests {
         testing_env!(VMContextBuilder::new()
             .current_account_id(contract.parse().unwrap())
             .predecessor_account_id("alice.testnet".parse().unwrap())
+            .attached_deposit(NearToken::from_millinear(100))
             .build());
     }
 

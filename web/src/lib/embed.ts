@@ -58,6 +58,18 @@ export function embedQuery(q: URLSearchParams): string {
   return s ? `?${s}` : "";
 }
 
+export function embedReturnPath(value: string | null, eventId: number): string | null {
+  if (!value?.startsWith("/") || value.startsWith("//")) return null;
+  try {
+    const url = new URL(value, "https://near.me");
+    return url.origin === "https://near.me" && url.pathname === `/embed/e/${eventId}/join` && !url.hash
+      ? `${url.pathname}${embedQuery(url.searchParams)}`
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 const LIGHT = { "--bg": "#ffffff", "--surface": "#ffffff", "--text": "#16161a", "--muted": "#6b6b76", "--border": "#ebebef" };
 const DARK = { "--bg": "#111114", "--surface": "#1a1a1f", "--text": "#f2f2f4", "--muted": "#9a9aa6", "--border": "#2a2a31" };
 const FONTS = {
