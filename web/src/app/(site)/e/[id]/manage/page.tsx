@@ -198,7 +198,7 @@ function ManageEvent() {
   const checkedIn = guests.filter((g) => g.status === "Attended").length;
   const pageUrl = `${origin}/e/${id}`;
   const payUrl = `${origin}/p/${id}`;
-  const widgetUrl = `${origin}/widget?event=${id}`;
+  const buttonCode = origin ? `<script src="${origin}/embed.js" async></script>\n<near-event event="${id}" mode="button"></near-event>` : "";
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-16">
@@ -309,7 +309,7 @@ function ManageEvent() {
           open={open}
           pageUrl={pageUrl}
           payUrl={payUrl}
-          widgetUrl={widgetUrl}
+          buttonCode={buttonCode}
           copied={copied}
           onCopy={copy}
         />
@@ -574,7 +574,7 @@ function RegistrationTab({
   open,
   pageUrl,
   payUrl,
-  widgetUrl,
+  buttonCode,
   copied,
   onCopy,
 }: {
@@ -582,7 +582,7 @@ function RegistrationTab({
   open: boolean;
   pageUrl: string;
   payUrl: string;
-  widgetUrl: string;
+  buttonCode: string;
   copied: string | null;
   onCopy: (k: string, v: string) => void;
 }) {
@@ -615,29 +615,28 @@ function RegistrationTab({
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Share &amp; integrate</h2>
-        <p className="text-sm text-muted">Put registration on your site, or share a link anywhere.</p>
+        <h2 className="text-lg font-semibold">Registration links</h2>
+        <p className="text-sm text-muted">Share this event or copy its checkout button code.</p>
         <CopyRow label="Event page" value={pageUrl} copied={copied === "page"} onCopy={() => onCopy("page", pageUrl)} />
         <CopyRow
-          label="Bare payment link"
+          label="Quick checkout link"
           value={payUrl}
           copied={copied === "pay"}
           onCopy={() => onCopy("pay", payUrl)}
-          hint="Instagram, WhatsApp, anywhere a URL works"
+          hint="Opens checkout directly; use in a message or behind your own button"
         />
         <div className="card p-4 space-y-3">
           <div>
-            <div className="font-medium">Want to integrate on your website?</div>
+            <div className="font-medium">Checkout button for your website</div>
             <p className="text-sm text-muted mt-1">
-              AI prompt or two lines of embed code. Guests deposit with us; your page stays the front door.
+              Add this code beside your event. It opens quick checkout on Near Me; guests can return for their QR pass or payout.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href={widgetUrl} className="btn btn-primary !py-2 text-sm">
-              Open integrate guide
-            </Link>
-            <button type="button" className="btn btn-ghost !py-2 text-sm" onClick={() => onCopy("widget", widgetUrl)}>
-              {copied === "widget" ? "Copied link" : "Copy widget link"}
+          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-bg p-3 text-xs">{buttonCode || "Preparing button code…"}</pre>
+          <div className="text-xs text-muted">Checkout is hosted on Near Me. The full event page stays available at the link above.</div>
+          <div>
+            <button type="button" className="btn btn-primary !py-2 text-sm" disabled={!buttonCode} onClick={() => onCopy("button", buttonCode)}>
+              {copied === "button" ? "Copied" : "Copy button code"}
             </button>
           </div>
         </div>

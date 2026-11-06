@@ -11,13 +11,23 @@ function slugOf(input: string): string | null {
 }
 
 function publicUrl(value: unknown): string | null {
-  if (typeof value !== "string") return null;
+  if (typeof value !== "string" || value.length > 2048) return null;
   try {
     const url = new URL(value);
     return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password ? url.href : null;
   } catch {
     return null;
   }
+}
+
+function coverUrl(event: Record<string, unknown>): string | null {
+  const value = event.cover_url ?? event.cover_image_url ?? event.cover_image;
+  if (typeof value === "string") return publicUrl(value);
+  if (value && typeof value === "object") {
+    const image = value as Record<string, unknown>;
+    return publicUrl(image.url ?? image.image_url);
+  }
+  return null;
 }
 
 type RichNode = {
@@ -30,6 +40,7 @@ type RichNode = {
 function descriptionOf(value: unknown): string {
   const text = (node: unknown): string => {
     if (Array.isArray(node)) return node.map(text).join("");
+    if (typeof node === "string") return node.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, "$1 ($2)");
     if (!node || typeof node !== "object") return "";
     const item = node as RichNode;
     if (item.type === "text") {
@@ -95,7 +106,8 @@ export async function GET(req: Request) {
     starts_at,
     ends_at,
     location: lumaLocation(e),
-    description: [descriptionOf(d.description_mirror), ...hostDetails(d.hosts)].filter(Boolean).join("\n\n"),
+    description: [descriptionOf(d.description_mirror), ...hostDetails(d.hosts)].filter(Boolean).join("\n\n").slice(0, 10_000),
+    cover_url: coverUrl(e),
   };
   return Response.json(imported);
 }

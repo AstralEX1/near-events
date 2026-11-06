@@ -1,4 +1,4 @@
-import { schemaOrgLocation, type ImportedEvent } from "./eventImport";
+import { schemaOrgLocation, type ImportedEvent } from "./eventImport.ts";
 
 const ORIGIN = "https://balisquad.com";
 const HOSTS = new Set(["balisquad.com", "www.balisquad.com"]);
@@ -65,13 +65,30 @@ function plainText(value: string): string {
 }
 
 function publicUrl(value: unknown, base = ORIGIN): string | null {
-  if (typeof value !== "string" || !value.trim()) return null;
+  if (typeof value !== "string" || !value.trim() || value.length > 2048) return null;
   try {
     const url = new URL(value, base);
     return (url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password ? url.href : null;
   } catch {
     return null;
   }
+}
+
+function imageUrl(value: unknown): string | null {
+  if (Array.isArray(value)) return value.map(imageUrl).find(Boolean) ?? null;
+  if (typeof value === "string") return publicUrl(value);
+  const item = object(value);
+  return item ? publicUrl(item.url ?? item.contentUrl) : null;
+}
+
+function metaImage(html: string): string | null {
+  const tags = html.match(/<meta\b[^>]*>/gi) ?? [];
+  for (const tag of tags) {
+    const property = /\b(?:property|name)=["'](?:og:image|twitter:image)["']/i.test(tag);
+    const content = tag.match(/\bcontent=["']([^"']+)["']/i)?.[1];
+    if (property && content) return publicUrl(decodeHtml(content));
+  }
+  return null;
 }
 
 function instant(value: unknown): number {
@@ -139,18 +156,39 @@ export function parseBaliSquadEvent(html: string, expectedSlug?: string): Import
   const ends_at = instant(event?.endDate);
   if (!title || !Number.isFinite(starts_at) || !Number.isFinite(ends_at) || ends_at <= starts_at) return null;
 
-  const organizer = object(event?.organizer);
+  const organizerValue = Array.isArray(event?.organizer) ? event.organizer[0] : event?.organizer;
+  const organizer = object(organizerValue);
   const hostName = typeof organizer?.name === "string" ? organizer.name.trim() : "";
   const hostUrl = publicUrl(organizer?.url);
   const details = [eventDescription(html, typeof event?.description === "string" ? event.description : "")];
-  if (hostName) details.push(`Hosted by ${hostName}${hostUrl ? `\n${hostUrl}` : ""}`);
+  const contactValues = [organizer?.email, organizer?.telephone]
+    .filter((value): value is string => typeof value === "string" && !!value.trim())
+    .map((value) => value.trim());
+  const sameAs = organizer?.sameAs;
+  const contacts = Array.isArray(organizer?.contactPoint) ? organizer.contactPoint : [organizer?.contactPoint];
+  for (const contact of contacts) {
+    const point = object(contact);
+    for (const value of [point?.email, point?.telephone]) {
+      if (typeof value === "string" && value.trim()) contactValues.push(value.trim());
+    }
+    const contactUrl = publicUrl(point?.url);
+    if (contactUrl) contactValues.push(contactUrl);
+  }
+  for (const value of Array.isArray(sameAs) ? sameAs : [sameAs]) {
+    const link = publicUrl(value);
+    if (link) contactValues.push(link);
+  }
+  if (hostName || hostUrl || contactValues.length) {
+    details.push([`Hosted by ${hostName || "Event host"}`, hostUrl, ...new Set(contactValues)].filter(Boolean).join("\n"));
+  }
 
   return {
     title,
     starts_at,
     ends_at,
     location: schemaOrgLocation(event?.location),
-    description: details.filter(Boolean).join("\n\n"),
+    description: details.filter(Boolean).join("\n\n").slice(0, 10_000),
+    cover_url: imageUrl(event?.image) ?? metaImage(html),
   };
 }
 

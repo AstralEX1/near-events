@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detectEventSource, fitImportedEvent, isGoogleMapsLink, locationProblem, lumaLocation, schemaOrgLocation } from "../src/lib/eventImport.ts";
+import { detectEventSource, isGoogleMapsLink, locationProblem, lumaLocation, schemaOrgLocation } from "../src/lib/eventImport.ts";
 import { aiPrompt, buttonCode, checkoutLink, eventPageLink } from "../src/lib/integration.ts";
 
 test("detectEventSource recognises Luma and BaliSquad links only", () => {
@@ -13,18 +13,6 @@ test("detectEventSource recognises Luma and BaliSquad links only", () => {
   for (const link of ["", "   ", "abc", "https://example.com/event/a", "https://lu.ma.evil.example/abc", "https://notlu.ma/abc", "https://lu.ma/", "ftp://lu.ma/abc", "javascript:alert(1)"]) {
     assert.equal(detectEventSource(link), null, link);
   }
-});
-
-test("fitImportedEvent shortens long details and leaves the location alone", () => {
-  const base = { title: "T", starts_at: 1, ends_at: 2, location: "https://maps.app.goo.gl/abc" };
-  const small = { ...base, description: "Hello" };
-  assert.deepEqual(fitImportedEvent(small), { event: small, shortened: false });
-
-  const { event, shortened } = fitImportedEvent({ ...base, description: "é".repeat(1500) });
-  assert.equal(shortened, true);
-  assert.equal(event.location, base.location);
-  assert.ok(new TextEncoder().encode(event.description).length <= 2000);
-  assert.ok(event.description.endsWith("…"));
 });
 
 test("isGoogleMapsLink accepts Google Maps links only", () => {
@@ -55,7 +43,7 @@ test("locationProblem allows empty or a Maps link and gives a short error otherw
   assert.equal(locationProblem("   "), null);
   assert.equal(locationProblem(" https://maps.app.goo.gl/abc "), null);
   assert.equal(locationProblem("Warung Yess, Bali"), "Location must be a Google Maps link.");
-  assert.equal(locationProblem(`https://maps.google.com/?q=${"x".repeat(300)}`), "Map link is too long.");
+  assert.equal(locationProblem(`https://maps.google.com/?q=${"x".repeat(1000)}`), "Map link is too long.");
 });
 
 test("lumaLocation builds a Maps link and never returns the address", () => {
@@ -70,6 +58,7 @@ test("lumaLocation builds a Maps link and never returns the address", () => {
     "https://www.google.com/maps/search/?api=1&query=Warung%20Yess%2C%20Bali",
   );
   assert.equal(lumaLocation({ geo_address_visibility: "guests-only", geo_address_info: place, coordinate }), "");
+  assert.equal(lumaLocation({ geo_address_info: { place_id: "ChIJ1" } }), "https://www.google.com/maps/search/?api=1&query=place_id%3AChIJ1&query_place_id=ChIJ1");
   assert.equal(lumaLocation({ geo_address_visibility: "public" }), "");
   assert.equal(lumaLocation({ geo_address_visibility: "public", geo_address_info: {} }), "");
 });

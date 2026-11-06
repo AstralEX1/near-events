@@ -1,14 +1,17 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { events, toUnits, type EventMode, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
-import { EventSetup } from "@/components/EventSetup";
+import { Cover } from "@/components/ui";
+import { EventThemePicker } from "@/components/EventThemePicker";
+import { createRandomEventVisual, createRandomVisual, type EventVisualConfig } from "@/lib/event-visuals";
+import { rememberEventVisual } from "@/lib/event-visual-client";
 import { SignInOptions } from "@/components/SignIn";
 import { LOCAL_TZ, city, dayLabel, fromEpoch, gmtLabel, toEpoch } from "@/lib/time";
-import { detectEventSource, fitImportedEvent, IMPORT_ENDPOINT, locationProblem, type ImportedEvent } from "@/lib/eventImport";
+import type { EventDetails, ImportedEvent } from "@/lib/eventImport";
 
 
 const SLOTS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
@@ -19,47 +22,25 @@ interface When {
   tz: string;
 }
 
-const DEPOSIT_HELP = "Each guest puts this down. People who come get it back plus a share of the no-shows.";
-const TICKET_HELP = "Each guest pays this for a ticket. You get it after the event starts and you close it. If you cancel, every guest gets it back.";
-
-export default function CreatePage() {
-  return (
-    <Suspense fallback={<p className="max-w-2xl mx-auto text-sm text-muted">Loading…</p>}>
-      <CreateEvent />
-    </Suspense>
-  );
-}
-
-/**
- * Create an event with its public details and escrow options.
- * /create?flow=widget&import=<link> is the Integrate flow: the event is imported on load,
- * and the host has to choose how guests pay, the amount and the capacity themselves.
- */
-function CreateEvent() {
-  const { accountId, send } = useWallet();
-  const params = useSearchParams();
-  const integrate = params.get("flow") === "widget";
-  const importOnLoad = params.get("import");
-  const [form, setForm] = useState({
-    title: "",
-    location: "",
-    description: "",
-    deposit: integrate ? "" : "10",
-    capacity: integrate ? "" : "50",
-    cohosts: "",
-    mode: (integrate ? null : "Deposit") as EventMode | null,
-  });
+/** Create an event with its public details and escrow options. */
+export default function CreateEvent() {
+  const { accountId, send, staffToken } = useWallet();
+  const [form, setForm] = useState({ title: "", location: "", description: "", cover_url: "", deposit: "10", capacity: "50", cohosts: "", mode: "Deposit" as EventMode });
   const [when, setWhen] = useState<When | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [importUrl, setImportUrl] = useState(importOnLoad ?? "");
+  const [importUrl, setImportUrl] = useState("");
   const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [loadingImport, setLoadingImport] = useState(Boolean(importOnLoad));
   const [imported, setImported] = useState<string | null>(null);
-  const [shortened, setShortened] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<EventView | null>(null);
+  const [createdDetails, setCreatedDetails] = useState<EventDetails | null>(null);
+  const [eventVisual, setEventVisual] = useState<EventVisualConfig>({ themeId: "near", seed: 0 });
+  const [createdVisual, setCreatedVisual] = useState<EventVisualConfig | null>(null);
+  const [detailsSaveError, setDetailsSaveError] = useState<string | null>(null);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [visualSaveError, setVisualSaveError] = useState<string | null>(null);
+  const [savingVisual, setSavingVisual] = useState(false);
   // Like Luma, the form is open to everyone; signing in is asked for on "Create Event".
   const [askSignIn, setAskSignIn] = useState(false);
   useEffect(() => {
@@ -82,8 +63,25 @@ function CreateEvent() {
         capacity: String(e.capacity),
         cohosts: e.cohosts.join(", "),
       }));
+      fetch(`/api/event-details?e=${encodeURIComponent(String(from))}`, { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null)
+        .then((json) => {
+          const details = json?.details as EventDetails | null | undefined;
+          if (details) setForm((f) => ({ ...f, ...details, cover_url: details.cover_url ?? "" }));
+        })
+        .catch(() => {});
+      fetch(`/api/event-visuals?ids=${encodeURIComponent(String(from))}`, { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null)
+        .then((json) => {
+          const visual = json?.visuals?.[String(from)] as EventVisualConfig | undefined;
+          if (visual) setEventVisual(visual);
+        })
+        .catch(() => {});
     });
   }, []);
+
+  // Start with a varied preview; a duplicated event can replace this with its saved look.
+  useEffect(() => setEventVisual(createRandomEventVisual()), []);
 
   // Default to tomorrow, on the hour, for two hours (set on the client, not during prerender).
   useEffect(() => {
@@ -93,54 +91,46 @@ function CreateEvent() {
   }, []);
 
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
-  const amountLabel = form.mode === "Ticket" ? "Ticket price" : form.mode === "Deposit" ? "Deposit" : "Amount";
 
-  const importEvent = async (link: string) => {
+  const importEvent = async () => {
     setImporting(true);
-    setImportError(null);
+    setError(null);
     try {
-      // An unknown link goes to Luma too: its importer explains what a good link looks like.
-      const source = detectEventSource(link) ?? "Luma";
-      const r = await fetch(`${IMPORT_ENDPOINT[source]}?url=${encodeURIComponent(link)}`);
+      const isBaliSquad = (() => {
+        try {
+          const value = importUrl.trim();
+          const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`);
+          return ["balisquad.com", "www.balisquad.com"].includes(url.hostname);
+        } catch {
+          return false;
+        }
+      })();
+      const source = isBaliSquad ? "BaliSquad" : "Luma";
+      const endpoint = isBaliSquad ? "/api/balisquad/import" : "/api/luma/import";
+      const r = await fetch(`${endpoint}?url=${encodeURIComponent(importUrl)}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Import failed");
-      const { event, shortened } = fitImportedEvent(j as ImportedEvent);
-      setShortened(shortened);
-      setForm((f) => ({ ...f, title: event.title, location: event.location, description: event.description }));
+      const event = j as ImportedEvent;
+      setForm((f) => ({ ...f, title: event.title, location: event.location, description: event.description, cover_url: event.cover_url ?? "" }));
+      if (isBaliSquad) setEventVisual(createRandomVisual("paradise"));
       setWhen((w) => ({ tz: w?.tz ?? LOCAL_TZ, start: event.starts_at, end: event.ends_at }));
       setImported(source);
       setImportOpen(false);
     } catch (e) {
-      setImportError(e instanceof Error ? e.message : String(e));
-      setImportOpen(true);
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setImporting(false);
     }
   };
 
-  // Integrate flow: the link was given on the previous screen, so don't ask for it again.
-  const importStarted = useRef(false);
-  useEffect(() => {
-    if (!importOnLoad || importStarted.current) return;
-    importStarted.current = true;
-    importEvent(importOnLoad).finally(() => setLoadingImport(false));
-  }, [importOnLoad]);
-
-  const amount = Number(form.deposit);
-  const seats = Number(form.capacity);
-  const amountOk = amount >= 0.1;
-  const seatsOk = Number.isInteger(seats) && seats >= 1 && seats <= 300;
-  const missing = !form.mode ? "Choose Deposit or Ticket" : !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? "Set the capacity: 1 to 300" : null;
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!when || missing || !form.mode) return;
-    const badLocation = locationProblem(form.location);
-    if (badLocation) return setError(badLocation);
+    if (!when) return;
     if (!accountId) return setAskSignIn(true);
     if (when.end <= when.start) return setError("The event has to end after it starts.");
     setBusy(true);
     setError(null);
+    let transactionSent = false;
     try {
       const capacity = Number(form.capacity);
       const title = form.title.trim();
@@ -150,7 +140,13 @@ function CreateEvent() {
       }
       const location = form.location.trim();
       const description = form.description.trim();
-      if (encoder.encode(description).length > 2000) throw new Error("Event details are too long. Shorten them and try again.");
+      const rawCoverUrl = form.cover_url.trim();
+      const coverUrl = rawCoverUrl ? safeImageUrl(rawCoverUrl) : null;
+      if (rawCoverUrl && !coverUrl) throw new Error("Use a public HTTP or HTTPS image link for the cover image.");
+      if (encoder.encode(location).length > 1000) throw new Error("Location is too long. Shorten it and try again.");
+      if (encoder.encode(description).length > 10_000) throw new Error("Event details are too long. Shorten them and try again.");
+      const submittedAt = Date.now();
+      // Theme, image, font and random-seed choices are presentation data; save them off-chain below.
       await send([
         {
           receiverId: EVENTS_CONTRACT,
@@ -158,8 +154,8 @@ function CreateEvent() {
           args: {
             metadata: {
               title,
-              description,
-              location,
+              description: "",
+              location: "",
               cover_url: null,
               starts_at: when.start,
               ends_at: when.end,
@@ -171,25 +167,101 @@ function CreateEvent() {
           },
         },
       ]);
-      // The new event is the latest one this account created with this title.
-      const latest = (await events.list()).find((ev) => ev.host === accountId && ev.metadata.title === title);
-      if (latest) setCreated(latest);
-      else setError("Your event was created, but we couldn’t load it yet. Find it on your profile page.");
+      transactionSent = true;
+      const matches = (ev: EventView) => ev.host === accountId
+        && ev.metadata.title === title
+        && ev.metadata.starts_at === when.start
+        && ev.metadata.ends_at === when.end
+        && ev.created_at >= submittedAt - 60_000;
+      let latest: EventView | undefined;
+      for (let attempt = 0; attempt < 4 && !latest; attempt++) {
+        latest = (await events.list().catch(() => [])).find(matches);
+        if (!latest && attempt < 3) await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      if (!latest) {
+        setError("The event may already be created, but its page could not be loaded. Refresh before trying again.");
+        return;
+      }
+      setCreated(latest);
+      setCreatedVisual(eventVisual);
+      const details: EventDetails = { location, description, cover_url: coverUrl };
+      const hasDetails = Boolean(location || description || coverUrl);
+      if (hasDetails) setCreatedDetails(details);
+      let token: string | null = null;
+      try {
+        token = await staffToken();
+      } catch (saveError) {
+        const message = saveError instanceof Error ? saveError.message : "Could not authorize off-chain event settings";
+        setVisualSaveError(message);
+        if (hasDetails) setDetailsSaveError(message);
+      }
+
+      setSavingVisual(true);
+      if (token) {
+        try {
+          await saveVisual(latest.id, eventVisual, token);
+          rememberEventVisual(latest.id, eventVisual);
+          setVisualSaveError(null);
+        } catch (saveError) {
+          setVisualSaveError(saveError instanceof Error ? saveError.message : "Could not save event visual");
+        } finally {
+          setSavingVisual(false);
+        }
+      } else {
+        setSavingVisual(false);
+      }
+
+      if (hasDetails && token) {
+        setCreatedDetails(details);
+        setSavingDetails(true);
+        try {
+          await saveDetails(latest.id, details, token);
+          setDetailsSaveError(null);
+        } catch (saveError) {
+          setDetailsSaveError(saveError instanceof Error ? saveError.message : "Could not save event details");
+        } finally {
+          setSavingDetails(false);
+        }
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(transactionSent
+        ? "The event may already be created. Refresh before trying again to avoid creating a duplicate."
+        : err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
   };
 
-  if (created) return <EventSetup event={created} integrate={integrate} />;
-  if (loadingImport) {
-    return (
-      <p className="max-w-2xl mx-auto text-sm text-muted" role="status">
-        Importing…
-      </p>
-    );
-  }
+  const retryDetailsSave = async () => {
+    if (!created || !createdDetails) return;
+    setSavingDetails(true);
+    try {
+      const token = await staffToken();
+      await saveDetails(created.id, createdDetails, token);
+      setDetailsSaveError(null);
+    } catch (saveError) {
+      setDetailsSaveError(saveError instanceof Error ? saveError.message : "Could not save event details");
+    } finally {
+      setSavingDetails(false);
+    }
+  };
+
+  const retryVisualSave = async () => {
+    if (!created || !createdVisual) return;
+    setSavingVisual(true);
+    try {
+      const token = await staffToken();
+      await saveVisual(created.id, createdVisual, token);
+      rememberEventVisual(created.id, createdVisual);
+      setVisualSaveError(null);
+    } catch (saveError) {
+      setVisualSaveError(saveError instanceof Error ? saveError.message : "Could not save event visual");
+    } finally {
+      setSavingVisual(false);
+    }
+  };
+
+  if (created) return <Created event={created} visual={createdVisual} coverUrl={createdDetails?.cover_url} detailsSaveError={detailsSaveError} savingDetails={savingDetails} onRetry={retryDetailsSave} visualSaveError={visualSaveError} savingVisual={savingVisual} onRetryVisual={retryVisualSave} />;
 
   return (
     <>
@@ -217,12 +289,11 @@ function CreateEvent() {
                 value={importUrl}
                 onChange={(e) => setImportUrl(e.target.value)}
               />
-              <button type="button" className="btn btn-primary !py-1.5 text-sm" disabled={!importUrl.trim() || importing} onClick={() => importEvent(importUrl)}>
+              <button type="button" className="btn btn-primary !py-1.5 text-sm" disabled={!importUrl.trim() || importing} onClick={importEvent}>
                 {importing ? "Importing…" : "Import"}
               </button>
             </div>
           )}
-          {importError && <p className="text-sm text-warn break-words">{importError}</p>}
 
           <textarea
             required
@@ -235,33 +306,43 @@ function CreateEvent() {
             className="w-full resize-none bg-transparent text-[40px] leading-[1.15] font-semibold tracking-tight outline-none placeholder:text-muted/50 [field-sizing:content]"
           />
 
+          <EventThemePicker value={eventVisual} title={form.title} coverUrl={safeImageUrl(form.cover_url)} onChange={setEventVisual} />
+
           {when && <WhenBlock when={when} onChange={setWhen} />}
 
           <div className="space-y-3">
             <label className="block space-y-1.5">
               <span className="label">Location (optional)</span>
-              <input
-                className="lu-field w-full px-3 py-2 text-sm"
-                inputMode="url"
-                autoComplete="off"
+              <textarea
+                rows={3}
+                className="lu-field w-full px-3 py-2 text-sm resize-y"
                 value={form.location}
-                onChange={(e) => {
-                  setError(null);
-                  set("location")(e.target.value);
-                }}
-                placeholder="Google Maps link"
+                onChange={(e) => set("location")(e.target.value)}
+                placeholder="Venue or address"
               />
             </label>
             <label className="block space-y-1.5">
               <span className="label">Event details (optional)</span>
               <textarea
                 className="lu-field w-full px-3 py-2 text-sm min-h-28 resize-y"
+                maxLength={10_000}
                 value={form.description}
                 onChange={(e) => set("description")(e.target.value)}
                 placeholder="Description, host contacts, and useful links"
               />
             </label>
-            {shortened && <p className="text-xs text-warn">Details shortened to fit.</p>}
+            <label className="block space-y-1.5">
+              <span className="label">Custom cover image (optional)</span>
+              <input
+                className="lu-field w-full px-3 py-2 text-sm"
+                type="url"
+                value={form.cover_url}
+                onChange={(e) => set("cover_url")(e.target.value)}
+                placeholder="Public image link"
+              />
+              {safeImageUrl(form.cover_url) && <img src={safeImageUrl(form.cover_url)!} alt="Custom cover image preview" referrerPolicy="no-referrer" className="w-full max-h-56 rounded-xl object-cover" />}
+            </label>
+            <p className="text-xs text-muted">The title cover and theme background stay separate. Paradise uses a Bali photo for the page background. Visual settings, location, details, and cover image are stored off-chain.</p>
           </div>
 
           <div className="space-y-2 pt-1">
@@ -271,7 +352,7 @@ function CreateEvent() {
               <div className="lu-row">
                 <Icon d="M12 8c-2.2 0-4 .9-4 2s1.8 2 4 2 4 .9 4 2-1.8 2-4 2m0-8V6m0 10v2M4 12a8 8 0 1016 0 8 8 0 00-16 0z" className="text-muted" />
                 <span className="flex-1">Guests pay</span>
-                <div className={`flex gap-1 rounded-full p-0.5 ${form.mode ? "" : "ring-1 ring-accent"}`} style={{ background: "color-mix(in srgb, var(--text) 8%, transparent)" }} role="radiogroup" aria-label="Guests pay">
+                <div className="flex gap-1 rounded-full p-0.5" style={{ background: "color-mix(in srgb, var(--text) 8%, transparent)" }} role="radiogroup" aria-label="Guests pay">
                   {(["Deposit", "Ticket"] as const).map((m) => (
                     <button
                       key={m}
@@ -288,28 +369,37 @@ function CreateEvent() {
               </div>
               <OptionRow
                 icon="M4 8a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4zM14 6v12"
-                label={amountLabel}
-                value={form.deposit ? `${form.deposit} USDC` : "Set"}
-                title={amountLabel}
-                help={form.mode === "Ticket" ? TICKET_HELP : form.mode === "Deposit" ? DEPOSIT_HELP : "USDC per guest."}
-                attention={!amountOk}
+                label={form.mode === "Ticket" ? "Ticket price" : "Deposit"}
+                value={`${form.deposit} USDC`}
+                title={form.mode === "Ticket" ? "Ticket price" : "Deposit"}
+                help={
+                  form.mode === "Ticket"
+                    ? "Each guest pays this for a ticket. You get it after the event starts and you close it. If you cancel, every guest gets it back."
+                    : "Each guest puts this down. People who come get it back plus a share of the no-shows."
+                }
               >
                 <input className="input" type="number" min="0.1" step="0.01" required value={form.deposit} onChange={(e) => set("deposit")(e.target.value)} />
               </OptionRow>
-              {form.mode && (
-                <div className="lu-row">
-                  <Icon d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" className="text-muted" />
-                  <span className="flex-1">{form.mode === "Ticket" ? "You get paid after the event" : "Show-ups split no-shows"}</span>
-                  <span className="text-muted text-sm">{form.mode === "Ticket" ? "Refunds if cancelled" : "Always on"}</span>
-                </div>
-              )}
+              <div className="lu-row">
+                <Icon d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" className="text-muted" />
+                {form.mode === "Ticket" ? (
+                  <>
+                    <span className="flex-1">You get paid after the event</span>
+                    <span className="text-muted text-sm">Refunds if cancelled</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1">Show-ups split no-shows</span>
+                    <span className="text-muted text-sm">Always on</span>
+                  </>
+                )}
+              </div>
               <OptionRow
                 icon="M16 19v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9.5 10a3 3 0 100-6 3 3 0 000 6zM21 19v-1a4 4 0 00-3-3.9M16 4.1a3 3 0 010 5.8"
                 label="Capacity"
-                value={form.capacity || "Set"}
+                value={form.capacity}
                 title="Max capacity"
                 help="Up to 300 guests. Registration closes when it's full."
-                attention={!seatsOk}
               >
                 <input className="input" type="number" min="1" max="300" required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
               </OptionRow>
@@ -326,9 +416,12 @@ function CreateEvent() {
           </div>
 
           {error && <p className="text-sm text-warn break-words">{error}</p>}
-          <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy || !!missing} title={missing ?? undefined}>
+          <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy}>
             {busy ? "Confirm in your wallet…" : "Create Event"}
           </button>
+          <p className="text-xs text-muted/80">
+            One event gives you a full Near Me page, a quick checkout link, and a button code for your site. Manage guests and check-in in the event admin.
+          </p>
       </form>
       {askSignIn && <SignInDialog onClose={() => setAskSignIn(false)} />}
     </>
@@ -512,14 +605,14 @@ function TzBox({ tz, at, onChange }: { tz: string; at: number; onChange: (tz: st
   );
 }
 
-function OptionRow({ icon, label, value, title, help, attention, children }: { icon: string; label: string; value: string; title: string; help: string; attention?: boolean; children: ReactNode }) {
+function OptionRow({ icon, label, value, title, help, children }: { icon: string; label: string; value: string; title: string; help: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <button type="button" className="lu-row lu-hover text-left" onClick={() => setOpen(true)}>
         <Icon d={icon} className="text-muted" />
         <span className="flex-1">{label}</span>
-        <span className={`font-medium ${attention ? "text-accent" : "text-muted"}`}>{value}</span>
+        <span className="text-muted font-medium">{value}</span>
         <Icon d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4" size={14} className="text-muted" />
       </button>
       {open && (
@@ -535,5 +628,160 @@ function OptionRow({ icon, label, value, title, help, attention, children }: { i
         </div>
       )}
     </>
+  );
+}
+
+/** After creating: share the event page, quick checkout, or simple site button. */
+function Created({ event, visual, coverUrl, detailsSaveError, savingDetails, onRetry, visualSaveError, savingVisual, onRetryVisual }: {
+  event: EventView;
+  visual: EventVisualConfig | null;
+  coverUrl?: string | null;
+  detailsSaveError: string | null;
+  savingDetails: boolean;
+  onRetry: () => void;
+  visualSaveError: string | null;
+  savingVisual: boolean;
+  onRetryVisual: () => void;
+}) {
+  const [origin, setOrigin] = useState("");
+  const [copiedCode, setCopiedCode] = useState(false);
+  useEffect(() => setOrigin(window.location.origin), []);
+  const page = `${origin}/e/${event.id}`;
+  const checkout = `${origin}/p/${event.id}`;
+  const buttonCode = `<script src="${origin}/embed.js" async></script>\n<near-event event="${event.id}" mode="button"></near-event>`;
+  return (
+    <div className="max-w-xl mx-auto space-y-6">
+      <div className="flex gap-4 items-center">
+        <Cover event={event} visual={visual ?? undefined} coverUrl={coverUrl} className="w-20 h-20 rounded-xl shrink-0 [&>span]:hidden" />
+        <div>
+          <div className="text-sm text-good font-medium">✓ Event created</div>
+          <h1 className="text-2xl font-semibold tracking-tight">{event.metadata.title}</h1>
+          <p className="text-sm text-muted mt-1">Your event page, quick checkout, and host controls are ready.</p>
+        </div>
+      </div>
+
+      {detailsSaveError && (
+        <div className="card p-4 space-y-2 border-warn/50">
+          <p className="text-sm text-warn">The event was created, but its public details could not be saved: {detailsSaveError}</p>
+          <button type="button" className="btn btn-ghost !py-1.5 text-sm" disabled={savingDetails} onClick={onRetry}>
+            {savingDetails ? "Saving…" : "Retry saving details"}
+          </button>
+        </div>
+      )}
+      {savingDetails && <p className="text-sm text-muted">Saving public event details…</p>}
+      {visualSaveError && (
+        <div className="card p-4 space-y-2 border-warn/50">
+          <p className="text-sm text-warn">The event was created, but its theme could not be saved: {visualSaveError}</p>
+          <button type="button" className="btn btn-ghost !py-1.5 text-sm" disabled={savingVisual} onClick={onRetryVisual}>
+            {savingVisual ? "Saving…" : "Retry saving theme"}
+          </button>
+        </div>
+      )}
+      {savingVisual && <p className="text-sm text-muted">Saving the event look off-chain…</p>}
+
+      <div className="space-y-3">
+        <Way
+          title="Event page on Near Me"
+          text="Share this link. Registration, payment and check-in all happen here."
+          value={page}
+        />
+        <Way
+          title="Quick checkout link"
+          text="Use this in a message, or put it behind any button on your site."
+          value={checkout}
+        />
+        <div className="card p-4 space-y-3">
+          <div>
+            <div className="font-medium">Checkout button for your site</div>
+            <p className="text-sm text-muted mt-1">This opens the quick checkout. Guests can return to the same button for their QR pass or payout.</p>
+          </div>
+          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-bg p-3 text-xs">{buttonCode}</pre>
+          <button
+            type="button"
+            className="btn btn-ghost !py-1.5 text-sm self-start"
+            disabled={!origin}
+            onClick={() => navigator.clipboard.writeText(buttonCode).then(() => {
+              setCopiedCode(true);
+              setTimeout(() => setCopiedCode(false), 1500);
+            })}
+          >
+            {copiedCode ? "Copied" : "Copy button code"}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <Link href={`/e/${event.id}`} className="btn btn-primary">
+          Open event page
+        </Link>
+        <Link href={`/e/${event.id}/manage`} className="btn btn-ghost">
+          Manage guests &amp; check-in
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function safeImageUrl(value: string): string | null {
+  if (value.length > 2048) return null;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveDetails(eventId: number, details: EventDetails, token: string) {
+  const response = await fetch("/api/event-details", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ eventId, details }),
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(json.error ?? "Could not save event details");
+}
+
+async function saveVisual(eventId: number, visual: EventVisualConfig, token: string) {
+  const response = await fetch("/api/event-visuals", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ eventId, visual }),
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(json.error ?? "Could not save event visual");
+}
+
+function Way({
+  title,
+  text,
+  value,
+}: {
+  title: string;
+  text: string;
+  value: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="card p-4 space-y-2">
+      <div className="font-medium">{title}</div>
+      <p className="text-sm text-muted">{text}</p>
+      <div className="flex gap-2">
+        <code className="flex-1 min-w-0 truncate text-xs bg-bg rounded-lg px-3 py-2 border border-border">{value}</code>
+        <button
+          type="button"
+          className="btn btn-ghost !py-1.5 text-sm"
+          disabled={!value}
+          onClick={() =>
+            navigator.clipboard.writeText(value).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            })
+          }
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+    </div>
   );
 }

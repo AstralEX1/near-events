@@ -4,29 +4,44 @@ export interface ImportedEvent {
   ends_at: number;
   location: string;
   description: string;
+  cover_url: string | null;
 }
 
-// The escrow's limits for public text, in UTF-8 bytes (contracts/events: MAX_SHORT_LEN, MAX_TEXT_LEN).
-const MAX_LOCATION_BYTES = 300;
-const MAX_DETAILS_BYTES = 2000;
+/** Public fields saved by Near Me outside the escrow contract. */
+export interface EventDetails {
+  location: string;
+  description: string;
+  cover_url: string | null;
+}
 
-const bytes = (s: string) => new TextEncoder().encode(s).length;
+export type EventSource = "Luma" | "BaliSquad";
 
-function cutToBytes(text: string, limit: number): string {
-  if (bytes(text) <= limit) return text;
-  let out = "";
-  for (const char of text) {
-    if (bytes(out + char) > limit - bytes("…")) break;
-    out += char;
+export const IMPORT_ENDPOINT: Record<EventSource, string> = {
+  Luma: "/api/luma/import",
+  BaliSquad: "/api/balisquad/import",
+};
+
+const SOURCE_BY_HOST: Record<string, EventSource> = {
+  "lu.ma": "Luma",
+  "luma.com": "Luma",
+  "balisquad.com": "BaliSquad",
+};
+
+/** Which site an event link is from, or null if we can't import from it. The link may omit https://. */
+export function detectEventSource(input: string): EventSource | null {
+  const value = input.trim();
+  if (!value) return null;
+  try {
+    const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`);
+    if (!["http:", "https:"].includes(url.protocol) || url.pathname.length < 2) return null;
+    return SOURCE_BY_HOST[url.hostname.replace(/^www\./, "")] ?? null;
+  } catch {
+    return null;
   }
-  return `${out.trimEnd()}…`;
 }
 
-/** Real events often have details longer than fit on chain, and the form would refuse them on submit. */
-export function fitImportedEvent(event: ImportedEvent): { event: ImportedEvent; shortened: boolean } {
-  const description = cutToBytes(event.description, MAX_DETAILS_BYTES);
-  return { event: { ...event, description }, shortened: description !== event.description };
-}
+// Off-chain limit for a saved location, in UTF-8 bytes (api/event-details).
+const MAX_LOCATION_BYTES = 1000;
 
 export function isGoogleMapsLink(value: string): boolean {
   try {
@@ -54,7 +69,7 @@ export function locationProblem(value: string): string | null {
   const location = value.trim();
   if (!location) return null;
   if (!isGoogleMapsLink(location)) return "Location must be a Google Maps link.";
-  return bytes(location) > MAX_LOCATION_BYTES ? "Map link is too long." : null;
+  return new TextEncoder().encode(location).length > MAX_LOCATION_BYTES ? "Map link is too long." : null;
 }
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
@@ -68,16 +83,18 @@ function mapsSearchLink(query: string, placeId = ""): string {
 
 /** Google Maps link for a Luma event. Empty when the address is hidden or Luma gave nothing to link to. */
 export function lumaLocation(event: Record<string, unknown>): string {
-  const visibility = text(event.geo_address_visibility).toLowerCase();
-  if (!["shown", "public", "visible"].includes(visibility)) return "";
-  const place = record(event.geo_address_info);
+  const visibility = text(event.geo_address_visibility ?? event.location_visibility).toLowerCase();
+  // Luma defaults location_visibility to public; do not expose details it marks guests-only.
+  if (visibility && !["shown", "public", "visible"].includes(visibility)) return "";
+  const place = record(event.geo_address_info ?? event.geo_address_json);
   if (!place) return "";
   const point = record(event.coordinate) ?? record(place.place_coordinate);
+  const placeId = text(place.place_id);
   // Coordinates keep the link short whatever the address looks like; the place id opens the venue itself.
   const query = point && finite(point.latitude) && finite(point.longitude)
     ? `${point.latitude},${point.longitude}`
-    : text(place.full_address) || text(place.address) || text(place.city_state);
-  return query ? mapsSearchLink(query, text(place.place_id)) : "";
+    : text(place.full_address) || text(place.address) || text(place.city_state) || text(place.name) || (placeId ? `place_id:${placeId}` : "");
+  return query ? mapsSearchLink(query, placeId) : "";
 }
 
 /** Google Maps link for a schema.org event location, which is a Place or plain text. */
@@ -94,30 +111,4 @@ export function schemaOrgLocation(location: unknown): string {
     .filter((part, index, all) => part && all.indexOf(part) === index)
     .join(", ");
   return query ? mapsSearchLink(query) : "";
-}
-
-export type EventSource = "Luma" | "BaliSquad";
-
-export const IMPORT_ENDPOINT: Record<EventSource, string> = {
-  Luma: "/api/luma/import",
-  BaliSquad: "/api/balisquad/import",
-};
-
-const SOURCE_BY_HOST: Record<string, EventSource> = {
-  "lu.ma": "Luma",
-  "luma.com": "Luma",
-  "balisquad.com": "BaliSquad",
-};
-
-/** Which site an event link is from, or null if we can't import from it. The link may omit https://. */
-export function detectEventSource(input: string): EventSource | null {
-  const value = input.trim();
-  if (!value) return null;
-  try {
-    const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`);
-    if (!["http:", "https:"].includes(url.protocol) || url.pathname.length < 2) return null;
-    return SOURCE_BY_HOST[url.hostname.replace(/^www\./, "")] ?? null;
-  } catch {
-    return null;
-  }
 }

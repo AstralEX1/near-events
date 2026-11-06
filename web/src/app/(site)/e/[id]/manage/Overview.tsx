@@ -32,7 +32,7 @@ export function Overview({ event, guests, origin, isHost, busy, onGuests, onChec
   const open = event.status === "Open";
   const pageUrl = origin ? `${origin}/e/${id}` : "";
   const payUrl = origin ? `${origin}/p/${id}` : "";
-  const widgetHref = `/widget?event=${id}`;
+  const registrationHref = `/e/${id}/manage?tab=registration`;
   const over = open && Date.now() > event.metadata.ends_at;
 
   const closeCard = (
@@ -48,7 +48,7 @@ export function Overview({ event, guests, origin, isHost, busy, onGuests, onChec
         ) : (
           <QuickAction tone="good" icon={<ListIcon />} label="Guest List" onClick={onGuests} />
         )}
-        <QuickAction tone="amber" icon={<CodeIcon />} label="Add to Your Site" href={widgetHref} />
+        <QuickAction tone="amber" icon={<CodeIcon />} label="Registration links" href={registrationHref} />
       </div>
 
       {over && closeCard}
@@ -75,18 +75,18 @@ export function Overview({ event, guests, origin, isHost, busy, onGuests, onChec
       <Divider />
       <section className="space-y-3">
         <div>
-          <h2 className="text-lg font-semibold">Links &amp; Integration</h2>
-          <p className="text-sm text-muted mt-0.5">Take payments anywhere you can post a link, or put registration on your own site.</p>
+          <h2 className="text-lg font-semibold">Registration links</h2>
+          <p className="text-sm text-muted mt-0.5">Share the event page or quick checkout, or copy the button code for your site.</p>
         </div>
         <div className="card divide-y divide-border">
           <LinkRow title="Payment link" hint="A bare pay page for Instagram, WhatsApp and the like" value={payUrl} />
           <div className="flex items-center gap-3 p-3 sm:p-4">
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium">Website widget</div>
-              <div className="text-xs text-muted mt-0.5">An AI prompt or two lines of embed code</div>
+              <div className="text-sm font-medium">Checkout button</div>
+              <div className="text-xs text-muted mt-0.5">Quick checkout hosted on Near Me</div>
             </div>
-            <Link href={widgetHref} className="btn btn-ghost !py-1.5 text-sm shrink-0">
-              Set Up
+            <Link href={registrationHref} className="btn btn-ghost !py-1.5 text-sm shrink-0">
+              Open
             </Link>
           </div>
         </div>

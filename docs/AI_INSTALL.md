@@ -4,10 +4,11 @@ For a business owner who has a coding agent (Claude Code, Cursor, Codex,
 Windsurf, Lovable, v0...). Open the agent **in your website's project** and
 send it the prompt below. You don't need to read anything else.
 
-Near Me fills this prompt in for you on the screen shown after creating an event
-and at `/widget?event=ID`; copy it from there. The generated copy also matches
-the event's Deposit or Ticket mode. To use the text below by hand, replace `https://YOUR-NEAR-ME-HOST`
-with your Near Me address and `EVENT_ID` with the number from `/e/{id}`.
+Create or import the event in Near Me, then open its **Manage → Integration**
+tab. This prompt is there, filled in for your event, ready to copy. To use the
+text below by hand, replace
+`https://YOUR-NEAR-ME-HOST` with your Near Me address and `EVENT_ID` with the
+number from `/e/{id}`.
 
 ## The prompt
 

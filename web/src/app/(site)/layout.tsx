@@ -15,7 +15,7 @@ export default function SiteLayout({ children }: LayoutProps<"/">) {
         <span>Near Me · no fee</span>
         <Link href="/guide" className="hover:text-text">How it works</Link>
         <Link href="/events" className="hover:text-text">Events</Link>
-        <Link href="/widget" className="hover:text-text">Embed</Link>
+        <Link href="/create" className="hover:text-text">Create event</Link>
       </footer>
     </>
   );
