@@ -50,8 +50,12 @@ and 10 USDC. Its deployed code hash is
 candidate: its 268,797-byte WASM SHA-256 is
 `026d9b19f697a7c81abcd10134c2ee2ac8fbfaac93590dc41a032ae5a0e6a361`, with
 expected NEAR code hash `AUkadt9QEg7JQXMqsPZQgUQDoimi4U1VgGwfEYgG6QG`. The
-code sizes and hashes differ. Do not upgrade this escrow or point the app at
-another account until access to the open event and its funds is preserved.
+code sizes and hashes differ, so this deployment cannot be treated as the
+candidate or upgraded in place. For this testnet rollout, leave `escrow-tp3`
+untouched and deploy the candidate to a fresh account; its existing test events
+and balances may remain on the old account and will not be available through the
+app after switching. This does not change the preservation requirements for
+mainnet.
 
 1. Build from the committed public source with cargo-near 0.22.0 and
    `cargo near build reproducible-wasm --manifest-path contracts/events/Cargo.toml`.
