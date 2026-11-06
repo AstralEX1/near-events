@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
-import { events, formatUsdc, isTicket, priceLabel, type EventView, type GuestView } from "@/lib/near";
+import { events, formatUsdc, isTicket, type EventView, type GuestView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { checkIns } from "@/lib/checkinsClient";
 import { useWallet } from "@/lib/wallet";
-import { Avatar, formatWhen, shortAccount } from "@/components/ui";
+import { Avatar, StatusPill, shortAccount } from "@/components/ui";
 import { QrScanner } from "@/components/Qr";
+import { Overview } from "./Overview";
 
 type Tab = "overview" | "guests" | "registration";
 const TABS: { id: Tab; label: string }[] = [
@@ -46,7 +47,7 @@ function ManageEvent() {
   const [origin, setOrigin] = useState("");
 
   const tabParam = search.get("tab");
-  const tab: Tab = tabParam === "guests" || tabParam === "registration" || tabParam === "overview" ? tabParam : "guests";
+  const tab: Tab = tabParam === "guests" || tabParam === "registration" ? tabParam : "overview";
 
   const setTab = (t: Tab) => {
     const q = new URLSearchParams(search.toString());
@@ -195,11 +196,10 @@ function ManageEvent() {
             <span className="mx-1.5 opacity-50">›</span>
             <span className="text-muted">Manage</span>
           </p>
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight mt-1 truncate">{event.metadata.title}</h1>
-          <p className="text-sm text-muted mt-1">
-            {formatWhen(event.metadata.starts_at, event.metadata.ends_at)}
-            {event.metadata.location ? ` · ${event.metadata.location}` : ""}
-          </p>
+          <div className="flex items-center gap-2.5 mt-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight truncate">{event.metadata.title}</h1>
+            {event.status !== "Open" && <StatusPill status={event.status} />}
+          </div>
         </div>
         <Link href={`/e/${id}`} className="btn btn-ghost !py-2 text-sm shrink-0" target="_blank">
           Event Page ↗
@@ -225,22 +225,18 @@ function ManageEvent() {
       {error && <p className="text-sm text-warn break-words card p-3">{error}</p>}
 
       {tab === "overview" && (
-        <OverviewTab
+        <Overview
           event={event}
-          paid={paid}
-          checkedIn={checkedIn}
-          pool={pool}
-          share={share}
-          open={open}
+          guests={guests}
+          origin={origin}
           isHost={isHost}
           busy={busy}
-          pageUrl={pageUrl}
-          payUrl={payUrl}
-          widgetUrl={widgetUrl}
-          copied={copied}
-          onCopy={copy}
           onGuests={() => setTab("guests")}
-          onRegistration={() => setTab("registration")}
+          onCheckIn={() => {
+            setTab("guests");
+            setScanning(true);
+            setScanNote(null);
+          }}
           onFinalize={finalizeEvent}
           onCancel={() => run("cancel", { event_id: id }, ticket ? "Cancel the event and refund every ticket?" : "Cancel the event and refund every guest deposit?")}
         />
@@ -291,102 +287,6 @@ function ManageEvent() {
           copied={copied}
           onCopy={copy}
         />
-      )}
-    </div>
-  );
-}
-
-function OverviewTab({
-  event,
-  paid,
-  checkedIn,
-  pool,
-  share,
-  open,
-  isHost,
-  busy,
-  pageUrl,
-  payUrl,
-  widgetUrl,
-  copied,
-  onCopy,
-  onGuests,
-  onRegistration,
-  onFinalize,
-  onCancel,
-}: {
-  event: EventView;
-  paid: number;
-  checkedIn: number;
-  pool: bigint;
-  share: bigint;
-  open: boolean;
-  isHost: boolean;
-  busy: boolean;
-  pageUrl: string;
-  payUrl: string;
-  widgetUrl: string;
-  copied: string | null;
-  onCopy: (k: string, v: string) => void;
-  onGuests: () => void;
-  onRegistration: () => void;
-  onFinalize: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="space-y-8">
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium text-muted">At a Glance</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Stat label="Paid" value={String(paid)} />
-          <Stat label="Checked in" value={String(checkedIn)} />
-          <Stat label="Pool" value={`${formatUsdc(pool)} USDC`} />
-          <Stat label="Each if closed" value={checkedIn ? `${formatUsdc(share)}` : "—"} />
-        </div>
-      </section>
-
-      <section className="grid sm:grid-cols-3 gap-3">
-        <ActionTile
-          tone="blue"
-          title="Invite / share"
-          body="Copy links for the page or a bare payment URL"
-          onClick={onRegistration}
-        />
-        <ActionTile tone="green" title="Check in guests" body="QR scan or tap a name" onClick={onGuests} />
-        <ActionTile
-          tone="amber"
-          title="Registration"
-          body={`${priceLabel(event)} · ${event.capacity} spots`}
-          onClick={onRegistration}
-        />
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium text-muted">Share</h2>
-        <CopyRow label="Event page" value={pageUrl} copied={copied === "page"} onCopy={() => onCopy("page", pageUrl)} />
-        <CopyRow label="Payment link" value={payUrl} copied={copied === "pay"} onCopy={() => onCopy("pay", payUrl)} />
-        <CopyRow label="Integrate widget" value={widgetUrl} copied={copied === "widget"} onCopy={() => onCopy("widget", widgetUrl)} link />
-      </section>
-
-      {open && isHost && (
-        <section className="pt-2 space-y-3 border-t border-border">
-          <button type="button" className="btn btn-primary w-full sm:w-auto" disabled={busy} onClick={onFinalize}>
-            {isTicket(event) ? "Close event & get paid" : "Close event & pay out"}
-          </button>
-          <div>
-            <button type="button" className="text-sm text-muted hover:text-warn" disabled={busy} onClick={onCancel}>
-              Cancel event &amp; refund everyone
-            </button>
-          </div>
-        </section>
-      )}
-      {!open && (
-        <p className="text-sm text-muted">
-          This event is <span className="text-text font-medium">{event.status === "Finalized" ? "paid out" : "cancelled"}</span>.
-        </p>
-      )}
-      {open && !isHost && (
-        <p className="text-sm text-muted">Only the host ({shortAccount(event.host)}) can close the event. You can check guests in.</p>
       )}
     </div>
   );
@@ -671,15 +571,6 @@ function RegistrationTab({
           </ul>
         </section>
       )}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="card p-4">
-      <div className="text-xs text-muted">{label}</div>
-      <div className="text-xl font-semibold tracking-tight mt-1 truncate">{value}</div>
     </div>
   );
 }
