@@ -4,7 +4,8 @@ For a business owner who has a coding agent (Claude Code, Cursor, Codex,
 Windsurf, Lovable, v0...). Open the agent **in your website's project** and
 send it the prompt below. You don't need to read anything else.
 
-Easiest: open `/widget` in the Near Me app, pick your event and style, and
+Easiest: open `/widget` in the Near Me app, set up the deposit for your event
+(your event page stays on your site), pick a style, and
 press **Copy** on "Have an AI agent do it". That prompt already has your event
 number, colors and the real host address filled in.
 
@@ -15,9 +16,9 @@ Events address and `EVENT_ID` with your event number (it's in the event link,
 ## The prompt
 
 ```text
-Add a Near Me registration widget to this website.
+Add a Near Me deposit widget to this website.
 
-Near Me lets guests register for an event by putting down a small refundable USDC deposit; people who show up get it back plus a share of the no-shows. The widget is a dependency-free script that defines a <near-event> custom element. Its usage notes are in the header comment of https://YOUR-NEAR-ME-HOST/embed.js.
+Near Me lets guests register for an event by putting down a small refundable USDC deposit; people who show up get it back plus a share of the no-shows. This site already shows the event; the widget adds only the deposit: amount, seats left and a pay button. It is a dependency-free script that defines a <near-event> custom element. Its usage notes are in the header comment of https://YOUR-NEAR-ME-HOST/embed.js.
 
 What to add:
 1. Load the script once per page, before </body> or in <head>:
@@ -45,7 +46,7 @@ Optional: react to registrations (show a toast, send to analytics/CRM):
 
 Do not copy embed.js into the project or modify it; load it from https://YOUR-NEAR-ME-HOST. Do not add any keys or secrets: none are needed.
 
-When done, run the site locally, open the page, and confirm the event card (or button) renders and that clicking Register opens the Near Me sign-up window. Tell me which files you changed.
+When done, run the site locally, open the page, and confirm the deposit box (or button) renders and that clicking Pay deposit opens the Near Me sign-up window. Tell me which files you changed.
 ```
 
 ## What the agent will touch
@@ -59,7 +60,7 @@ straight to the Near Me contract, so your site never handles money or secrets.
 | File | What it is |
 |---|---|
 | `web/public/embed.js` | The whole widget script, no dependencies. Served at `/embed.js`. |
-| `web/src/app/embed/e/[id]/page.tsx` | The event card inside the iframe |
+| `web/src/app/embed/e/[id]/page.tsx` | The deposit box inside the iframe |
 | `web/src/app/embed/e/[id]/join/page.tsx` | The sign-up window |
 | `web/src/app/api/embed/[id]/route.ts` | Public event summary JSON |
 | `web/src/lib/agentPrompt.ts` | The prompt above, used by `/widget` |

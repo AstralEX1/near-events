@@ -2,13 +2,15 @@
 
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { events, formatUsdc, isTicket, priceLabel, type EventView } from "@/lib/near";
+import { events, formatUsdc, isTicket, type EventView } from "@/lib/near";
 import { embedQuery, embedVars, readEmbedStyle, type EmbedMessage } from "@/lib/embed";
-import { AvatarStack, Cover, DateBadge, formatWhen } from "@/components/ui";
+import { AvatarStack } from "@/components/ui";
 import { spotsLine } from "@/components/EventParts";
 
 /**
- * The event card other sites put in an iframe (directly or through /embed.js).
+ * The deposit block other sites put in an iframe (directly or through /embed.js).
+ * The host's own page already shows the event (title, date, place), so this
+ * shows only the money part: the deposit, seats left and the pay button.
  * Sign-up happens in a small window of our own, where wallets and Google
  * sign-in work normally; the card hears back and tells the host page.
  */
@@ -63,42 +65,27 @@ export default function EmbedCard() {
 
   return (
     <div ref={root} className="embed p-px" style={embedVars(style)}>
-      {event === undefined && <div className="card p-4 text-sm text-muted">Loading event…</div>}
-      {event === null && <div className="card p-4 text-sm text-muted">This event was not found.</div>}
+      {event === undefined && <div className="card p-4 text-sm text-muted">Loading…</div>}
+      {event === null && <div className="card p-4 text-sm text-muted">This deposit was not found.</div>}
       {event && (
-        <div className="card overflow-hidden">
-          <div className="flex gap-4 p-3">
-            <Cover event={event} className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl shrink-0 [&>span]:hidden" />
-            <div className="min-w-0 flex-1 py-0.5">
-              <h2 className="embed-title text-lg sm:text-xl font-semibold leading-snug line-clamp-2">{event.metadata.title}</h2>
-              <div className="flex items-center gap-2 mt-2 text-sm">
-                <DateBadge ms={event.metadata.starts_at} />
-                <div className="min-w-0">
-                  <div className="truncate">{formatWhen(event.metadata.starts_at, event.metadata.ends_at)}</div>
-                  <div className="text-muted truncate">{event.metadata.location || "Location TBA"}</div>
-                </div>
-              </div>
+        <div className="card p-4 space-y-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-xs text-muted">{isTicket(event) ? "Ticket" : "Refundable deposit"}</div>
+              <div className="embed-title text-2xl font-semibold leading-tight">{formatUsdc(event.deposit)} USDC</div>
+            </div>
+            <div className="flex items-center gap-2 min-w-0 text-sm">
+              {guests.length > 0 && <AvatarStack accounts={guests} max={4} />}
+              <span className="text-muted truncate">{spotsLine(event)}</span>
             </div>
           </div>
-          <div className="px-3 pb-3 space-y-3">
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <div className="flex items-center gap-2 min-w-0">
-                {guests.length > 0 && <AvatarStack accounts={guests} max={5} />}
-                <span className="text-muted truncate">
-                  {spotsLine(event)}{isTicket(event) ? "" : ` · pool ${formatUsdc(event.total_pool)} USDC`}
-                </span>
-              </div>
-            </div>
-            <CardAction event={event} joined={joined} joinUrl={joinUrl} onOpen={open} />
-            <p className="text-xs text-muted">
-              {isTicket(event)
-                ? `${formatUsdc(event.deposit)} USDC ticket, refunded if the host cancels`
-                : `Show up and get your ${formatUsdc(event.deposit)} USDC back plus a share of the no-shows`} ·{" "}
-              <a href={`/e/${event.id}`} target="_blank" rel="noopener" className="underline underline-offset-2">
-                Near Me
-              </a>
-            </p>
-          </div>
+          <CardAction event={event} joined={joined} joinUrl={joinUrl} onOpen={open} />
+          <p className="text-xs text-muted">
+            {isTicket(event)
+              ? "Refunded if the host cancels"
+              : `Show up and get it back plus a share of the no-shows${Number(event.total_pool) > 0 ? ` · pool ${formatUsdc(event.total_pool)} USDC` : ""}`}{" "}
+            · Near Me
+          </p>
         </div>
       )}
     </div>
@@ -122,7 +109,7 @@ function CardAction({
   if (event.guest_count >= event.capacity) return <div className="btn btn-ghost w-full text-muted">Event is full</div>;
   return (
     <a href={joinUrl} target="_blank" rel="opener" onClick={onOpen} className="btn btn-accent w-full">
-      {isTicket(event) ? "Get ticket" : "Register"} · {priceLabel(event)}
+      {isTicket(event) ? "Get ticket" : "Pay deposit"} · {formatUsdc(event.deposit)} USDC
     </a>
   );
 }

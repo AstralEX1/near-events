@@ -1,7 +1,7 @@
 /*! Near Me embed · https://github.com/AstralEX1/near-events · MIT
  *
  * <script src="https://YOUR-NEAR-ME-HOST/embed.js" async></script>
- * <near-event event="3"></near-event>                       event card (iframe)
+ * <near-event event="3"></near-event>                       deposit block (iframe)
  * <near-event event="3" mode="button"></near-event>         just the button
  * <button onclick="NearEvents.open(3)">Join</button>        your own button
  *
@@ -110,9 +110,9 @@
       if (this._frame && this._frame.src === src) return frames.add(this);
       var f = document.createElement("iframe");
       f.src = src;
-      f.title = "Event registration";
+      f.title = "Event deposit";
       f.loading = "lazy";
-      f.style.cssText = "display:block;width:100%;max-width:560px;height:250px;border:0;background:transparent;color-scheme:normal";
+      f.style.cssText = "display:block;width:100%;max-width:560px;height:170px;border:0;background:transparent;color-scheme:normal";
       f.setAttribute("allowtransparency", "true");
       this.replaceChildren(f);
       this._frame = f;
@@ -126,7 +126,7 @@
       css.textContent = BUTTON_CSS;
       var b = document.createElement("button");
       b.type = "button";
-      b.textContent = this.getAttribute("label") || "Register";
+      b.textContent = this.getAttribute("label") || "Pay deposit";
       if (opts.accent) this.style.setProperty("--ne-accent", opts.accent);
       if (opts.radius) this.style.setProperty("--ne-radius", opts.radius + "px");
       b.addEventListener("click", function () {
@@ -148,7 +148,7 @@
             b.disabled = true;
             b.textContent = e.full ? "Event is full" : "Registration closed";
           } else if (!custom) {
-            b.textContent = (e.mode === "Ticket" ? "Get ticket · " : "Register · ") + e.deposit_usdc + " USDC";
+            b.textContent = (e.mode === "Ticket" ? "Get ticket · " : "Pay deposit · ") + e.deposit_usdc + " USDC";
           }
         })
         .catch(function () {});
