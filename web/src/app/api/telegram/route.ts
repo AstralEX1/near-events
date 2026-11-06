@@ -1,8 +1,6 @@
 import { events, formatUsdc, type EventView, type GuestView } from "@/lib/near";
-import { EVENTS_CONTRACT } from "@/lib/config";
-import { relayer } from "@/lib/relayer";
+import { listCheckIns, setCheckIn, withCheckIns } from "@/lib/checkins";
 import { PUBLIC_URL, checkSecret, chatToken, loadStore, tg, tgDocument, updateStore, type Draft } from "@/lib/telegram";
-import { createWebhook, getEvent, seal } from "@/lib/luma";
 
 // The host's admin lives in Telegram. Telegram posts every update here
 // (webhook in production, scripts/telegram-dev.mjs locally).
@@ -27,7 +25,7 @@ export async function POST(req: Request) {
   const update = (await req.json()) as Update;
   try {
     if (update.callback_query) await onButton(update.callback_query);
-    else if (update.message?.text) await onText(update.message.chat.id, update.message.text.trim(), update.message.message_id);
+    else if (update.message?.text) await onText(update.message.chat.id, update.message.text.trim());
   } catch (e) {
     const chat = update.message?.chat.id ?? update.callback_query?.message?.chat.id;
     if (chat) await say(chat, `Something went wrong: ${e instanceof Error ? e.message : String(e)}`).catch(() => {});
@@ -54,12 +52,11 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 
 // ------------------------------------------------------------------ text
 
-async function onText(chat: number, text: string, messageId: number) {
+async function onText(chat: number, text: string) {
   const cmd = text.split(/\s+/)[0].split("@")[0].toLowerCase();
   if (cmd === "/start" || cmd === "/help") return help(chat);
   if (cmd === "/new") return startDraft(chat);
   if (cmd === "/events" || cmd === "/status") return listEvents(chat);
-  if (cmd === "/luma") return connectLuma(chat, text, messageId);
   if (cmd === "/cancel") {
     await updateStore((s) => void delete s.drafts[chat]);
     return say(chat, "Okay, dropped the draft.");
@@ -81,7 +78,6 @@ function help(chat: number) {
       "",
       "/new: create an event",
       "/status: your events, pools and buttons",
-      "/luma: connect a Luma event (needs Luma Plus)",
     ].join("\n"),
   );
 }
@@ -152,7 +148,13 @@ async function myEvents(chat: number): Promise<EventView[]> {
     .filter(([, v]) => v.chat === chat)
     .map(([k]) => Number(k));
   const list = await Promise.all(ids.map((id) => events.get(id).catch(() => null)));
-  return list.filter((e): e is EventView => !!e);
+  return Promise.all(
+    list
+      .filter((e): e is EventView => !!e)
+      .map(async (e) =>
+        e.status === "Open" ? { ...e, attended_count: Object.keys(await listCheckIns(e.id)).length } : e,
+      ),
+  );
 }
 
 async function listEvents(chat: number) {
@@ -195,9 +197,10 @@ async function onButton(q: { id: string; data?: string; message?: Msg }) {
   if ((await loadStore()).events[id]?.chat !== chat)
     return tg("answerCallbackQuery", { callback_query_id: q.id, text: "This event isn’t managed from this chat.", show_alert: true });
 
-  const [e, guests] = await Promise.all([events.get(id), events.guests(id).catch((): GuestView[] => [])]);
-  if (!e) return tg("answerCallbackQuery", { callback_query_id: q.id, text: "Event not found" });
+  const [onChain, chainGuests] = await Promise.all([events.get(id), events.guests(id).catch((): GuestView[] => [])]);
+  if (!onChain) return tg("answerCallbackQuery", { callback_query_id: q.id, text: "Event not found" });
   await tg("answerCallbackQuery", { callback_query_id: q.id });
+  const { e, guests } = await withCheckIns(onChain, chainGuests);
 
   if (kind === "g") {
     if (guests.length === 0) return say(chat, "No one has registered yet.");
@@ -214,13 +217,7 @@ async function onButton(q: { id: string; data?: string; message?: Msg }) {
     const g = guests[Number(arg)];
     if (!g) return say(chat, "That guest isn’t on the list any more.");
     if (g.status === "Attended") return say(chat, `${esc(short(g.account_id))} is already checked in.`);
-    await relayer().callFunction({
-      contractId: EVENTS_CONTRACT,
-      methodName: "check_in",
-      args: { event_id: id, accounts: [g.account_id] },
-      gas: 50_000_000_000_000n,
-      deposit: 1n,
-    });
+    await setCheckIn(id, g.account_id, true, "telegram");
     await say(chat, `✅ ${esc(short(g.account_id))} checked in.`);
     return checkInKeyboard(chat, { ...e, attended_count: e.attended_count + 1 }, guests.map((x) => (x === g ? { ...x, status: "Attended" } : x)), 0);
   }
@@ -270,51 +267,4 @@ async function checkInKeyboard(chat: number, e: EventView, guests: GuestView[], 
   if ((page + 1) * PAGE < waiting.length) nav.push({ text: "More →", callback_data: `c:${e.id}:${page + 1}` });
   if (nav.length) rows.push(nav);
   return say(chat, `Tap a guest to check them in. ${e.attended_count}/${e.guest_count} in so far.`, rows);
-}
-
-// ------------------------------------------------------------------ Luma
-
-/**
- * /luma <our event id> <Luma event id> <Luma API key>
- * After this, paying guests land on the Luma list as Going and Luma check-ins
- * count on-chain. The key message is deleted right away; we keep it encrypted.
- */
-async function connectLuma(chat: number, text: string, messageId: number) {
-  const [, idStr, lumaEventId, apiKey] = text.split(/\s+/);
-  if (!apiKey) {
-    return say(
-      chat,
-      [
-        "<b>Connect a Luma event</b> (needs Luma Plus)",
-        "",
-        "1. In Luma: Calendar → Settings → Developer → create an API key.",
-        "2. Open your event in Luma and copy its id (starts with <code>evt-</code>).",
-        "3. Send here: <code>/luma &lt;event #&gt; &lt;evt-…&gt; &lt;API key&gt;</code>",
-        "",
-        "In the Luma event, turn on Require Approval and make the ticket free: people who skip the deposit then wait in Pending until they pay.",
-      ].join("\n"),
-    );
-  }
-  await tg("deleteMessage", { chat_id: chat, message_id: messageId }).catch(() => {});
-  const id = Number(idStr.replace("#", ""));
-  if ((await loadStore()).events[id]?.chat !== chat) return say(chat, `Event #${idStr} isn’t managed from this chat.`);
-  const ev = await getEvent(apiKey, lumaEventId).catch((e) => {
-    throw new Error(`Luma didn’t accept that key or event id (${e instanceof Error ? e.message : e}).`);
-  });
-  const secret = await createWebhook(apiKey, `${PUBLIC_URL()}/api/luma/webhook?e=${id}`).catch(() => undefined);
-  await updateStore((s) => {
-    s.luma ??= {};
-    const prev = s.luma[id];
-    s.luma[id] = {
-      lumaEventId,
-      apiKey: seal(apiKey),
-      webhookSecret: secret ? seal(secret) : prev?.webhookSecret,
-      guests: prev?.guests ?? {},
-    };
-  });
-  return say(
-    chat,
-    `🔗 Connected to <b>${esc(ev.name ?? lumaEventId)}</b> on Luma. I deleted your message with the key.\n\nNow guests who pay the deposit get your normal Luma ticket, and scanning them in the Luma app counts for the payout.` +
-      (secret ? "" : "\n\n⚠️ I couldn’t set up the Luma webhook, so Luma check-ins won’t reach me yet. Use “Check in at the door” here instead."),
-  );
 }

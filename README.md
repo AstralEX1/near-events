@@ -24,9 +24,9 @@ Hackathon track focus: Real-World Money (USDC, NEAR Intents, gasless onboarding)
 
 | What | Account |
 |---|---|
-| Event escrow (the web app's default) | [`escrow-tp2.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-tp2.nearevents-11022103.testnet) |
+| Event escrow (the web app's default: deposits or paid tickets, check-in off-chain, `finalize` with the attendee list) | [`escrow-tp3.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-tp3.nearevents-11022103.testnet) |
 | Test USDC (Tidepool faucet) | [`usdc.tidepool-sandbox.testnet`](https://testnet.nearblocks.io/address/usdc.tidepool-sandbox.testnet) |
-| Previous escrow code (deposit only) on our own test USDC, used by the script below | [`escrow-v3.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-v3.nearevents-11022103.testnet) + [`usdc-nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/usdc-nearevents-11022103.testnet) |
+| Older escrow code with on-chain check-in (kept for history): `escrow-tp2` (tickets), `escrow-tp` and `escrow-v3` (deposit only, our own test USDC `usdc-nearevents-11022103.testnet`) | not used by the app |
 
 NEAR Intents itself has no testnet. On testnet the Intents paths run on
 [Tidepool](https://www.usetidepool.tech/docs), a 1Click sandbox with the official
@@ -52,24 +52,26 @@ npm run dev                     # http://localhost:3000
 3. Click “Register · 5 USDC”. On testnet the test USDC comes from the faucet, then
    the deposit goes into the escrow and you appear under “going”.
 4. Create your own event at `/create` (free) and add a friend as co-host.
-5. As host or co-host open “Manage & check in guests”, tick who came and click
-   *Check in*. The page shows what each attendee will receive.
-6. Click “Close event & pay out”. Each attendee's share lands on their balance.
+5. As host or co-host open “Manage & check in guests” and tick who came. The
+   first tick asks your wallet (or Google account) to sign a message once; the
+   marks are kept on our server, no transaction per guest. The page shows what
+   each attendee will receive.
+6. Click “Close event & pay out”. This one transaction sends the list of who
+   came to the contract, and each attendee's share lands on their balance.
 7. Press Withdraw on the event page or `/me`: send the payout through NEAR
    Intents to any chain (via 1Click) or to any NEAR Intents account.
 
 Without a browser, the whole cycle runs from a script (uses your own testnet
-accounts from `~/.near-credentials`). It mints from our own test USDC, so it runs
-against escrow-v3, which has the same code as the app's escrow:
+accounts from `~/.near-credentials`; Tidepool's faucet tops the guest up with test USDC):
 
 ```bash
 cd web
-EVENTS_CONTRACT=escrow-v3.nearevents-11022103.testnet USDC_CONTRACT=usdc-nearevents-11022103.testnet \
-HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet node scripts/smoke-testnet.mjs
+export EVENTS_CONTRACT=escrow-tp3.nearevents-11022103.testnet HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet
+node scripts/smoke-intents-testnet.mjs   # deposit via 1Click → finalize(attended) → cash out to Base and into Intents
+node scripts/smoke-tickets-testnet.mjs   # paid ticket → finalize after the start → cancel refunds
 ```
 
-Expected output ends with `"status":"Finalized"` and the guest's balance moving back
-to their wallet.
+Both print each step and end with the payouts landing (checked on 2026-11-05).
 
 ## Embed on your website
 
@@ -90,13 +92,13 @@ install it: [docs/AI_INSTALL.md](docs/AI_INSTALL.md).
 ```
 guest ──(any chain via 1Click | USDC from a NEAR wallet | Google login)──► NEAR Intents
                                                                               │
-host / co-host ── create_event / check_in / finalize ──► escrow contract (NEAR)
+host / co-host ── create_event / finalize(attended) ──► escrow contract (NEAR)
                                                                               │
                    pool / attendees → internal balances → withdraw through Intents
                                    (any chain via 1Click, or any Intents account)
 ```
 
-Contract: `contracts/events/src/lib.rs` (86 unit tests in `tests.rs`).
+Contract: `contracts/events/src/lib.rs` (91 unit tests in `tests.rs`).
 
 **EVM wallet flow (mainnet):** the guest signs an ERC-191 intent
 `ft_withdraw {token: USDC, receiver_id: escrow, msg: register}`; `/api/intents/execute`
@@ -105,16 +107,15 @@ checks it is only a Near Me registration and submits it to `intents.near`
 
 | Method | Who | What |
 |---|---|---|
-| `create_event(metadata, deposit, capacity, cohosts)` | anyone (caller = host) | free: the contract pays storage from its own balance; max 5 open events per host, capacity ≤ 300, deposit ≥ 0.1 USDC |
-| `ft_transfer_call` → `ft_on_transfer` | guest / friend / 1Click / intents.near | `{"action":"register","event_id":N,"guest":"..."}` or `{"action":"top_up",...}` |
-| `check_in`, `undo_check_in` | host, co-hosts (+1 yocto) | mark who showed up; check-in batch ≤ capacity |
+| `create_event(metadata, deposit, capacity, cohosts)` | anyone (caller = host) | free: the contract pays storage from its own balance; max 5 open events per host, capacity ≤ 300, deposit ≥ 0.1 USDC; up to 10 co-hosts, fixed after creation |
+| `ft_transfer_call` → `ft_on_transfer` | guest / friend / 1Click / intents.near | `{"action":"register","event_id":N,"guest":"..."}` |
 | `refund_guest` | host (+1 yocto) | refund one guest who has not been checked in |
-| `finalize` | host (+1 yocto) | pool ÷ attendees to balances; remainder to host; nobody came → full refund |
+| `finalize(event_id, attended)` | host (+1 yocto) | `attended` = guests checked in at the door (kept off-chain on our server until now). Deposit: pool ÷ attendees, remainder to host, empty list → full refund. Ticket: all ticket money to the host after the start |
+| `set_paused(paused)` | owner = the account that ran `new` (+1 yocto) | stops new events and registrations; payouts, refunds and withdrawals keep working |
 | `cancel`, `refund_if_abandoned` | host (+1 yocto) / anyone after 30 days | refund every guest deposit |
 | `cleanup_event(event_id, limit)` | anyone, 7 days after close | deletes up to 100 guest records so their storage NEAR returns to the contract; payouts stay on balances |
 | `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to a NEAR account (e.g. a 1Click deposit address) or into NEAR Intents |
 | `payout_to_intents(account_id)` | owner or configured relayer | moves that account's balance into *its own* Intents balance; how EVM-wallet guests get paid |
-| `register_with_balance` | guest (+1 yocto) | reuse a payout for the next event (contract only, not in the web app) |
 
 Views include `storage_pool` (NEAR left for free event creation) and `open_events_of(account)`.
 
@@ -130,7 +131,7 @@ reach the guest; it lands on the guest's balance instead. Capacity is capped at
 
 ```bash
 cd contracts
-cargo test -p near-events                       # 86 unit tests
+cargo test -p near-events                       # 91 unit tests
 cargo test -p test-usdc                         # faucet guards
 cargo test -p near-events-sandbox               # local NEAR sandbox
 cd events && cargo near build non-reproducible-wasm

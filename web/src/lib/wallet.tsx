@@ -2,10 +2,11 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { NearConnector } from "@hot-labs/near-connect";
-import { NETWORK } from "./config";
+import { EVENTS_CONTRACT, NETWORK } from "./config";
+import { STAFF_MESSAGE } from "./staffShared";
 import { useRouter } from "next/navigation";
 import { connectEvm, evmAccount } from "./intents";
-import { RETURN_KEY, fastAuthEnsure, fastAuthLogin, fastAuthLogout, fastAuthPrepare, fastAuthRestore, fastAuthSend } from "./fastauth";
+import { RETURN_KEY, fastAuthEnsure, fastAuthLogin, fastAuthLogout, fastAuthPrepare, fastAuthProve, fastAuthRestore, fastAuthSend } from "./fastauth";
 
 /** Implicit NEAR accounts from Google/email login are a 64-char hex id. */
 const isImplicit = (id: string) => /^[0-9a-f]{64}$/i.test(id);
@@ -51,6 +52,11 @@ interface WalletState {
   signOut: () => Promise<void>;
   /** Signs and sends calls, one transaction each, in order. */
   send: (calls: Call[]) => Promise<void>;
+  /**
+   * A server token for door check-in (host / co-host). Asks the wallet to sign
+   * a message once (Google/email: an unsent transaction), then reuses it.
+   */
+  staffToken: () => Promise<string>;
 }
 
 const WalletContext = createContext<WalletState | null>(null);
@@ -215,6 +221,47 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [kind, accountId],
   );
 
+  const staffToken = useCallback(async () => {
+    if (!accountId) throw new Error("Sign in first.");
+    const key = `near-events:staff:${accountId}`;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(key) ?? "null") as { token: string; until: number } | null;
+      if (saved && saved.until > Date.now()) return saved.token;
+    } catch {}
+
+    let proof: object;
+    if (kind === "email" || (kind == null && isImplicit(accountId))) {
+      proof = { mpc: await fastAuthProve() };
+    } else if (kind === "wallet") {
+      const c = connector.current;
+      if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");
+      const wallet = await c.wallet();
+      const nonce = new Uint8Array(32);
+      crypto.getRandomValues(nonce);
+      new DataView(nonce.buffer).setBigUint64(0, BigInt(Date.now()));
+      const signed = await wallet.signMessage({ message: STAFF_MESSAGE, recipient: EVENTS_CONTRACT, nonce });
+      if (!signed) throw new Error("The wallet did not sign the message.");
+      proof = {
+        wallet: {
+          accountId: signed.accountId,
+          publicKey: signed.publicKey,
+          signature: signed.signature,
+          nonce: btoa(String.fromCharCode(...nonce)),
+        },
+      };
+    } else {
+      throw new Error("Door check-in needs a NEAR wallet or a Google/email account.");
+    }
+    const res = await fetch("/api/checkin/session", { method: "POST", body: JSON.stringify(proof) });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? "Could not sign in");
+    if (json.accountId !== accountId) throw new Error(`The wallet signed as ${json.accountId}, not ${accountId}.`);
+    try {
+      sessionStorage.setItem(key, JSON.stringify({ token: json.token, until: Date.now() + 11 * 60 * 60 * 1000 }));
+    } catch {}
+    return json.token as string;
+  }, [kind, accountId]);
+
   return (
     <WalletContext.Provider
       value={{
@@ -226,6 +273,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         signInWithEvm,
         signOut,
         send,
+        staffToken,
       }}
     >
       {children}

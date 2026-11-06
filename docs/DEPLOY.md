@@ -11,11 +11,13 @@ below has been run; deploying needs Alex's OK. (2026-11-03, Claude)
 | Name | Testnet value | Secret? |
 |---|---|---|
 | `NEXT_PUBLIC_NETWORK` | `testnet` | no |
-| `NEXT_PUBLIC_EVENTS_CONTRACT` | `escrow-tp2.nearevents-11022103.testnet` | no |
+| `NEXT_PUBLIC_EVENTS_CONTRACT` | `escrow-tp3.nearevents-11022103.testnet` | no |
 | `NEXT_PUBLIC_USDC_CONTRACT` | `usdc.tidepool-sandbox.testnet` | no |
 | `RELAYER_ACCOUNT_ID` | `relayer-nearevents-11022103.testnet` | no |
 | `RELAYER_PRIVATE_KEY` | from `web/.env.local` (paste in Vercel only) | **yes** |
 | `ONECLICK_API_KEY` | optional | **yes** |
+| `APP_SECRET` | any long random string (signs door check-in tokens) | **yes** |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | an Upstash Redis database (door check-ins; Vercel's disk is wiped) | **yes** |
 
 3. FastAuth (Google/email): the shared testnet Auth0 client only accepts
    approved callback URLs. Localhost works; a Vercel domain may need its own

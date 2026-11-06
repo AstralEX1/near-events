@@ -53,7 +53,7 @@ console.log("2. bought, guest status", await view("get_guest_status", { event_id
 
 // 3. Closing before the start must fail.
 try {
-  await call(host, EVENTS, "finalize", { event_id: eventId }, 1n, 100n * TGAS);
+  await call(host, EVENTS, "finalize", { event_id: eventId, attended: [] }, 1n, 100n * TGAS);
   throw new Error("finalize before the start went through");
 } catch (err) {
   if (!String(err).includes("released once the event has started")) throw err;
@@ -63,7 +63,7 @@ try {
 // 4. After the start the host closes and is paid, though nobody was checked in.
 await sleep(Math.max(0, startsAt - Date.now()) + 5_000);
 const hostBefore = BigInt(await view("balance_of", { account_id: HOST }));
-await call(host, EVENTS, "finalize", { event_id: eventId }, 1n, 100n * TGAS);
+await call(host, EVENTS, "finalize", { event_id: eventId, attended: [] }, 1n, 100n * TGAS);
 const hostAfter = BigInt(await view("balance_of", { account_id: HOST }));
 console.log("4. finalized, host +", (hostAfter - hostBefore).toString(), "guest balance", await view("balance_of", { account_id: GUEST }));
 if (hostAfter - hostBefore !== BigInt(PRICE)) throw new Error("host was not paid the ticket");
