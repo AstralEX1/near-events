@@ -146,6 +146,7 @@ export default function CreateEvent() {
       if (encoder.encode(location).length > 1000) throw new Error("Location is too long. Shorten it and try again.");
       if (encoder.encode(description).length > 10_000) throw new Error("Event details are too long. Shorten them and try again.");
       const submittedAt = Date.now();
+      // Theme, image, font and random-seed choices are presentation data; save them off-chain below.
       await send([
         {
           receiverId: EVENTS_CONTRACT,

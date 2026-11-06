@@ -12,7 +12,7 @@ export async function GET(req: Request) {
     return Response.json({ error: "Bad event ids" }, { status: 400 });
   }
   try {
-    return Response.json({ visuals: await getEventVisuals([...new Set(ids)]) });
+    return Response.json({ visuals: await getEventVisuals([...new Set(ids)]) }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json({ error: "Event visuals are temporarily unavailable" }, { status: 503 });
   }

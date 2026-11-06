@@ -15,3 +15,11 @@ image hosts. Unsplash photos are used under the [Unsplash License](https://unspl
 The Ethereum, Bitcoin, NEAR and Solana marks used in theme previews are the
 existing local assets under `public/landing/icons/`. Other themes use their
 product names as text labels and original Near Me textures.
+
+AI visual references: [Claude / Anthropic](https://www.anthropic.com/legal),
+[Codex / OpenAI](https://openai.com/academy/codex/),
+[Cursor](https://www.cursor.com/brand),
+[Grok](https://x.ai/legal/brand-guidelines), and
+[Hermes Agent](https://hermes-agent.nousresearch.com/docs/user-guide/features/skins).
+The app uses product names, palette cues and original textures; it does not
+bundle their marketing screenshots or copied product illustrations.

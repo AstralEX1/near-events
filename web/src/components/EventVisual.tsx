@@ -13,7 +13,7 @@ export function VisualBackdrop({ visual, className = "", children }: { visual: E
   return (
     <div
       className={`relative isolate overflow-hidden ${className}`}
-      style={{ backgroundColor: dark, backgroundImage, backgroundSize: resolved.backgroundAsset ? "auto, cover, cover" : undefined, backgroundPosition: "center" }}
+      style={{ backgroundColor: dark, backgroundImage, backgroundSize: resolved.backgroundAsset ? "cover, cover" : undefined, backgroundPosition: "center" }}
     >
       <div aria-hidden="true" className="absolute inset-0 z-0 opacity-50" style={{ backgroundImage: resolved.texture }} />
       <div className="relative z-10 flex h-full w-full flex-col justify-end">{children}</div>

@@ -14,10 +14,10 @@ export const EVENT_THEMES = [
   { id: "solana", name: "Solana", group: "blockchain", note: "Neon signal bands", mark: "SOL", icon: "/landing/icons/sol.svg" },
   { id: "paradise", name: "Paradise", group: "paradise", note: "Bali, islands & coworking", mark: "BALI" },
   { id: "claude", name: "Claude", group: "ai", note: "Warm paper and ember", mark: "claude" },
-  { id: "codex", name: "Codex", group: "ai", note: "Terminal green", mark: "CODEX" },
+  { id: "codex", name: "Codex", group: "ai", note: "Blue-violet code paths", mark: "CODEX" },
   { id: "cursor", name: "Cursor", group: "ai", note: "Quiet editor dark", mark: "cursor" },
   { id: "grok", name: "Grok", group: "ai", note: "Black, silver & orbit", mark: "GROK" },
-  { id: "hermes", name: "Hermes", group: "ai", note: "Agentic violet light", mark: "HERMES" },
+  { id: "hermes", name: "Hermes", group: "ai", note: "Classic gold & deep navy", mark: "HERMES" },
 ] as const;
 
 export type EventThemeId = (typeof EVENT_THEMES)[number]["id"];
@@ -54,10 +54,10 @@ const PALETTES: Record<EventThemeId, [string, string, string][]> = {
   solana: [["#10132b", "#9945ff", "#14f195"], ["#17172e", "#6d55d8", "#5ee5c4"], ["#102c36", "#28b6a2", "#b7f35e"]],
   paradise: [["#063d48", "#2da894", "#e9d2a4"], ["#104554", "#56b7c5", "#ffbb7a"], ["#2b3e33", "#6c9d67", "#edd49d"]],
   claude: [["#38221b", "#da7147", "#f7ce9f"], ["#38251f", "#bf624b", "#f4d9ad"], ["#3b2923", "#e58b58", "#ffd598"]],
-  codex: [["#0c211b", "#51b887", "#c4f7d1"], ["#10251e", "#2f9d75", "#94e2ae"], ["#0c2c32", "#47b695", "#d2ef9f"]],
+  codex: [["#151735", "#6257db", "#a9c7ff"], ["#172449", "#4a73e8", "#d6aaff"], ["#20183d", "#8162e8", "#83d7ff"]],
   cursor: [["#111316", "#6d7787", "#d3e1f4"], ["#171922", "#6574a3", "#d1d8e8"], ["#151719", "#4e7772", "#d2e9db"]],
   grok: [["#090b0e", "#8a98a8", "#eff4f9"], ["#17191e", "#778499", "#fff3d7"], ["#111316", "#596979", "#d4e5f4"]],
-  hermes: [["#21142f", "#a875dc", "#86d8be"], ["#201936", "#7b65cc", "#c0a6ed"], ["#192b37", "#57a9a0", "#dbc5f1"]],
+  hermes: [["#17130b", "#b47b18", "#ffd94f"], ["#20180c", "#cb8d25", "#ffe3a0"], ["#171b11", "#a28d36", "#d5ee69"]],
 };
 
 const TEXTURES: Record<EventThemeId, string[]> = {
@@ -93,9 +93,9 @@ const TEXTURES: Record<EventThemeId, string[]> = {
     "radial-gradient(ellipse at 20% 15%, #ffb78130, transparent 55%), repeating-linear-gradient(145deg, transparent 0 28px, #ffdda219 29px 30px)",
   ],
   codex: [
-    "repeating-linear-gradient(0deg, #a6f4c514 0 1px, transparent 1px 18px), repeating-linear-gradient(90deg, #a6f4c514 0 1px, transparent 1px 18px)",
-    "repeating-linear-gradient(135deg, transparent 0 20px, #7af1ad1b 21px 22px)",
-    "radial-gradient(circle at 18% 22%, #b7f9c92b 0 1px, transparent 2px), repeating-linear-gradient(90deg, #aff5ce15 0 2px, transparent 2px 27px)",
+    "linear-gradient(35deg, transparent 48%, #c4b2ff22 49% 50%, transparent 51%), linear-gradient(145deg, transparent 48%, #9fcaff20 49% 50%, transparent 51%)",
+    "repeating-linear-gradient(0deg, #c4b2ff16 0 1px, transparent 1px 22px), repeating-linear-gradient(90deg, #9fcaff12 0 1px, transparent 1px 22px)",
+    "radial-gradient(circle at 18% 22%, #cdb8ff38 0 1px, transparent 2px), repeating-linear-gradient(135deg, transparent 0 20px, #9dc9ff1b 21px 22px)",
   ],
   cursor: [
     "linear-gradient(#dce7f212 1px, transparent 1px), linear-gradient(90deg, #dce7f212 1px, transparent 1px)",
@@ -108,9 +108,9 @@ const TEXTURES: Record<EventThemeId, string[]> = {
     "radial-gradient(ellipse at 50% 0%, #e0e8f022, transparent 60%), repeating-linear-gradient(90deg, #d6e2f012 0 1px, transparent 1px 33px)",
   ],
   hermes: [
-    "radial-gradient(circle at 75% 23%, #dbbdff30 0 1px, transparent 2px), repeating-linear-gradient(45deg, #bf9bea16 0 1px, transparent 1px 23px)",
-    "linear-gradient(120deg, transparent 47%, #aaf5da1f 48% 49%, transparent 50%), linear-gradient(60deg, transparent 47%, #e6c4ff19 48% 49%, transparent 50%)",
-    "radial-gradient(ellipse at 25% 80%, #87e4c532, transparent 50%), repeating-radial-gradient(ellipse at 65% 20%, #dec8ff13 0 1px, transparent 2px 22px)",
+    "radial-gradient(circle at 75% 23%, #ffdf6330 0 1px, transparent 2px), repeating-linear-gradient(45deg, #f1bd4b16 0 1px, transparent 1px 23px)",
+    "linear-gradient(120deg, transparent 47%, #ffcf4c25 48% 49%, transparent 50%), linear-gradient(60deg, transparent 47%, #a8df6c19 48% 49%, transparent 50%)",
+    "radial-gradient(ellipse at 25% 80%, #e8b64a32, transparent 50%), repeating-radial-gradient(ellipse at 65% 20%, #ffe19b13 0 1px, transparent 2px 22px)",
   ],
 };
 
