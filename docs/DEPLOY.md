@@ -1,7 +1,8 @@
-# Hosting the web app (not done yet)
+# Web app hosting and escrow release
 
-The testnet escrow deployment is recorded below. The Vercel hosting steps have
-not been run. (2026-11-06, Codex)
+Status last checked on 2026-11-06: the testnet escrow deployment is recorded
+below; the Vercel hosting steps had not been run. Recheck before using this as a
+current deployment status.
 
 ## Vercel (recommended)
 1. Import the public repo in Vercel, **Root Directory = `web`**, framework Next.js
@@ -25,6 +26,11 @@ not been run. (2026-11-06, Codex)
    approved callback URLs. Localhost works; a Vercel domain may need its own
    client (docs.auth.near.org → apply). Wallet and EVM login work
    anywhere.
+
+The Telegram bot's chat/event mapping and unfinished drafts are stored in
+`web/.data/telegram.json`, without a Redis adapter. This file is not durable on
+an ephemeral/serverless host; add persistent storage before enabling the bot
+webhook there. Check-ins and public event details use Upstash separately.
 
 For mainnet, switch the three `NEXT_PUBLIC_*` values to the mainnet escrow,
 `17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1` (USDC), and a

@@ -1,26 +1,33 @@
 # Near Me: show up, split the pool
 
-Kickback-style events on NEAR. Every guest puts down the same small USDC deposit.
-Guests who show up get their deposit back plus an equal share of the no-shows'
-deposits. No platform fee, and creating an event is free.
+Kickback-style events on NEAR. In Deposit mode, every guest puts down the same
+small USDC deposit; guests who show up get it back plus an equal share of the
+no-shows' deposits. Paid Ticket mode is also available. There is no platform
+fee, and creating an event is free.
 
-- All money moves through NEAR Intents. Guests pay with USDC from a NEAR wallet
-  or with almost any token on any chain (1Click swaps it to exactly the deposit),
-  and cash out the same way: to any chain via 1Click, or to any NEAR Intents account.
-- No wallet needed: sign in with Google or email through FastAuth and get a NEAR
-  account behind the scenes. A NEAR wallet or MetaMask / any EVM wallet works too.
-  With an EVM wallet your account is your NEAR Intents account (`0x…`), you
-  register by signing one intent, and our relayer pays the gas.
+- Funds are held by a Rust escrow on NEAR. Mainnet cross-chain payments use NEAR
+  Intents and 1Click; testnet uses Tidepool because NEAR Intents has no testnet.
+  Mainnet 1Click first funds the guest's Intents account, then the guest confirms
+  registration. Withdrawals can go through 1Click to another chain or to an
+  Intents account.
+- Guests can sign in with Google or email through FastAuth, use a NEAR wallet, or
+  use an EVM wallet. Mainnet EVM and FastAuth release checks are still pending.
 - Free for hosts: the escrow pays the storage for a new event, so a host needs
   no NEAR to create one.
 - The host is a person (any NEAR account) with optional co-hosts at the door.
-- Escrow: deposits sit in a Rust contract on NEAR. The host cannot take the
-  pool, only decide who showed up. If the host disappears, anyone can refund
-  everyone after a grace period.
+- In Deposit mode the host records who showed up but cannot take the pool. In
+  Ticket mode ticket funds go to the host after the event starts. Anyone can
+  refund guests after an event is abandoned for 30 days.
 
 Hackathon track focus: Real-World Money (USDC, NEAR Intents, gasless onboarding).
 
 ## Live on testnet
+
+As last recorded on 2026-11-06, the app uses the verified `escrow-tp4`
+deployment. Its code hash and USDC storage registration were checked, but the
+live registration/payment smoke, hosted demo setup, and mainnet release checks
+were still pending. Treat mainnet flows below as implementation details until
+those checks are confirmed complete.
 
 | What | Account |
 |---|---|
@@ -38,24 +45,25 @@ account first, and the guest confirms registration separately.
 
 ```bash
 cd web
-cp .env.example .env.local      # relayer settings are required for FastAuth and EVM actions
+cp .env.example .env.local      # add local server settings from docs/DEPLOY.md as needed
 npm install
 npm run dev                     # http://localhost:3000
 ```
 
 1. Open http://localhost:3000 and go to `/events`. Open and past events are read
    live from the testnet contract.
-2. Open an event and click “Continue with Google or email” (or connect a wallet).
-   You get a NEAR account; on testnet the relayer gives it a little NEAR for gas.
+2. Open an event and connect a NEAR wallet. Google/email sign-in needs the
+   FastAuth settings described in `docs/DEPLOY.md`.
 3. Click “Register · 5 USDC”. On testnet the test USDC comes from the faucet, then
    the deposit goes into the escrow and you appear under “going”.
 4. Create your own event at `/create` (free) and add a friend as co-host.
 5. As host or co-host open “Manage & check in guests” and tick who came. The
-   first tick asks your wallet (or Google account) to sign a message once; the
+   first tick asks your wallet to sign a message once; the
    marks are kept on our server, no transaction per guest. The page shows what
    each attendee will receive.
-6. Click “Close event & pay out”. This one transaction sends the list of who
-   came to the contract, and each attendee's share lands on their balance.
+6. After the event ends and check-ins are settled, click “Close event & pay out”.
+   This transaction sends the attendance list to the contract and credits each
+   attendee's share to their balance.
 7. Press Withdraw on the event page or `/me`: send the payout through NEAR
    Intents to any chain (via 1Click) or to any NEAR Intents account.
 
@@ -72,7 +80,8 @@ node scripts/smoke-intents-testnet.mjs   # deposit via 1Click → finalize(atten
 node scripts/smoke-tickets-testnet.mjs   # paid ticket → finalize after the start → cancel refunds
 ```
 
-Both print each step and end with the payouts landing (checked on 2026-11-05).
+Those scripts last passed against an earlier testnet setup on 2026-11-05. Rerun
+the current release smoke against `escrow-tp4` before relying on that result.
 
 ## Embed on your website
 
@@ -105,7 +114,7 @@ host / co-host ── create_event / finalize(attended) ──► escrow contrac
 
 Contract: `contracts/events/src/lib.rs` (unit tests in `tests.rs`).
 
-**EVM wallet flow (mainnet):** the guest signs an ERC-191 intent
+**EVM wallet flow (mainnet; release smoke pending):** the guest signs an ERC-191 intent
 `ft_withdraw {token: USDC, receiver_id: escrow, msg: register}`; `/api/intents/execute`
 checks it is only a Near Me registration and submits it to `intents.near`
 (`execute_intents`), which calls `ft_transfer_call` on the escrow.
@@ -114,11 +123,11 @@ checks it is only a Near Me registration and submits it to `intents.near`
 |---|---|---|
 | `create_event(metadata, deposit, capacity, cohosts)` | anyone (caller = host) | free: the contract pays storage from its own balance; max 5 open events per host, capacity ≤ 300, deposit ≥ 0.1 USDC; up to 10 co-hosts, fixed after creation |
 | `ft_transfer_call` → `ft_on_transfer` | guest / friend / verifier | `{"action":"register","event_id":N,"guest":"..."}` |
-| `update_event(event_id, title, starts_at, ends_at)` | host (+1 yocto) | update the event details before it starts, on the audit candidate |
+| `update_event(event_id, title, starts_at, ends_at)` | host (+1 yocto) | edit the title and times before the event starts |
 | `refund_guest` | host (+1 yocto) | refund one guest and free their seat while the event is open |
 | `finalize(event_id, attended)` | host (+1 yocto) | `attended` = guests checked in at the door (kept off-chain on our server until now). Deposit: pool ÷ attendees, remainder to host, empty list → full refund. Ticket: all ticket money to the host after the start |
 | `set_paused(paused)` | owner = the account that ran `new` (+1 yocto) | stops new events and registrations; payouts, refunds and withdrawals keep working |
-| `cancel`, `refund_if_abandoned` | host (+1 yocto) / anyone after 30 days | refund every guest deposit |
+| `cancel`, `refund_if_abandoned` | host (+1 yocto) / anyone after event end + 30 days | refund every guest payment |
 | `cleanup_event(event_id, limit)` | anyone, 7 days after close | deletes up to 100 guest records so their storage NEAR returns to the contract; payouts stay on balances |
 | `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to a NEAR account (e.g. a 1Click deposit address) or into NEAR Intents |
 | `payout_to_intents(account_id)` | owner or configured relayer | moves that account's balance into *its own* Intents balance; how EVM-wallet guests get paid |
@@ -152,13 +161,13 @@ and verify its hash against the deployed account. See [deployment and release ch
 
 ## Built with
 
-Rust `near-sdk` 5.30 and `near-contract-standards`, `cargo-near`; Next.js 16,
+Rust `near-sdk` 5.29.1 and `near-contract-standards`, `cargo-near`; Next.js 16,
 React 19, Tailwind CSS 4; `near-api-js` 7 (and 5 for FastAuth);
 `@hot-labs/near-connect` (wallets); `@fast-auth-near/*` (FastAuth, Google/email
 sign-in); NEAR Intents and the 1Click API.
 
-**AI disclosure:** the contract, web app, scripts and this README were written with
-Claude (Anthropic) in Claude Code, directed and reviewed by the author.
+**AI disclosure:** the contract, web app, scripts and documentation were
+AI-assisted with Claude, Cursor and Codex, directed and reviewed by the author.
 
 ## Hackathon work
 
