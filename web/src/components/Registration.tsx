@@ -198,6 +198,17 @@ export function RegistrationCard({
         )
       ) : myStatus === "Registered" ? (
         <p className="text-sm">You weren’t checked in, so your deposit went to the people who came.</p>
+      ) : balanceLoading ? (
+        <p className="text-sm text-muted">Checking your Near Me balance…</p>
+      ) : balanceError ? (
+        <p className="text-sm text-warn">Could not load your Near Me balance. Refresh and try again.</p>
+      ) : balance > 0n ? (
+        <div className="space-y-2">
+          <p className="text-sm">
+            You have <b>{formatUsdc(balance)} USDC</b> in your Near Me balance. This is an account-level balance and may include funds from other events.
+          </p>
+          <CashOut accountId={accountId} kind={kind} balance={balance} onDone={loadBalance} startOpen />
+        </div>
       ) : (
         <p className="text-sm">This event is over and the pool was paid out.</p>
       );

@@ -7,11 +7,10 @@ import { NETWORK } from "@/lib/config";
 import { Avatar, shortAccount } from "./ui";
 import { SignInMenu } from "./SignIn";
 
-/** Logo + two products (Create · Integrate) + account. */
+/** Logo, Create and Events links, plus the account menu. */
 export function Header() {
   const { accountId, signOut } = useWallet();
   const path = usePathname() || "/";
-  const marketing = path === "/" || path === "/try";
 
   return (
     <header className="sticky top-0 z-10 backdrop-blur bg-bg/90 border-b border-border">
@@ -26,22 +25,14 @@ export function Header() {
           <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-accent-soft text-accent">testnet</span>
         )}
         <nav className="ml-auto flex items-center gap-1 sm:gap-2 text-sm">
-          {!marketing && (
-            <Link href="/events" className="hidden sm:inline text-muted hover:text-text px-2">
-              Events
-            </Link>
-          )}
+          <Link href="/events" className="hidden sm:inline text-muted hover:text-text px-2">
+            Events
+          </Link>
           <Link
             href="/create"
             className={`px-2 py-1 rounded-lg ${path.startsWith("/create") ? "text-text font-medium" : "text-muted hover:text-text"}`}
           >
             Create
-          </Link>
-          <Link
-            href="/widget"
-            className={`px-2 py-1 rounded-lg ${path.startsWith("/widget") ? "text-text font-medium" : "text-muted hover:text-text"}`}
-          >
-            Integrate
           </Link>
           {accountId ? (
             <>

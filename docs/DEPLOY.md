@@ -16,8 +16,8 @@ below has been run; deploying needs Alex's OK. (2026-11-03, Claude)
 | `RELAYER_ACCOUNT_ID` | `relayer-nearevents-11022103.testnet` | no |
 | `RELAYER_PRIVATE_KEY` | from `web/.env.local` (paste in Vercel only) | **yes** |
 | `ONECLICK_API_KEY` | optional | **yes** |
-| `APP_SECRET` | any long random string (signs door check-in tokens) | **yes** |
-| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | an Upstash Redis database (door check-ins; Vercel's disk is wiped) | **yes** |
+| `APP_SECRET` | any long random string (signs staff-session tokens for check-ins and event-detail saves) | **yes** |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | an Upstash Redis database (door check-ins and public event details; Vercel's disk is wiped) | **yes** |
 | `RATE_LIMIT_REDIS_URL` | shared Redis REST URL | no |
 | `RATE_LIMIT_REDIS_TOKEN` | Redis REST token | **yes** |
 
@@ -41,6 +41,14 @@ of existing contracts is incompatible. The app uses one escrow account at a
 time; it does not look up events or route withdrawals across older accounts.
 Point the app at the release escrow only after the checks below pass. Events and
 balances on older accounts are outside the app flow and are not migrated.
+
+The 2026-11-06 release check found four events on the current
+`escrow-tp3.nearevents-11022103.testnet`, including one open event with a guest
+and 10 USDC. Its deployed code hash is
+`5SH6L4aZBsiQMj8UHZW7GeHrPbXTJeTZyneh4oNfxMx3`; checked reproducible artifacts
+from earlier commits did not match. Do not upgrade this escrow or point the app
+at another account until access to the open event and its funds is preserved.
+Build and verify the committed release artifact first.
 
 1. Build from the committed public source with cargo-near 0.22.0 and
    `cargo near build reproducible-wasm --manifest-path contracts/events/Cargo.toml`.

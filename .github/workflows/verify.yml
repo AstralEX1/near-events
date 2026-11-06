@@ -35,7 +35,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-      - run: node --test tests/embed.test.mjs
+      - run: node --test tests/embed.test.mjs tests/balisquad-import.test.mjs
       - run: npm run build
 
   escrow-wasm:

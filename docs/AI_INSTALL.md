@@ -4,9 +4,10 @@ For a business owner who has a coding agent (Claude Code, Cursor, Codex,
 Windsurf, Lovable, v0...). Open the agent **in your website's project** and
 send it the prompt below. You don't need to read anything else.
 
-Open `/widget` in Near Me, choose the event, and copy the button code. For
-an agent working from these instructions, replace `https://YOUR-NEAR-ME-HOST`
-with your Near Me address and `EVENT_ID` with the number from `/e/{id}`.
+Create or import the event in Near Me, then copy the button code from the
+creation screen or its Manage → Registration tab. Replace
+`https://YOUR-NEAR-ME-HOST` with your Near Me address and `EVENT_ID` with the
+number from `/e/{id}`.
 
 ## The prompt
 

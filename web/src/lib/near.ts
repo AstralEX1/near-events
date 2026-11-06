@@ -9,6 +9,8 @@ export const isTicket = (e: { mode?: EventMode }) => e.mode === "Ticket";
 
 export interface EventMetadata {
   title: string;
+  description: string;
+  location: string;
   starts_at: number;
   ends_at: number;
 }

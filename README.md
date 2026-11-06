@@ -87,9 +87,10 @@ The button opens Near Me checkout in a separate window when the browser allows
 it; on phones it may open a new tab, and blocked pop-ups fall back to the
 current tab. After registering, the button stays available to reopen the guest's
 QR pass or, after the event closes, their payout or refund page; guests may need
-to sign in again. Hosts create and manage events in Near Me. The builder at
-`/widget` gives the button code and a direct `/p/{id}` checkout link. Existing
-event-card and iframe embeds remain supported. Details: [docs/EMBED.md](docs/EMBED.md).
+to sign in again. Create or import an event at `/create`, then copy its button
+code and direct `/p/{id}` checkout link from the creation screen or Manage →
+Registration. Existing event-card and iframe embeds remain supported. Details:
+[docs/EMBED.md](docs/EMBED.md).
 
 ## How it works
 

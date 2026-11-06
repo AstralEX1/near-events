@@ -8,7 +8,7 @@ stay in the Near Me contract, and there is no platform fee.
 
 ## Add a registration button
 
-Open **`/widget`**, choose the event, and copy this code:
+Create or import the event in Near Me. On the creation screen or in that event’s **Manage → Registration** tab, copy this code:
 
 ```html
 <script src="https://YOUR-NEAR-ME-HOST/embed.js" async></script>
@@ -23,8 +23,9 @@ checked in can claim their payout; the page explains the outcome for everyone
 else. If their wallet or sign-in session is not restored, checkout asks them to
 sign in before showing their pass or payout.
 
-The same builder also gives you a direct checkout link, `/p/6`, for a message or
-a site builder that does not allow scripts.
+The creation screen and Manage → Registration tab also give you a direct
+checkout link, `/p/6`, for a message or a site builder that does not allow
+scripts.
 
 ### Continue to your own registration form (optional)
 
@@ -128,8 +129,8 @@ your event page ── button ──► Near Me checkout window
 
 ## Host setup
 
-1. Create the event at `/create` and add the door person as a co-host.
-2. Open `/widget`, choose the event, and copy the button or checkout link.
+1. Create or import the event at `/create` and add the door person as a co-host.
+2. Copy the button code or checkout link from the creation screen or that event’s Manage → Registration tab.
 3. Add it to your event page.
 4. Manage registrations and check-in in Near Me. Close the event there; eligible
    guests can then claim their payout from the same checkout page.

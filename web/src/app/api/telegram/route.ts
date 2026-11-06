@@ -250,10 +250,10 @@ async function onButton(q: { id: string; data?: string; message?: Msg }) {
     return say(chat, `${what}\nConfirm with your account:${l.text}`, l.buttons);
   }
   if (kind === "w") {
-    const code = `<script src="${PUBLIC_URL()}/embed.js" async></script>\n<near-event event="${id}"></near-event>`;
+    const code = `<script src="${PUBLIC_URL()}/embed.js" async></script>\n<near-event event="${id}" mode="button"></near-event>`;
     return say(
       chat,
-      `Paste this where the event is on your website:\n\n<pre>${esc(code)}</pre>\nOr send your AI agent the prompt from ${PUBLIC_URL()}/widget?event=${id}\nPayment link for Luma, Instagram or WhatsApp: ${PUBLIC_URL()}/p/${id}`,
+      `Checkout button for your website:\n\n<pre>${esc(code)}</pre>\nEvent page: ${PUBLIC_URL()}/e/${id}\nQuick checkout: ${PUBLIC_URL()}/p/${id}\nManage event: ${PUBLIC_URL()}/e/${id}/manage`,
     );
   }
 }

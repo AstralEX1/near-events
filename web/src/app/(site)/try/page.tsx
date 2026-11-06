@@ -4,10 +4,10 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Fill every slot · Near Me",
   description:
-    "Turn sign-ups into show-ups. Create an event or embed the deposit widget on your site.",
+    "Turn sign-ups into show-ups. Create or import an event, then share its checkout link or button.",
 };
 
-/** Same two products as home — short campaign page. */
+/** Short campaign page for hosts and guests. */
 export default function TryPage() {
   return (
     <div className="min-h-[calc(100vh-10rem)] flex flex-col items-center justify-center text-center max-w-lg mx-auto space-y-8 py-16 px-4">
@@ -20,9 +20,9 @@ export default function TryPage() {
           <div className="font-semibold">Create event</div>
           <p className="text-sm text-muted mt-1">Host on Near Me</p>
         </Link>
-        <Link href="/widget" className="rounded-2xl border border-border bg-surface p-4 hover:border-accent/40 transition-colors">
-          <div className="font-semibold">Integrate widget</div>
-          <p className="text-sm text-muted mt-1">Embed on your landing</p>
+        <Link href="/events" className="rounded-2xl border border-border bg-surface p-4 hover:border-accent/40 transition-colors">
+          <div className="font-semibold">Browse events</div>
+          <p className="text-sm text-muted mt-1">See what’s happening</p>
         </Link>
       </div>
       <a

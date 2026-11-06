@@ -10,6 +10,9 @@ import { RegistrationCard } from "@/components/Registration";
 import { GuestGrid } from "@/components/EventParts";
 import { EVENTS_CONTRACT, EXPLORER_URL } from "@/lib/config";
 import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
+import type { EventDetails } from "@/lib/eventImport";
+import { useEventVisual } from "@/lib/event-visual-client";
+import { VisualBackdrop } from "@/components/EventVisual";
 
 /**
  * The hosted event page, laid out like Luma so hosts and guests feel at home.
@@ -21,11 +24,34 @@ export default function EventPage() {
   const { accountId } = useWallet();
   const [event, setEvent] = useState<EventView | null | undefined>(undefined);
   const [guests, setGuests] = useState<GuestView[]>([]);
+  const [details, setDetails] = useState<EventDetails | null>(null);
+  const [detailsUnavailable, setDetailsUnavailable] = useState(false);
+  const visual = useEventVisual(id, event?.metadata.title ?? "");
 
   const load = useCallback(async () => {
-    const [e, g] = await Promise.all([events.get(id), events.guests(id).catch(() => [])]);
+    const [e, g] = await Promise.all([
+      events.get(id),
+      events.guests(id).catch(() => []),
+    ]);
     setEvent(e);
     setGuests(g);
+    setDetails(null);
+    setDetailsUnavailable(false);
+    if (e) {
+      void fetch(`/api/event-details?e=${encodeURIComponent(String(id))}`, { cache: "no-store" })
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Event details are unavailable");
+          return response.json();
+        })
+        .then((json) => {
+          setDetails((json?.details as EventDetails | null | undefined) ?? null);
+          setDetailsUnavailable(false);
+        })
+        .catch(() => {
+          setDetails(null);
+          setDetailsUnavailable(true);
+        });
+    }
   }, [id]);
 
   useEffect(() => {
@@ -42,9 +68,10 @@ export default function EventPage() {
 
   // Cover, hosts and who's going on the left; title, time and registration on the right.
   return (
-    <div className="grid gap-8 md:grid-cols-[330px_1fr] items-start max-w-[928px] mx-auto">
+    <VisualBackdrop visual={visual} className="max-w-[928px] mx-auto rounded-3xl p-3 sm:p-6 shadow-sm">
+      <div className="relative grid gap-8 md:grid-cols-[330px_1fr] items-start rounded-2xl bg-surface/70 p-3 sm:p-5 backdrop-blur-sm">
         <aside className="space-y-6">
-          <Cover event={event} className="aspect-square w-full rounded-2xl shadow-sm [&>span]:hidden" />
+          <Cover event={event} visual={visual} coverUrl={details?.cover_url} className="aspect-square w-full rounded-2xl shadow-sm [&>span]:hidden" />
           <div>
             <div className="label pb-2 mb-3 border-b border-border">Hosted by</div>
             <div className="space-y-2.5">
@@ -94,6 +121,28 @@ export default function EventPage() {
             </div>
           </div>
 
+          {(details?.location || details?.description) && (
+            <div className="card p-4 space-y-4">
+              {details.location && (
+                <section className="space-y-1">
+                  <h2 className="font-medium">Location</h2>
+                  <PublicText value={details.location} />
+                </section>
+              )}
+              {details.description && (
+                <section className="space-y-1">
+                  <h2 className="font-medium">Event details</h2>
+                  <PublicText value={details.description} />
+                </section>
+              )}
+            </div>
+          )}
+          {detailsUnavailable && (
+            <p className="text-sm text-muted">
+              Event details are temporarily unavailable. <button type="button" className="underline underline-offset-2" onClick={() => void load()}>Retry</button>
+            </p>
+          )}
+
           <div className="card overflow-hidden bg-surface/80 backdrop-blur">
             <div className="px-4 py-2.5 text-sm font-medium text-muted border-b border-border">Registration</div>
             <div className="p-4">
@@ -104,6 +153,31 @@ export default function EventPage() {
           {event.status !== "Open" && <GuestGrid event={event} guests={guests} me={accountId} />}
         </section>
       </div>
+  );
+}
+
+function PublicText({ value }: { value: string }) {
+  return (
+    <p className="text-sm text-muted whitespace-pre-wrap break-words">
+      {value.split(/(https?:\/\/[^\s]+)/g).map((part, index) => {
+        if (!/^https?:\/\//i.test(part)) return <span key={index}>{part}</span>;
+        let href = part.replace(/[.,;!?]+$/, "");
+        while (href.endsWith(")")) {
+          const opening = (href.match(/\(/g) ?? []).length;
+          const closing = (href.match(/\)/g) ?? []).length;
+          if (closing <= opening) break;
+          href = href.slice(0, -1);
+        }
+        const tail = part.slice(href.length);
+        try {
+          const url = new URL(href);
+          if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return <span key={index}>{part}</span>;
+          return <span key={index}><a href={url.href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-text">{href}</a>{tail}</span>;
+        } catch {
+          return <span key={index}>{part}</span>;
+        }
+      })}
+    </p>
   );
 }
 
@@ -140,12 +214,13 @@ function MoreMenu({ id, isStaff }: { id: number; isStaff: boolean }) {
                 <div className="border-t border-border my-1" />
                 <Link className={item} href={`/e/${id}/manage`}>Manage event</Link>
                 <Link className={item} href={`/create?from=${id}`}>Duplicate event</Link>
-                <Link className={item} href={`/widget?event=${id}`}>Put it on your website</Link>
+                <Link className={item} href={`/e/${id}/manage?tab=registration`}>Get quick checkout button</Link>
               </>
             )}
           </div>
         </>
       )}
-    </div>
+      </div>
+    </VisualBackdrop>
   );
 }

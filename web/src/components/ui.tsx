@@ -1,4 +1,9 @@
+"use client";
+
 import type { EventStatus, EventView } from "@/lib/near";
+import { useEventVisual } from "@/lib/event-visual-client";
+import type { EventVisualConfig } from "@/lib/event-visuals";
+import { EventPoster } from "@/components/EventVisual";
 
 /** Implicit accounts (Google/email users) and EVM addresses (Intents accounts) are shortened for display. */
 export function shortAccount(account: string): string {
@@ -32,25 +37,10 @@ export function Avatar({ account, size = 32 }: { account: string; size?: number 
   );
 }
 
-/** Deterministic title gradient, independent of stored event metadata. */
-export function Cover({ event, className = "" }: { event: EventView; className?: string }) {
-  const h = hash(event.metadata.title + event.id);
-  const a = h % 360;
-  return (
-    <div
-      className={`relative overflow-hidden ${className}`}
-      style={{
-        background: `radial-gradient(circle at 20% 20%, hsl(${a} 90% 70%), transparent 55%),
-          radial-gradient(circle at 80% 30%, hsl(${(a + 70) % 360} 85% 65%), transparent 50%),
-          radial-gradient(circle at 50% 90%, hsl(${(a + 160) % 360} 80% 60%), transparent 60%),
-          hsl(${(a + 220) % 360} 60% 25%)`,
-      }}
-    >
-      <span className="absolute bottom-3 left-4 right-4 text-white/90 font-semibold text-lg leading-tight drop-shadow">
-        {event.metadata.title}
-      </span>
-    </div>
-  );
+/** The cover is rendered from the exact title and a stable, off-chain visual choice. */
+export function Cover({ event, className = "", coverUrl = null, visual }: { event: EventView; className?: string; coverUrl?: string | null; visual?: EventVisualConfig }) {
+  const savedVisual = useEventVisual(event.id, event.metadata.title);
+  return <EventPoster title={event.metadata.title} visual={visual ?? savedVisual} coverUrl={coverUrl} className={className} />;
 }
 
 export function DateBadge({ ms }: { ms: number }) {

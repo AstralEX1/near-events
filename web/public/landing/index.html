@@ -236,7 +236,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     <a class="brand" href="/">Near Me</a>
     <nav class="nav">
       <a href="/create">Create</a>
-      <a href="#integrate">Integrate</a>
+      <a href="/events">Events</a>
       <a class="signin" href="/me">Sign in</a>
     </nav>
   </div></header>
@@ -380,10 +380,10 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
   <section class="integrate" id="integrate">
     <div class="wrap">
       <div class="txt reveal">
-        <span class="eyebrow">Integrate</span>
-        <h2 class="h2">Already have a site?</h2>
-        <p class="lead">Paste two lines. Guests leave the deposit with us; you keep your page as the front door.</p>
-        <a class="more" href="/widget">Get the embed code →</a>
+        <span class="eyebrow">One event, every way to register</span>
+        <h2 class="h2">Create or import it on Near Me.</h2>
+        <p class="lead">Share its full event page, quick checkout link, or a button for your own site. Manage guests and check-in in the same event.</p>
+        <a class="more" href="/create">Create or import an event →</a>
       </div>
       <div class="snippet reveal" id="embed-snippet">
         <div class="snippet-bar">
@@ -391,7 +391,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
           <button type="button" class="copy-btn" id="copy-embed">Copy</button>
         </div>
         <pre><code id="embed-code"><span class="tok-tag">&lt;script</span> <span class="tok-attr">src</span>=<span class="tok-val">"<span data-origin></span>/embed.js"</span> <span class="tok-attr">async</span><span class="tok-tag">&gt;&lt;/script&gt;</span>
-<span class="tok-tag">&lt;near-event</span> <span class="tok-attr">event</span>=<span class="tok-val">"YOUR_EVENT_ID"</span><span class="tok-tag">&gt;&lt;/near-event&gt;</span></code></pre>
+<span class="tok-tag">&lt;near-event</span> <span class="tok-attr">event</span>=<span class="tok-val">"YOUR_EVENT_ID"</span> <span class="tok-attr">mode</span>=<span class="tok-val">"button"</span><span class="tok-tag">&gt;&lt;/near-event&gt;</span></code></pre>
       </div>
     </div>
   </section>
@@ -447,7 +447,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
   if (copyBtn) {
     copyBtn.addEventListener('click', function () {
       var text = '<script src="' + origin + '/embed.js" async></' + 'script>\n' +
-        '<near-event event="YOUR_EVENT_ID"></near-event>';
+        '<near-event event="YOUR_EVENT_ID" mode="button"></near-event>';
       var done = function () {
         copyBtn.classList.add('ok');
         copyBtn.textContent = 'Copied';
