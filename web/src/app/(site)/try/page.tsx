@@ -10,15 +10,19 @@ export const metadata: Metadata = {
 /** Short campaign page for hosts and guests. */
 export default function TryPage() {
   return (
-    <div className="min-h-[calc(100vh-10rem)] flex flex-col items-center justify-center text-center max-w-lg mx-auto space-y-8 py-16 px-4">
+    <div className="min-h-[calc(100vh-10rem)] flex flex-col items-center justify-center text-center max-w-2xl mx-auto space-y-8 py-16 px-4">
       <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight leading-[1.05]">Fill every slot.</h1>
       <p className="text-lg text-muted">
         Same small deposit for every guest. Who comes gets it back — plus a share of the no-shows.
       </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full text-left">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full text-left">
         <Link href="/create" className="rounded-2xl border border-border bg-surface p-4 hover:border-accent/40 transition-colors">
           <div className="font-semibold">Create event</div>
           <p className="text-sm text-muted mt-1">Host on Near Me</p>
+        </Link>
+        <Link href="/widget" className="rounded-2xl border border-border bg-surface p-4 hover:border-accent/40 transition-colors">
+          <div className="font-semibold">Integrate</div>
+          <p className="text-sm text-muted mt-1">Add to your site</p>
         </Link>
         <Link href="/events" className="rounded-2xl border border-border bg-surface p-4 hover:border-accent/40 transition-colors">
           <div className="font-semibold">Browse events</div>

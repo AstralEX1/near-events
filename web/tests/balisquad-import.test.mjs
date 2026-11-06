@@ -31,7 +31,7 @@ test("BaliSquad import keeps wall-clock seconds, nested details, links, and Goog
   assert.equal(event.starts_at, Date.parse("2026-11-06T18:00:59+08:00"));
   assert.match(event.description, /Intro/);
   assert.match(event.description, /RSVP: https:\/\/example\.com\/rsvp/);
-  assert.match(event.location, /https:\/\/www\.google\.com\/maps\/place\/example/);
+  assert.equal(event.location, "https://www.google.com/maps/place/example");
 });
 
 test("BaliSquad import rejects normalized or impossible wall-clock dates", () => {

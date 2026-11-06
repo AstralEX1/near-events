@@ -1,15 +1,14 @@
 import { redirect } from "next/navigation";
+import { StartStep } from "@/components/StartStep";
+import { integrationUrl } from "@/lib/flow";
 
-type LegacyWidgetPageProps = {
-  searchParams: Promise<{ event?: string | string[] }>;
-};
+type Param = string | string[] | undefined;
+const one = (value: Param) => (typeof value === "string" ? value : null);
 
-/** Keep old builder links working while moving hosts into the event flow. */
-export default async function LegacyWidgetPage({ searchParams }: LegacyWidgetPageProps) {
-  const { event } = await searchParams;
-  const eventId = typeof event === "string" && /^(0|[1-9]\d*)$/.test(event) && Number.isSafeInteger(Number(event))
-    ? Number(event)
-    : null;
-
-  redirect(eventId !== null ? `/e/${eventId}/manage?tab=registration` : "/create");
+/** The Integrate flow starts here. /widget?event=<id> opens that event's guide. */
+export default async function WidgetPage({ searchParams }: { searchParams: Promise<Record<string, Param>> }) {
+  const params = await searchParams;
+  const event = one(params.event);
+  if (event && /^(0|[1-9]\d*)$/.test(event) && Number.isSafeInteger(Number(event))) redirect(integrationUrl(event));
+  return <StartStep widget initial={{ mode: one(params.mode), amount: one(params.amount), link: one(params.import) }} />;
 }

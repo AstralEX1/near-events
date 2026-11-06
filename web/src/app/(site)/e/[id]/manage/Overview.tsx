@@ -32,7 +32,7 @@ export function Overview({ event, guests, origin, isHost, busy, onGuests, onChec
   const open = event.status === "Open";
   const pageUrl = origin ? `${origin}/e/${id}` : "";
   const payUrl = origin ? `${origin}/p/${id}` : "";
-  const registrationHref = `/e/${id}/manage?tab=registration`;
+  const integrationHref = `/e/${id}/manage?tab=integration`;
   const over = open && Date.now() > event.metadata.ends_at;
 
   const closeCard = (
@@ -48,7 +48,7 @@ export function Overview({ event, guests, origin, isHost, busy, onGuests, onChec
         ) : (
           <QuickAction tone="good" icon={<ListIcon />} label="Guest List" onClick={onGuests} />
         )}
-        <QuickAction tone="amber" icon={<CodeIcon />} label="Registration links" href={registrationHref} />
+        <QuickAction tone="amber" icon={<CodeIcon />} label="Add to Your Site" href={integrationHref} />
       </div>
 
       {over && closeCard}
@@ -82,10 +82,9 @@ export function Overview({ event, guests, origin, isHost, busy, onGuests, onChec
           <LinkRow title="Payment link" hint="A bare pay page for Instagram, WhatsApp and the like" value={payUrl} />
           <div className="flex items-center gap-3 p-3 sm:p-4">
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium">Checkout button</div>
-              <div className="text-xs text-muted mt-0.5">Quick checkout hosted on Near Me</div>
+              <div className="text-sm font-medium">Add to your site</div>
             </div>
-            <Link href={registrationHref} className="btn btn-ghost !py-1.5 text-sm shrink-0">
+            <Link href={integrationHref} className="btn btn-ghost !py-1.5 text-sm shrink-0">
               Open
             </Link>
           </div>

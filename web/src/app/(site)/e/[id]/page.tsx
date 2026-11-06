@@ -10,7 +10,7 @@ import { RegistrationCard } from "@/components/Registration";
 import { GuestGrid } from "@/components/EventParts";
 import { EVENTS_CONTRACT, EXPLORER_URL } from "@/lib/config";
 import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
-import type { EventDetails } from "@/lib/eventImport";
+import { isGoogleMapsLink, type EventDetails } from "@/lib/eventImport";
 import { useEventVisual } from "@/lib/event-visual-client";
 import { VisualBackdrop } from "@/components/EventVisual";
 
@@ -126,7 +126,7 @@ export default function EventPage() {
               {details.location && (
                 <section className="space-y-1">
                   <h2 className="font-medium">Location</h2>
-                  <PublicText value={details.location} />
+                  <LocationValue value={details.location} />
                 </section>
               )}
               {details.description && (
@@ -154,6 +154,17 @@ export default function EventPage() {
         </section>
       </div>
     </VisualBackdrop>
+  );
+}
+
+/** A link shows as a short label; older events may hold a plain address, which stays as text. */
+function LocationValue({ value }: { value: string }) {
+  const link = value.trim();
+  if (!/^https?:\/\/\S+$/i.test(link)) return <PublicText value={value} />;
+  return (
+    <a href={link} target="_blank" rel="noopener noreferrer" className="text-sm text-muted underline underline-offset-2 hover:text-text">
+      {isGoogleMapsLink(link) ? "Google Maps" : "Map"}
+    </a>
   );
 }
 
@@ -215,7 +226,7 @@ function MoreMenu({ id, isStaff }: { id: number; isStaff: boolean }) {
                 <div className="border-t border-border my-1" />
                 <Link className={item} href={`/e/${id}/manage`}>Manage event</Link>
                 <Link className={item} href={`/create?from=${id}`}>Duplicate event</Link>
-                <Link className={item} href={`/e/${id}/manage?tab=registration`}>Get quick checkout button</Link>
+                <Link className={item} href={`/e/${id}/manage?tab=integration`}>Add to your site</Link>
               </>
             )}
           </div>

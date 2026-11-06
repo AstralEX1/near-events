@@ -1,5 +1,5 @@
 import { rateLimited } from "@/lib/ratelimit";
-import type { ImportedEvent } from "@/lib/eventImport";
+import { lumaLocation, type ImportedEvent } from "@/lib/eventImport";
 
 // Only the public event slug is sent to Luma.
 
@@ -81,28 +81,6 @@ function hostDetails(hosts: unknown): string[] {
   });
 }
 
-function locationOf(event: Record<string, unknown>): string {
-  const visibility = String(event.geo_address_visibility ?? event.location_visibility ?? "").toLowerCase();
-  // Luma defaults location_visibility to public; do not expose details it marks guests-only.
-  if (visibility && !["shown", "public", "visible"].includes(visibility)) return "";
-  const geo = event.geo_address_info ?? event.geo_address_json;
-  if (!geo || typeof geo !== "object") return "";
-  const place = geo as Record<string, unknown>;
-  const address = [place.full_address, place.address, place.city_state]
-    .find((value) => typeof value === "string" && value.trim());
-  const coordinate = event.coordinate;
-  const point = coordinate && typeof coordinate === "object" ? coordinate as Record<string, unknown> : null;
-  const textQuery = [address, place.name].find((value) => typeof value === "string" && value.trim());
-  const query = typeof textQuery === "string" ? textQuery.trim()
-    : typeof point?.latitude === "number" && typeof point.longitude === "number" ? `${point.latitude},${point.longitude}` : "";
-  const placeId = typeof place.place_id === "string" && place.place_id.trim() ? place.place_id : "";
-  const mapQuery = query || (placeId ? `place_id:${placeId}` : "");
-  const map = mapQuery
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}${placeId ? `&query_place_id=${encodeURIComponent(placeId)}` : ""}`
-    : "";
-  return [typeof address === "string" ? address.trim() : "", map ? `Map: ${map}` : ""].filter(Boolean).join("\n");
-}
-
 export async function GET(req: Request) {
   if (rateLimited(req, 20)) return Response.json({ error: "Too many requests" }, { status: 429 });
   const slug = slugOf(new URL(req.url).searchParams.get("url") ?? "");
@@ -127,7 +105,7 @@ export async function GET(req: Request) {
     title: String(e.name).slice(0, 120),
     starts_at,
     ends_at,
-    location: locationOf(e).slice(0, 1000),
+    location: lumaLocation(e),
     description: [descriptionOf(d.description_mirror), ...hostDetails(d.hosts)].filter(Boolean).join("\n\n").slice(0, 10_000),
     cover_url: coverUrl(e),
   };
