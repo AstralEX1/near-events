@@ -46,10 +46,10 @@ The 2026-11-06 release check found four events on the current
 `escrow-tp3.nearevents-11022103.testnet`, including one open event with a guest
 and 10 USDC. Its deployed code hash is
 `5SH6L4aZBsiQMj8UHZW7GeHrPbXTJeTZyneh4oNfxMx3`; read-only RPC returned
-254,164 bytes of deployed WASM. CI reproducibly built the current `867f6c0`
+254,164 bytes of deployed WASM. CI reproducibly built the current `fffd053`
 candidate: its 268,797-byte WASM SHA-256 is
-`289bed7d5a650763fc23e8dc10fa5eec31cb75c9f0fda8b3785f99a29528f605`, with
-expected NEAR code hash `3jXDFKaP3wENet5xCfU8W9VnGqBJxjpYpStmbxPJW1Dv`. The
+`026d9b19f697a7c81abcd10134c2ee2ac8fbfaac93590dc41a032ae5a0e6a361`, with
+expected NEAR code hash `AUkadt9QEg7JQXMqsPZQgUQDoimi4U1VgGwfEYgG6QG`. The
 code sizes and hashes differ. Do not upgrade this escrow or point the app at
 another account until access to the open event and its funds is preserved.
 
