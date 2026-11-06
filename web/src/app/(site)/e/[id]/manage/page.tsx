@@ -9,18 +9,20 @@ import { checkIns } from "@/lib/checkinsClient";
 import { useWallet } from "@/lib/wallet";
 import { Avatar, StatusPill, shortAccount } from "@/components/ui";
 import { QrScanner } from "@/components/Qr";
+import { IntegrationGuide } from "@/components/IntegrationGuide";
 import { Overview } from "./Overview";
 import { LOCAL_TZ, fromEpoch, toEpoch } from "@/lib/time";
 
-type Tab = "overview" | "guests" | "registration";
+type Tab = "overview" | "guests" | "registration" | "integration";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "guests", label: "Guests" },
   { id: "registration", label: "Registration" },
+  { id: "integration", label: "Integration" },
 ];
 
 /**
- * Host admin — Luma-style manage: Overview · Guests · Registration.
+ * Host admin — Luma-style manage: Overview · Guests · Registration · Integration.
  * No Blasts / Insights / More. Door flow lives under Guests (QR + name).
  */
 export default function ManageEventPage() {
@@ -48,7 +50,7 @@ function ManageEvent() {
   const [origin, setOrigin] = useState("");
 
   const tabParam = search.get("tab");
-  const tab: Tab = tabParam === "guests" || tabParam === "registration" ? tabParam : "overview";
+  const tab: Tab = tabParam === "guests" || tabParam === "registration" || tabParam === "integration" ? tabParam : "overview";
 
   const setTab = (t: Tab) => {
     const q = new URLSearchParams(search.toString());
@@ -198,7 +200,6 @@ function ManageEvent() {
   const checkedIn = guests.filter((g) => g.status === "Attended").length;
   const pageUrl = `${origin}/e/${id}`;
   const payUrl = `${origin}/p/${id}`;
-  const buttonCode = origin ? `<script src="${origin}/embed.js" async></script>\n<near-event event="${id}" mode="button"></near-event>` : "";
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-16">
@@ -222,7 +223,7 @@ function ManageEvent() {
         </Link>
       </div>
 
-      {/* Tabs — Overview · Guests · Registration only */}
+      {/* Tabs */}
       <nav className="flex gap-5 border-b border-border overflow-x-auto" aria-label="Manage sections">
         {TABS.map((t) => (
           <button
@@ -309,11 +310,12 @@ function ManageEvent() {
           open={open}
           pageUrl={pageUrl}
           payUrl={payUrl}
-          buttonCode={buttonCode}
           copied={copied}
           onCopy={copy}
         />
       )}
+
+      {tab === "integration" && <IntegrationGuide eventId={id} mode={event.mode ?? "Deposit"} />}
     </div>
   );
 }
@@ -574,7 +576,6 @@ function RegistrationTab({
   open,
   pageUrl,
   payUrl,
-  buttonCode,
   copied,
   onCopy,
 }: {
@@ -582,7 +583,6 @@ function RegistrationTab({
   open: boolean;
   pageUrl: string;
   payUrl: string;
-  buttonCode: string;
   copied: string | null;
   onCopy: (k: string, v: string) => void;
 }) {
@@ -616,7 +616,6 @@ function RegistrationTab({
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Registration links</h2>
-        <p className="text-sm text-muted">Share this event or copy its checkout button code.</p>
         <CopyRow label="Event page" value={pageUrl} copied={copied === "page"} onCopy={() => onCopy("page", pageUrl)} />
         <CopyRow
           label="Quick checkout link"
@@ -625,21 +624,6 @@ function RegistrationTab({
           onCopy={() => onCopy("pay", payUrl)}
           hint="Opens checkout directly; use in a message or behind your own button"
         />
-        <div className="card p-4 space-y-3">
-          <div>
-            <div className="font-medium">Checkout button for your website</div>
-            <p className="text-sm text-muted mt-1">
-              Add this code beside your event. It opens quick checkout on Near Me; guests can return for their QR pass or payout.
-            </p>
-          </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-bg p-3 text-xs">{buttonCode || "Preparing button code…"}</pre>
-          <div className="text-xs text-muted">Checkout is hosted on Near Me. The full event page stays available at the link above.</div>
-          <div>
-            <button type="button" className="btn btn-primary !py-2 text-sm" disabled={!buttonCode} onClick={() => onCopy("button", buttonCode)}>
-              {copied === "button" ? "Copied" : "Copy button code"}
-            </button>
-          </div>
-        </div>
       </section>
 
       {event.cohosts.length > 0 && (
