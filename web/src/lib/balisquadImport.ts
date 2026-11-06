@@ -9,7 +9,7 @@ export function baliSquadSlug(input: string): string | null {
     const value = input.trim();
     const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`);
     if (!["http:", "https:"].includes(url.protocol) || !HOSTS.has(url.hostname) || url.port || url.username || url.password) return null;
-    return url.pathname.match(/^\/(?:id\/)?event\/([A-Za-z0-9-]{3,100})\/?$/)?.[1] ?? null;
+    return url.pathname.match(/^\/(?:id\/)?event\/([A-Za-z0-9_-]{3,100})\/?$/)?.[1] ?? null;
   } catch {
     return null;
   }
@@ -147,7 +147,7 @@ export function parseBaliSquadEvent(html: string, expectedSlug?: string): Import
   const sourceUrl = publicUrl(event?.url);
   if (!sourceUrl) return null;
   const source = new URL(sourceUrl);
-  const sourcePath = source.pathname.match(/^\/(?:id\/)?event\/([A-Za-z0-9-]{3,100})\/?$/);
+  const sourcePath = source.pathname.match(/^\/(?:id\/)?event\/([A-Za-z0-9_-]{3,100})\/?$/);
   if (!HOSTS.has(source.hostname) || !sourcePath || (expectedSlug && sourcePath[1] !== expectedSlug)) return null;
   const title = typeof event?.name === "string" ? event.name.trim() : "";
   const starts_at = instant(event?.startDate);
