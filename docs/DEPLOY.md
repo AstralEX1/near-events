@@ -1,7 +1,7 @@
-# Deploying the web app (not done yet)
+# Hosting the web app (not done yet)
 
-Hosting is a plus for judging (keep it up until at least 2026-11-18). Nothing
-below has been run; deploying needs Alex's OK. (2026-11-03, Claude)
+The testnet escrow deployment is recorded below. The Vercel hosting steps have
+not been run. (2026-11-06, Codex)
 
 ## Vercel (recommended)
 1. Import the public repo in Vercel, **Root Directory = `web`**, framework Next.js
@@ -11,7 +11,7 @@ below has been run; deploying needs Alex's OK. (2026-11-03, Claude)
 | Name | Testnet value | Secret? |
 |---|---|---|
 | `NEXT_PUBLIC_NETWORK` | `testnet` | no |
-| `NEXT_PUBLIC_EVENTS_CONTRACT` | `escrow-tp3.nearevents-11022103.testnet` | no |
+| `NEXT_PUBLIC_EVENTS_CONTRACT` | `escrow-tp4.nearevents-11022103.testnet` | no |
 | `NEXT_PUBLIC_USDC_CONTRACT` | `usdc.tidepool-sandbox.testnet` | no |
 | `RELAYER_ACCOUNT_ID` | `relayer-nearevents-11022103.testnet` | no |
 | `RELAYER_PRIVATE_KEY` | from `web/.env.local` (paste in Vercel only) | **yes** |
@@ -39,10 +39,10 @@ paid requests if the shared quota cannot be enforced.
 The audited storage changes require a fresh escrow account. The storage layout
 of existing contracts is incompatible. The app uses one escrow account at a
 time; it does not look up events or route withdrawals across older accounts.
-Point the app at the release escrow only after the checks below pass. Events and
-balances on older accounts are outside the app flow and are not migrated.
+Events and balances on older accounts are outside the app flow and are not
+migrated.
 
-The 2026-11-06 release check found four events on the current
+The 2026-11-06 check found four events on the old
 `escrow-tp3.nearevents-11022103.testnet`, including one open event with a guest
 and 10 USDC. Its deployed code hash is
 `5SH6L4aZBsiQMj8UHZW7GeHrPbXTJeTZyneh4oNfxMx3`; read-only RPC returned
@@ -50,28 +50,36 @@ and 10 USDC. Its deployed code hash is
 candidate: its 268,797-byte WASM SHA-256 is
 `026d9b19f697a7c81abcd10134c2ee2ac8fbfaac93590dc41a032ae5a0e6a361`, with
 expected NEAR code hash `AUkadt9QEg7JQXMqsPZQgUQDoimi4U1VgGwfEYgG6QG`. The
-code sizes and hashes differ, so this deployment cannot be treated as the
-candidate or upgraded in place. For this testnet rollout, leave `escrow-tp3`
-untouched and deploy the candidate to a fresh account; its existing test events
-and balances may remain on the old account and will not be available through the
-app after switching. This does not change the preservation requirements for
-mainnet.
+code sizes and hashes differ. Alex confirmed these are disposable testnet data;
+`escrow-tp3` was left untouched and is no longer used by the app.
+
+The app now targets `escrow-tp4.nearevents-11022103.testnet`. CI run
+`42233084526` built the 268,797-byte artifact from source
+`b9079baa1e504fd2abfd240ab15d4d15f7fc0007`, SHA-256
+`b9c30dd43327ff0e60c4655e3293c7adf03598115332e4eb2c38095913543606`, NEAR code
+hash `DW8vzNr2zzAcrdCfvp2FyJfctSxiAkKcoxkgjbGpp4eH`. Read-only RPC confirmed the
+deployed hash, `usdc.tidepool-sandbox.testnet`,
+`verifier.tidepool-sandbox.testnet`, the relayer, and zero events. Tidepool USDC
+storage registration also succeeded. The contract has about 2.30 NEAR available
+for future storage commitments.
 
 1. Build from the committed public source with cargo-near 0.22.0 and
    `cargo near build reproducible-wasm --manifest-path contracts/events/Cargo.toml`.
    The manifest pins the container digest. Record the source SHA and built artifact.
 2. Deploy and initialize in one transaction. Set the correct token, Intents verifier
-   and relayer, and register escrow storage on the USDC contract. Fund the NEAR
+   and relayer, register escrow storage on the USDC contract, and fund the NEAR
    storage reserve for the planned number of simultaneous events. The testnet deploy
-   script does these steps.
+   script does these steps for a new sub-account; `tp4` already existed as an empty
+   account, so it was deployed using that account's local key.
 3. Verify the resulting contract code without sending a transaction:
    `node web/scripts/verify-escrow-code.mjs <wasm> <account> <rpc-url>`.
    A mismatch is a release blocker. Confirm the target chain supports the SDK's
    minimum protocol version before deploying. The current lockfile uses
    `near-sdk` 5.29.1 (minimum protocol 84); 5.30.0 requires protocol 88, so
    check the target RPC again before upgrading the SDK or releasing.
-4. For testnet, run the Tidepool and ERC-191 smoke scripts against the intended
-   escrow and application. They assert delivery, registration and refunds.
+4. Before a hosted testnet demo, run the Tidepool and ERC-191 smoke scripts against
+   the intended escrow and application. They assert delivery, registration and
+   refunds. These live payment checks have not been run on `tp4`.
 5. Before enabling mainnet cross-chain payments, verify 1Click credits the
    guest's Intents account, the wallet signs registration and the escrow records it.
    Repeat with ERC-191 through the app relayer. Verify that a rejected registration

@@ -2,7 +2,7 @@
 export const NETWORK = (process.env.NEXT_PUBLIC_NETWORK ?? "testnet") as "testnet" | "mainnet";
 // Testnet runs on Tidepool, a community 1Click sandbox with the official NEAR
 // Intents verifier and its own test USDC (https://www.usetidepool.tech/docs).
-export const EVENTS_CONTRACT = process.env.NEXT_PUBLIC_EVENTS_CONTRACT ?? "escrow-tp3.nearevents-11022103.testnet";
+export const EVENTS_CONTRACT = process.env.NEXT_PUBLIC_EVENTS_CONTRACT ?? "escrow-tp4.nearevents-11022103.testnet";
 export const USDC_CONTRACT = process.env.NEXT_PUBLIC_USDC_CONTRACT ?? "usdc.tidepool-sandbox.testnet";
 export const RPC_URL =
   process.env.NEXT_PUBLIC_RPC_URL ??

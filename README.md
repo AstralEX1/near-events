@@ -24,7 +24,7 @@ Hackathon track focus: Real-World Money (USDC, NEAR Intents, gasless onboarding)
 
 | What | Account |
 |---|---|
-| Event escrow (the web app's default) | [`escrow-tp3.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-tp3.nearevents-11022103.testnet) |
+| Event escrow (the web app's default) | [`escrow-tp4.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-tp4.nearevents-11022103.testnet) |
 | Test USDC (Tidepool faucet) | [`usdc.tidepool-sandbox.testnet`](https://testnet.nearblocks.io/address/usdc.tidepool-sandbox.testnet) |
 
 NEAR Intents itself has no testnet. On testnet the Intents paths run on
@@ -59,15 +59,15 @@ npm run dev                     # http://localhost:3000
 7. Press Withdraw on the event page or `/me`: send the payout through NEAR
    Intents to any chain (via 1Click) or to any NEAR Intents account.
 
-The app reads and writes events through one escrow: `escrow-tp3.nearevents-11022103.testnet`.
-Older escrow deployments are not queried or supported by the app.
+The app reads and writes events through one escrow: `escrow-tp4.nearevents-11022103.testnet`.
+Older escrow deployments are not queried or supported by the app. The old `escrow-tp3` events and balances remain testnet data and are not migrated.
 
 Without a browser, the whole cycle runs from a script (uses your own testnet
 accounts from `~/.near-credentials`; Tidepool's faucet tops the guest up with test USDC):
 
 ```bash
 cd web
-export EVENTS_CONTRACT=escrow-tp3.nearevents-11022103.testnet HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet
+export EVENTS_CONTRACT=escrow-tp4.nearevents-11022103.testnet HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet
 node scripts/smoke-intents-testnet.mjs   # deposit via 1Click → finalize(attended) → cash out to Base and into Intents
 node scripts/smoke-tickets-testnet.mjs   # paid ticket → finalize after the start → cancel refunds
 ```
