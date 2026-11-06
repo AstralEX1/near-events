@@ -1,14 +1,14 @@
 // The copy-paste prompt a host sends to their own coding agent (Claude Code,
 // Cursor, Codex...) to add the embed to their site. Same text as docs/AI_INSTALL.md.
 export function agentPrompt(origin: string, eventId: string, element: string): string {
-  return `Add a Near Me registration widget to this website.
+  return `Add a Near Me deposit widget to this website.
 
-Near Me lets guests register for an event by putting down a small refundable USDC deposit; people who show up get it back plus a share of the no-shows. The widget is a dependency-free script that defines a <near-event> custom element. Full reference for agents: ${origin}/llms.txt
+Near Me lets guests register for an event by putting down a small refundable USDC deposit; people who show up get it back plus a share of the no-shows. This site already shows the event (title, date, place); the widget adds only the deposit: amount, seats left and a pay button. It is a dependency-free script that defines a <near-event> custom element. Full reference for agents: ${origin}/llms.txt
 
 What to add:
 1. Load the script once per page, before </body> or in <head>:
    <script src="${origin}/embed.js" async></script>
-2. Put this element where the event should appear (event ${eventId}):
+2. Put this element next to the event, where guests would sign up (deposit ${eventId}):
    ${element}
 
 Where to put it, depending on the stack:
@@ -20,7 +20,7 @@ Where to put it, depending on the stack:
 - Svelte / Astro / Angular: add the script to the root HTML; in Angular add CUSTOM_ELEMENTS_SCHEMA to the component.
 - WordPress, Webflow, Tilda, Wix, Squarespace: use a "Custom code" / "HTML embed" block with both lines.
 - If the platform forbids scripts, use the iframe instead:
-  <iframe src="${origin}/embed/e/${eventId}" title="Event registration" loading="lazy" style="width:100%;max-width:560px;height:260px;border:0"></iframe>
+  <iframe src="${origin}/embed/e/${eventId}" title="Event deposit" loading="lazy" style="width:100%;max-width:560px;height:180px;border:0"></iframe>
 
 If this site already has its own registration (Luma, Typeform, Google Forms, a signup page), keep it: add then="<that registration URL>" so guests pay the deposit first and then continue to the usual form. Use {account} in that URL if the form can take a reference, e.g. ?ref={account}.
 
@@ -33,5 +33,5 @@ Optional: react to registrations (show a toast, send to analytics/CRM):
 
 Do not copy embed.js into the project or modify it; load it from ${origin}. Do not add any keys or secrets: none are needed.
 
-When done, run the site locally, open the page, and confirm the event card (or button) renders and that clicking Register opens the Near Me sign-up window. Tell me which files you changed.`;
+When done, run the site locally, open the page, and confirm the deposit box (or button) renders and that clicking Pay deposit opens the Near Me sign-up window. Tell me which files you changed.`;
 }

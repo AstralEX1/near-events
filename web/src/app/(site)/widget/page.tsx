@@ -3,7 +3,9 @@
 import Link from "next/link";
 import Script from "next/script";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { events, type EventView } from "@/lib/near";
+import { events, toUnits, type EventView } from "@/lib/near";
+import { EVENTS_CONTRACT } from "@/lib/config";
+import { SignInOptions } from "@/components/SignIn";
 import { useWallet } from "@/lib/wallet";
 import { agentPrompt } from "@/lib/agentPrompt";
 
@@ -39,7 +41,11 @@ function attrs(id: string, l: Look) {
   return a;
 }
 
-/** Product 2 — embed the deposit widget on your own site. */
+/**
+ * Product 2: a host whose event already lives on their own site (or anywhere)
+ * adds only the deposit. One short form creates the on-chain escrow under the
+ * host's account (one signature); no event page here is needed.
+ */
 export default function WidgetBuilder() {
   const { accountId } = useWallet();
   const [list, setList] = useState<EventView[]>([]);
@@ -55,7 +61,7 @@ export default function WidgetBuilder() {
     const fromUrl = new URLSearchParams(window.location.search).get("event");
     events.list().then((l) => {
       setList(l);
-      setEventId((cur) => cur || fromUrl || String(l.find((e) => e.status === "Open")?.id ?? l[0]?.id ?? ""));
+      setEventId((cur) => cur || fromUrl || "");
     });
   }, []);
 
@@ -65,7 +71,7 @@ export default function WidgetBuilder() {
   const payLink = `${origin}/p/${eventId}${look.then.trim() ? `?then=${encodeURIComponent(look.then.trim())}` : ""}`;
   const snippets = {
     script: `<script src="${origin}/embed.js" async></script>\n${element}`,
-    iframe: `<iframe src="${origin}/embed/e/${eventId}${query ? `?${query}` : ""}"\n  title="Event registration" loading="lazy"\n  style="width:100%;max-width:560px;height:260px;border:0"></iframe>`,
+    iframe: `<iframe src="${origin}/embed/e/${eventId}${query ? `?${query}` : ""}"\n  title="Event deposit" loading="lazy"\n  style="width:100%;max-width:560px;height:180px;border:0"></iframe>`,
     link: payLink,
     agent: agentPrompt(origin, eventId, element),
   };
@@ -92,32 +98,37 @@ export default function WidgetBuilder() {
             ← Create event
           </Link>
           {" · "}
-          Integrate
+          Deposit widget
         </p>
-        <h1 className="text-3xl font-semibold tracking-tight">Integrate on your site</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Add a deposit to your event</h1>
         <p className="text-muted">
-          Keep your landing as the front door. Guests leave the deposit with us. Easiest: copy the AI prompt into Cursor or Claude.
+          Your event stays on your site. Set the deposit once, then paste the widget next to your event: guests pay here and
+          you check them in at the door. Easiest: copy the AI prompt into Cursor or Claude.
         </p>
       </div>
 
-      <Field label="Event">
-        <select className="input max-w-xl" value={eventId} onChange={(e) => setEventId(e.target.value)}>
-          {list.map((e) => (
-            <option key={e.id} value={e.id}>
-              #{e.id} {e.metadata.title}
-              {mine(e) ? " · yours" : ""}
-              {e.status !== "Open" ? ` · ${e.status.toLowerCase()}` : ""}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-muted">
-          No event yet?{" "}
-          <Link href="/create" className="text-accent">
-            Create event
-          </Link>
-        </p>
-      </Field>
+      <DepositSetup
+        list={list}
+        mine={mine}
+        eventId={eventId}
+        onPick={setEventId}
+        onCreated={(id, l) => {
+          setList(l);
+          setEventId(id);
+        }}
+      />
 
+      {eventId && (
+        <p className="text-sm text-muted max-w-2xl">
+          At the door, check guests in on{" "}
+          <Link href={`/e/${eventId}/manage`} className="text-accent">
+            your check-in page
+          </Link>{" "}
+          (scan their QR or tap their name). After the event, close it there and the pool is split.
+        </p>
+      )}
+
+      {eventId && (
       <div className="grid gap-6 md:grid-cols-[320px_1fr]">
         <div className="card p-5 space-y-4 h-fit">
           <Field label="Start from a style">
@@ -139,11 +150,11 @@ export default function WidgetBuilder() {
             </div>
           </Field>
           <Field label="What to show">
-            <Segmented value={look.mode} options={[["card", "Event card"], ["button", "Just a button"]]} onChange={(v) => set("mode", v)} />
+            <Segmented value={look.mode} options={[["card", "Deposit box"], ["button", "Just a button"]]} onChange={(v) => set("mode", v)} />
           </Field>
           {look.mode === "button" && (
             <Field label="Button text">
-              <input className="input" value={look.label} maxLength={40} onChange={(e) => set("label", e.target.value)} placeholder="Register · 5 USDC" />
+              <input className="input" value={look.label} maxLength={40} onChange={(e) => set("label", e.target.value)} placeholder="Pay deposit · 5 USDC" />
             </Field>
           )}
           <Field label="After deposit → (optional)">
@@ -196,6 +207,7 @@ export default function WidgetBuilder() {
           <Snippet title="Iframe fallback" note="If your site blocks scripts." code={snippets.iframe} copied={copied === "iframe"} onCopy={() => copy("iframe")} collapsed />
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -255,6 +267,144 @@ function Snippet({
       <pre className={`p-4 text-xs font-mono overflow-x-auto ${collapsed ? "whitespace-pre-wrap max-h-40 overflow-y-auto" : "whitespace-pre"}`}>
         {code}
       </pre>
+    </div>
+  );
+}
+
+/** Pick one of your deposits, or set up a new one for an event that lives elsewhere. */
+function DepositSetup({
+  list,
+  mine,
+  eventId,
+  onPick,
+  onCreated,
+}: {
+  list: EventView[];
+  mine: (e: EventView) => boolean;
+  eventId: string;
+  onPick: (id: string) => void;
+  onCreated: (id: string, list: EventView[]) => void;
+}) {
+  const { accountId, send } = useWallet();
+  const own = list.filter(mine);
+  const [tab, setTab] = useState<"new" | "existing">("new");
+  const [f, setF] = useState({ link: "", title: "", start: "", deposit: "5", capacity: "50" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF((x) => ({ ...x, [k]: e.target.value }));
+
+  // An event id in the link (?event=3) means the host already has one: show it.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("event")) setTab("existing");
+  }, []);
+  // Picking from the list: start with your newest open deposit.
+  useEffect(() => {
+    if (tab !== "existing" || eventId) return;
+    const first = own.find((e) => e.status === "Open") ?? own[0] ?? list[0];
+    if (first) onPick(String(first.id));
+  }, [tab, eventId, own, list, onPick]);
+
+  const startMs = f.start ? new Date(f.start).getTime() : NaN; // the host's local time
+  const link = f.link.trim();
+  const linkOk = !link || /^https?:\/\/\S+$/i.test(link);
+  const valid = f.title.trim() && Number.isFinite(startMs) && startMs > Date.now() && Number(f.deposit) >= 0.1 && Number(f.capacity) >= 1 && Number(f.capacity) <= 300 && linkOk;
+
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!valid || !accountId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const title = f.title.trim().slice(0, 120);
+      await send([
+        {
+          receiverId: EVENTS_CONTRACT,
+          methodName: "create_event",
+          args: {
+            metadata: {
+              title,
+              // The event's own page stays the source of truth; we keep only a link to it.
+              description: link ? `Event page: ${link.slice(0, 1000)}` : "",
+              location: "",
+              cover_url: null,
+              starts_at: startMs,
+              ends_at: startMs + 3 * 3600_000,
+            },
+            deposit: toUnits(f.deposit),
+            capacity: Math.floor(Number(f.capacity)),
+            mode: "Deposit",
+          },
+        },
+      ]);
+      const l = await events.list();
+      const made = l.find((ev) => ev.host === accountId && ev.metadata.title === title && ev.metadata.starts_at === startMs);
+      if (!made) throw new Error("Set up, but it isn’t visible yet. Reload in a minute and pick it under “I already have one”.");
+      onCreated(String(made.id), l);
+      setTab("existing");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card p-5 space-y-4 max-w-2xl">
+      <Segmented
+        value={tab}
+        options={[["new", "Set up a deposit"], ["existing", "I already have one"]]}
+        onChange={setTab}
+      />
+      {tab === "existing" ? (
+        <Field label="Deposit">
+          <select className="input" value={eventId} onChange={(e) => onPick(e.target.value)}>
+            {(own.length ? own : list).map((e) => (
+              <option key={e.id} value={e.id}>
+                #{e.id} {e.metadata.title}
+                {mine(e) ? " · yours" : ""}
+                {e.status !== "Open" ? ` · ${e.status.toLowerCase()}` : ""}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : (
+        <form className="space-y-4" onSubmit={create}>
+          <p className="text-sm text-muted">
+            Your event page stays where it is. We only hold the deposits, under your account.
+          </p>
+          <Field label="Link to your event page (optional)">
+            <input className="input" type="url" placeholder="https://yoursite.com/events/meetup" value={f.link} onChange={set("link")} />
+          </Field>
+          <Field label="Event name (guests see it when they pay)">
+            <input className="input" maxLength={120} placeholder="Builders meetup" value={f.title} onChange={set("title")} required />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Starts">
+              <input className="input" type="datetime-local" value={f.start} onChange={set("start")} required />
+            </Field>
+            <Field label="Deposit, USDC">
+              <input className="input" type="number" min="0.1" step="0.1" value={f.deposit} onChange={set("deposit")} required />
+            </Field>
+            <Field label="Seats (max 300)">
+              <input className="input" type="number" min="1" max="300" value={f.capacity} onChange={set("capacity")} required />
+            </Field>
+          </div>
+          {!accountId ? (
+            <div className="space-y-2">
+              <p className="text-sm text-muted">Sign in once. The deposits and payouts stay under your account.</p>
+              <SignInOptions />
+            </div>
+          ) : (
+            <button className="btn btn-accent w-full sm:w-auto" disabled={busy || !valid}>
+              {busy ? "Confirm in your wallet…" : "Set up deposit"}
+            </button>
+          )}
+          {error && <p className="text-sm text-warn break-words">{error}</p>}
+          <p className="text-xs text-muted">
+            Free, up to 5 open deposits at a time. Guests who show up get their deposit back plus a share of the no-shows.
+          </p>
+        </form>
+      )}
     </div>
   );
 }

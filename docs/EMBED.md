@@ -6,10 +6,11 @@ the money sits in the Near Me contract, and there is no platform fee.
 
 Using a coding agent? Send it the prompt in [AI_INSTALL.md](AI_INSTALL.md).
 
-Product path: **Integrate widget** at **`/widget`** — choose Luma (payment link) or your landing
-(embed). Fastest for a host: open **`/widget`** (the "Integrate"
-link in the header, or "Put it on your website" on your event page), pick the
-event, match your colors, copy the code.
+The widget is deposit-only: your event keeps living on your own site (title,
+date, place, description), and the widget adds only the deposit. You don't
+create the event again on Near Me. Open **`/widget`** (the "Integrate" link in
+the header), fill in **Set up a deposit** (link to your event page, name,
+start time, deposit, seats), sign once, match your colors, copy the code.
 
 ## 1. Script + element (recommended)
 
@@ -19,10 +20,11 @@ event, match your colors, copy the code.
 <near-event event="6"></near-event>
 ```
 
-That renders an event card (title, date, place, who is going, pool) with a
-**Register · 3 USDC deposit** button. The card sizes itself to its content.
+That renders a deposit box (amount, who is going, seats left, pool) with a
+**Pay deposit · 3 USDC** button. It sizes itself to its content. It shows no
+title, date or cover: your page already does.
 
-Just the button, for sites that already have their own event cards:
+Just the button:
 
 ```html
 <near-event event="7" mode="button"></near-event>
@@ -44,7 +46,7 @@ Or your own button:
 | `font` | `geist`, `poppins`, `system` | `geist` |
 | `display` | `serif` for a serif event title (Instrument Serif) | same font |
 | `radius` | corner radius in px, 0 to 32 (buttons: any) | 16 |
-| `label` | button text (`mode="button"` only) | `Register · <deposit> USDC` |
+| `label` | button text (`mode="button"` only) | `Pay deposit · <deposit> USDC` |
 | `then` | your own registration form; guests go there after paying. `{account}` and `{event}` in the URL are filled in | none |
 
 ### Keep your own registration form
@@ -83,7 +85,7 @@ the event's guest list, so nothing private is shared.
   style="width:100%;max-width:560px;height:260px;border:0"></iframe>
 ```
 
-Same card and the same query parameters as the style attributes above. You set
+Same deposit box and the same query parameters as the style attributes above. You set
 the height yourself and don't get the `registered` event.
 
 ## 3. Plain link
@@ -94,19 +96,19 @@ email, QR code at the venue.
 ## How it works
 
 ```
-your page ── embed.js ──► <iframe /embed/e/:id>  (card, read-only)
+your page ── embed.js ──► <iframe /embed/e/:id>  (deposit box, read-only)
                 │                   │ click "Register"
                 │                   ▼
                 │          window /embed/e/:id/join  (sign in + pay deposit)
                 │                   │ postMessage "near-events:registered"
-                ◄───────────────────┘ (via the card, or straight to your page)
+                ◄───────────────────┘ (via the box, or straight to your page)
 ```
 
 - Sign-up happens in a small window on the Near Me domain, not inside the
   iframe. Wallet pop-ups, Google/email sign-in (FastAuth) and 1Click payment
   all need a normal top-level page; inside a third-party iframe browsers block
   their storage and pop-ups. On phones the window opens as a new tab.
-- Only the card (`/embed/e/:id`) may be framed by other sites
+- Only the deposit box (`/embed/e/:id`) may be framed by other sites
   (`frame-ancestors *`). Every other page, including the sign-up window where
   guests approve transactions, sends `frame-ancestors 'self'`, so nobody can
   overlay it on another site (clickjacking).
@@ -119,11 +121,12 @@ your page ── embed.js ──► <iframe /embed/e/:id>  (card, read-only)
 
 ## Host onboarding, start to finish
 
-1. **Create the event** at `/create` with a NEAR wallet or Google/email. Add the
-   door person as co-host.
-2. **Open `/widget`**, pick the event, choose a style preset or your own colors,
-   copy the code.
-3. **Paste it** into the site where the event should appear.
+1. **Open `/widget`** and fill in *Set up a deposit*: a link to your event page,
+   the name guests see when paying, start time, deposit and seats. Sign in
+   (NEAR wallet, EVM wallet or Google/email) and confirm once. The deposit
+   escrow is created under your account; no event page on Near Me is needed.
+2. Choose a style preset or your own colors, copy the code (or the AI prompt).
+3. **Paste it** next to your event, where guests would sign up.
 4. **On the day**, the host or a co-host opens the event's *Manage* page and
    checks people in. Closing the event pays everyone who came.
 

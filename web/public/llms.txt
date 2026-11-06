@@ -10,13 +10,13 @@ This file is for AI coding agents adding Near Me to a host's website. Everything
 
 1. Load the script once per page:
    `<script src="https://NEAR-ME-HOST/embed.js" async></script>`
-2. Put the element where the event should appear:
+2. Put the element next to the event, where guests would sign up:
    `<near-event event="EVENT_ID"></near-event>`
 
-The element renders an event card with a "Register · N USDC" button. Sign-up and payment open in a small window on the Near Me domain (wallets and Google sign-in need a first-party page). Never copy or modify embed.js; always load it from the host. The widget needs no API keys or secrets.
+The site keeps its own event page; the element renders only a deposit box (amount, seats left) with a "Pay deposit · N USDC" button. The host sets the deposit up once at /widget (no event is created again on Near Me). Sign-up and payment open in a small window on the Near Me domain (wallets and Google sign-in need a first-party page). Never copy or modify embed.js; always load it from the host. The widget needs no API keys or secrets.
 
 ### Attributes
-- `mode="button"`: only the button (for sites with their own event cards)
+- `mode="button"`: only the button
 - `label="…"`: button text
 - `then="https://…"`: the site's existing registration form; guests pay the deposit first, then continue there. `{account}` and `{event}` in the URL are replaced (e.g. `?ref={account}`)
 - `theme="light|dark|auto"`, `accent="#hex"`, `font="geist|poppins|system"`, `display="serif"`, `radius="12"`: match the site's design
@@ -57,4 +57,4 @@ If the site sets one, allow: `script-src`, `frame-src` and `connect-src` for `ht
 - Create and manage events from the Telegram bot: /new, deposit notifications, guest list, check-in, payouts and refunds (each confirmed by the host).
 
 ## Verify
-Run the site, open the page, confirm the card or button renders and that clicking Register opens the Near Me window. Report which files changed.
+Run the site, open the page, confirm the deposit box or button renders and that clicking Pay deposit opens the Near Me window. Report which files changed.
