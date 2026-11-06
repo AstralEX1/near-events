@@ -186,7 +186,7 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
 
     let stranger_finalize = stranger
         .call(events.id(), "finalize")
-        .args_json(json!({ "event_id": event_id }))
+        .args_json(json!({ "event_id": event_id, "attended": [] }))
         .deposit(yocto(1))
         .transact()
         .await?;
@@ -194,7 +194,7 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
 
     let cohost_finalize = cohost
         .call(events.id(), "finalize")
-        .args_json(json!({ "event_id": event_id }))
+        .args_json(json!({ "event_id": event_id, "attended": [] }))
         .deposit(yocto(1))
         .transact()
         .await?;
@@ -286,25 +286,9 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     .await?;
     assert_eq!(token_balance(&usdc, sponsor.id()).await?, sponsor_before, "unknown action must be refunded");
 
-    let stranger_check = stranger
-        .call(events.id(), "check_in")
-        .args_json(json!({ "event_id": event_id, "accounts": [guest.id()] }))
-        .deposit(yocto(1))
-        .transact()
-        .await?;
-    expect_reject(&stranger_check, "Only the host or a co-host");
-
-    cohost
-        .call(events.id(), "check_in")
-        .args_json(json!({ "event_id": event_id, "accounts": [guest.id()] }))
-        .deposit(yocto(1))
-        .transact()
-        .await?
-        .into_result()?;
-
-    // The event has not started. Finalize is still the host's call today.
+    // Check-in happened off-chain; the host closes with the list of who came.
     host.call(events.id(), "finalize")
-        .args_json(json!({ "event_id": event_id }))
+        .args_json(json!({ "event_id": event_id, "attended": [guest.id()] }))
         .deposit(yocto(1))
         .gas(Gas::from_tgas(200))
         .transact()
@@ -313,7 +297,7 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
 
     let again = host
         .call(events.id(), "finalize")
-        .args_json(json!({ "event_id": event_id }))
+        .args_json(json!({ "event_id": event_id, "attended": [] }))
         .deposit(yocto(1))
         .transact()
         .await?;
@@ -434,13 +418,6 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     worker.fast_forward(400).await?;
     let later = worker.view_block().await?.timestamp() / 1_000_000;
     assert!(later > now_ms + 1_000, "clock did not pass the event end: {later} vs {now_ms}");
-    cohost
-        .call(events.id(), "check_in")
-        .args_json(json!({ "event_id": ended, "accounts": [guest.id()] }))
-        .deposit(yocto(1))
-        .transact()
-        .await?
-        .into_result()?;
     let too_soon = stranger
         .call(events.id(), "refund_if_abandoned")
         .args_json(json!({ "event_id": ended }))
@@ -498,16 +475,9 @@ async fn measure_finalize_gas(
         accounts.push(account.id().clone());
         let _ = i;
     }
-    host.call(events.id(), "check_in")
-        .args_json(json!({ "event_id": event_id, "accounts": accounts }))
-        .deposit(yocto(1))
-        .gas(Gas::from_tgas(300))
-        .transact()
-        .await?
-        .into_result()?;
     let finalized = host
         .call(events.id(), "finalize")
-        .args_json(json!({ "event_id": event_id }))
+        .args_json(json!({ "event_id": event_id, "attended": accounts }))
         .deposit(yocto(1))
         .gas(Gas::from_tgas(300))
         .transact()
@@ -584,7 +554,7 @@ async fn sandbox_ticket_cycle() -> anyhow::Result<()> {
 
     // Nobody checked in: in Ticket mode the host is still paid for both tickets.
     host.call(events.id(), "finalize")
-        .args_json(json!({ "event_id": event_id }))
+        .args_json(json!({ "event_id": event_id, "attended": [] }))
         .deposit(yocto(1))
         .gas(Gas::from_tgas(100))
         .transact()

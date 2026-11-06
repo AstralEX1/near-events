@@ -55,7 +55,6 @@ If the site sets one, allow: `script-src`, `frame-src` and `connect-src` for `ht
 
 ## For hosts
 - Create and manage events from the Telegram bot: /new, deposit notifications, guest list, check-in, payouts and refunds (each confirmed by the host).
-- On Luma Plus, the bot connects the Luma event: paid guests are added to Luma as Going and Luma check-ins count for the payout.
 
 ## Verify
 Run the site, open the page, confirm the card or button renders and that clicking Register opens the Near Me window. Report which files changed.

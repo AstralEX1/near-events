@@ -6,7 +6,7 @@
 // sent from the user's own implicit account.
 import type { FastAuthClient, FastAuthSigner } from "@fast-auth-near/browser-sdk";
 import type { JavascriptProvider } from "@fast-auth-near/javascript-provider";
-import { NETWORK, RPC_URL } from "./config";
+import { EVENTS_CONTRACT, NETWORK, RPC_URL } from "./config";
 import type { Call } from "./wallet";
 
 const CLIENT_ID = process.env.NEXT_PUBLIC_FASTAUTH_CLIENT_ID ?? "np8paqIpMWmNbzT4xAvOOapZBjsOpptl";
@@ -168,6 +168,44 @@ export async function fastAuthSend(call: Call): Promise<void> {
   const outcome = await s.signer.sendTransaction(tx as never, FastAuthSignature.fromBase64(json.signature), "ed25519");
   const status = outcome?.status as { Failure?: unknown } | undefined;
   if (status?.Failure) throw new Error(`Transaction failed: ${JSON.stringify(status.Failure)}`);
+}
+
+/**
+ * Proves the Google/email account to our server without spending anything:
+ * the MPC key signs a transaction that is never sent (see lib/staff.ts).
+ */
+export async function fastAuthProve(): Promise<{ transaction: string; signature: string }> {
+  await fastAuthEnsure();
+  if (!session) throw new Error("Sign in with Google or email first");
+  const s = await session;
+  if (!s.accountId) throw new Error("Sign in with Google or email again.");
+  const { transactions, utils } = await import("near-api-js-v5");
+  const { STAFF_PROOF_METHOD } = await import("./staffShared");
+  const tx = transactions.createTransaction(
+    s.accountId,
+    utils.PublicKey.fromString(s.publicKey),
+    EVENTS_CONTRACT,
+    0n,
+    [transactions.functionCall(STAFF_PROOF_METHOD, { at: Date.now() }, 1n, 0n)],
+    new Uint8Array(32),
+  );
+  await s.signer.requestTransactionSignature({ transaction: tx as never });
+  const { signatureRequest } = await s.signer.getSignatureRequest();
+  const res = await fetch("/api/fastauth/sign", {
+    method: "POST",
+    body: JSON.stringify({
+      guard_id: signatureRequest.guardId,
+      verify_payload: signatureRequest.verifyPayload,
+      sign_payload: signatureRequest.signPayload,
+      algorithm: "eddsa",
+    }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? "Could not sign in");
+  const { FastAuthSignature } = await import("@fast-auth-near/browser-sdk");
+  const signature = FastAuthSignature.fromBase64(json.signature).recover("ed25519");
+  const toB64 = (b: Uint8Array) => btoa(String.fromCharCode(...b));
+  return { transaction: toB64(tx.encode()), signature: toB64(new Uint8Array(signature)) };
 }
 
 async function rpcQuery<T>(params: object): Promise<T> {

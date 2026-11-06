@@ -7,8 +7,6 @@ import { Avatar, Cover, DateBadge, shortAccount } from "@/components/ui";
 
 /** How many of the newest guests the Overview shows before "All Guests". */
 const RECENT_GUESTS = 5;
-/** NEAR named account or 64-hex implicit account. */
-const ACCOUNT_RE = /^[a-z0-9]+([-_.][a-z0-9]+)*$/;
 
 type Props = {
   event: EventView;
@@ -20,8 +18,6 @@ type Props = {
   onCheckIn: () => void;
   onFinalize: () => void;
   onCancel: () => void;
-  onAddCohost: (account: string) => void;
-  onRemoveCohost: (account: string) => void;
 };
 
 /**
@@ -30,7 +26,7 @@ type Props = {
  * invitations: closing the event is the one thing a host must not miss, so it
  * jumps to the top as soon as the event is over.
  */
-export function Overview({ event, guests, origin, isHost, busy, onGuests, onCheckIn, onFinalize, onCancel, onAddCohost, onRemoveCohost }: Props) {
+export function Overview({ event, guests, origin, isHost, busy, onGuests, onCheckIn, onFinalize, onCancel }: Props) {
   const [sharing, setSharing] = useState(false);
   const id = event.id;
   const open = event.status === "Open";
@@ -75,14 +71,7 @@ export function Overview({ event, guests, origin, isHost, busy, onGuests, onChec
       {!over && closeCard}
 
       <Divider />
-      <HostsSection
-        event={event}
-        isHost={isHost}
-        busy={busy}
-        onGuests={onGuests}
-        onAdd={onAddCohost}
-        onRemove={onRemoveCohost}
-      />
+      <HostsSection event={event} onGuests={onGuests} />
 
       <Divider />
       <section className="space-y-3">
@@ -489,77 +478,20 @@ function CloseEvent({
 
 /* ---------- Hosts ---------- */
 
-function HostsSection({
-  event,
-  isHost,
-  busy,
-  onGuests,
-  onAdd,
-  onRemove,
-}: {
-  event: EventView;
-  isHost: boolean;
-  busy: boolean;
-  onGuests: () => void;
-  onAdd: (account: string) => void;
-  onRemove: (account: string) => void;
-}) {
-  const [adding, setAdding] = useState(false);
-  const [value, setValue] = useState("");
+function HostsSection({ event, onGuests }: { event: EventView; onGuests: () => void }) {
   const open = event.status === "Open";
-  const account = value.trim().toLowerCase();
-  const valid = account.length >= 2 && account.length <= 64 && ACCOUNT_RE.test(account) && account !== event.host && !event.cohosts.includes(account);
-
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      <div>
         <h2 className="text-lg font-semibold">Hosts</h2>
-        {isHost && open && (
-          <button type="button" className="btn btn-ghost !py-1.5 text-sm" onClick={() => setAdding((a) => !a)}>
-            {adding ? "Close" : "+ Add Co-host"}
-          </button>
-        )}
+        <p className="text-sm text-muted mt-0.5">Co-hosts are set when the event is created. They can check guests in; only the host can close or cancel.</p>
       </div>
-      {adding && (
-        <form
-          className="card p-3 sm:p-4 space-y-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!valid) return;
-            onAdd(account);
-            setValue("");
-            setAdding(false);
-          }}
-        >
-          <label className="text-sm font-medium" htmlFor="cohost-account">
-            NEAR account
-          </label>
-          <div className="flex gap-2">
-            <input
-              id="cohost-account"
-              className="input"
-              placeholder="friend.near"
-              autoComplete="off"
-              spellCheck={false}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-            />
-            <button type="submit" className="btn btn-primary !py-2 text-sm shrink-0" disabled={busy || !valid}>
-              Add
-            </button>
-          </div>
-          <p className="text-xs text-muted">Co-hosts can check guests in. Only you can close or cancel the event.</p>
-        </form>
-      )}
       <ul className="card divide-y divide-border overflow-hidden">
         <HostRow account={event.host} badge="Host" />
         {event.cohosts.map((a) => (
-          <HostRow key={a} account={a} badge="Door team" onRemove={isHost && open ? () => onRemove(a) : undefined} busy={busy} />
+          <HostRow key={a} account={a} badge="Door team" />
         ))}
       </ul>
-      {event.cohosts.length === 0 && isHost && open && (
-        <p className="text-sm text-muted">Add a co-host to get help with check-in at the door.</p>
-      )}
       <button type="button" className="text-sm text-muted hover:text-text inline-flex items-center gap-1.5" onClick={onGuests}>
         <ScanIcon size={14} /> {open ? "Open check-in and the guest list" : "Open the guest list"}
       </button>
@@ -567,7 +499,7 @@ function HostsSection({
   );
 }
 
-function HostRow({ account, badge, onRemove, busy }: { account: string; badge: string; onRemove?: () => void; busy?: boolean }) {
+function HostRow({ account, badge }: { account: string; badge: string }) {
   return (
     <li className="flex items-center gap-3 px-3 sm:px-4 py-2.5">
       <Avatar account={account} size={28} />
@@ -575,12 +507,6 @@ function HostRow({ account, badge, onRemove, busy }: { account: string; badge: s
         {shortAccount(account)}
       </span>
       <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-accent-soft text-accent shrink-0">{badge}</span>
-      <span className="flex-1" />
-      {onRemove && (
-        <button type="button" className="text-sm text-muted hover:text-warn shrink-0" disabled={busy} onClick={onRemove}>
-          Remove
-        </button>
-      )}
     </li>
   );
 }

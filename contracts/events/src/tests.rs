@@ -78,9 +78,8 @@ fn full_cycle_attendees_split_pool() {
         register(&mut c, id, &g);
     }
     ctx(&accounts(1), one_yocto());
-    c.check_in(id, vec![accounts(2), accounts(3), accounts(4)]);
     ctx(&accounts(0), one_yocto());
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2), accounts(3), accounts(4)]);
 
     // 4 x 10 = 40, split by 3 attendees; 1 unit of dust goes to the host.
     let e = c.get_event(id).unwrap();
@@ -101,8 +100,7 @@ fn remainder_goes_to_host() {
         pay(&mut c, &g, 10 * USDC + 1, &format!(r#"{{"action":"register","event_id":{id}}}"#));
     }
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2), accounts(3)]);
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2), accounts(3)]);
     // 30 USDC + 3 units split by 2 → 1 unit remainder to host.
     assert_eq!(c.balance_of(accounts(2)).0, 15 * USDC + 1);
     assert_eq!(c.balance_of(accounts(0)).0, 1);
@@ -114,7 +112,7 @@ fn nobody_attended_refunds_everyone() {
     register(&mut c, id, &accounts(2));
     register(&mut c, id, &accounts(3));
     ctx(&accounts(0), one_yocto());
-    c.finalize(id);
+    c.finalize(id, vec![]);
     assert_eq!(c.balance_of(accounts(2)).0, 10 * USDC);
     assert_eq!(c.balance_of(accounts(3)).0, 10 * USDC);
 }
@@ -133,30 +131,16 @@ fn overpayment_is_returned_and_friend_can_pay() {
 }
 
 #[test]
-fn reuse_payout_for_next_event() {
+fn finalize_counts_a_duplicate_once() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
+    register(&mut c, id, &accounts(3));
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
-
-    ctx(&accounts(0), NearToken::from_near(5));
-    let next = c.create_event(meta(), U128(10 * USDC), 10, None, None);
-    ctx(&accounts(2), one_yocto());
-    c.register_with_balance(next);
-    assert_eq!(c.balance_of(accounts(2)).0, 0);
-    assert_eq!(c.get_guest_events(accounts(2)), vec![id, next]);
-}
-
-#[test]
-fn undo_check_in() {
-    let (mut c, id) = setup(10);
-    register(&mut c, id, &accounts(2));
-    ctx(&accounts(1), one_yocto());
-    c.check_in(id, vec![accounts(2), accounts(2)]);
+    c.finalize(id, vec![accounts(2), accounts(2)]);
     assert_eq!(c.get_event(id).unwrap().attended_count, 1);
-    c.undo_check_in(id, accounts(2));
-    assert_eq!(c.get_event(id).unwrap().attended_count, 0);
+    assert_eq!(c.balance_of(accounts(2)).0, 20 * USDC);
+    assert_eq!(c.get_guest_status(id, accounts(2)), Some(GuestStatus::Attended));
+    assert_eq!(c.get_guest_status(id, accounts(3)), Some(GuestStatus::Registered));
 }
 
 #[test]
@@ -191,12 +175,12 @@ fn rejects_when_full() {
 }
 
 #[test]
-#[should_panic(expected = "Only the host or a co-host")]
-fn guest_cannot_check_in() {
+#[should_panic(expected = "Only the host")]
+fn guest_cannot_finalize() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(2), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
+    c.finalize(id, vec![accounts(2)]);
 }
 
 #[test]
@@ -204,7 +188,7 @@ fn guest_cannot_check_in() {
 fn cohost_cannot_finalize() {
     let (mut c, id) = setup(10);
     ctx(&accounts(1), one_yocto());
-    c.finalize(id);
+    c.finalize(id, vec![]);
 }
 
 #[test]
@@ -212,7 +196,7 @@ fn cohost_cannot_finalize() {
 fn no_registration_after_finalize() {
     let (mut c, id) = setup(10);
     ctx(&accounts(0), one_yocto());
-    c.finalize(id);
+    c.finalize(id, vec![]);
     register(&mut c, id, &accounts(2));
 }
 
@@ -295,7 +279,7 @@ fn closing_an_event_frees_a_slot_for_the_host() {
     ctx(&accounts(0), one_yocto());
     c.cancel(ids[0]);
     ctx(&accounts(0), one_yocto());
-    c.finalize(ids[1]);
+    c.finalize(ids[1], vec![]);
     assert_eq!(c.open_events_of(accounts(0)), MAX_OPEN_EVENTS_PER_HOST - 2);
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     c.create_event(meta(), U128(10 * USDC), 10, None, None);
@@ -329,9 +313,8 @@ fn closed_event_with_guests(n: u32) -> (Contract, u64, u64) {
         register(&mut c, id, &guest);
     }
     ctx(&accounts(1), one_yocto());
-    c.check_in(id, vec!["g0.testnet".parse().unwrap()]);
     ctx(&accounts(0), one_yocto());
-    c.finalize(id);
+    c.finalize(id, vec!["g0.testnet".parse().unwrap()]);
     let closed_at = c.get_event(id).unwrap().closed_at;
     (c, id, closed_at)
 }
@@ -415,8 +398,7 @@ fn withdraw_debits_balance() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2)]);
     ctx(&accounts(2), one_yocto());
     let _ = c.withdraw(Some(U128(4 * USDC)), None, None);
     assert_eq!(c.balance_of(accounts(2)).0, 6 * USDC);
@@ -460,8 +442,7 @@ fn relayer_can_push_payout_to_owners_intents_account() {
     let msg = format!(r#"{{"action":"register","event_id":{},"guest":"{}"}}"#, id, evm);
     pay(&mut c, &intents, 10 * USDC, &msg);
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![evm.clone()]);
-    c.finalize(id);
+    c.finalize(id, vec![evm.clone()]);
     assert_eq!(c.balance_of(evm.clone()).0, 10 * USDC);
     ctx(&relayer, NearToken::from_yoctonear(0));
     let _ = c.payout_to_intents(evm.clone(), None);
@@ -477,44 +458,20 @@ fn stranger_cannot_payout_to_intents() {
     let msg = format!(r#"{{"action":"register","event_id":{},"guest":"{}"}}"#, id, evm);
     pay(&mut c, &intents, 10 * USDC, &msg);
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![evm.clone()]);
-    c.finalize(id);
+    c.finalize(id, vec![evm.clone()]);
     ctx(&accounts(5), NearToken::from_yoctonear(0));
     let _ = c.payout_to_intents(evm, None);
 }
 
 #[test]
-#[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
-fn register_with_balance_requires_one_yocto() {
-    let (mut c, id) = setup(10);
-    register(&mut c, id, &accounts(2));
-    ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
-    ctx(&accounts(0), NearToken::from_near(5));
-    let next = c.create_event(meta(), U128(10 * USDC), 10, None, None);
-    ctx(&accounts(2), NearToken::from_yoctonear(0));
-    c.register_with_balance(next);
-}
-
-#[test]
 #[should_panic(expected = "Too many accounts")]
-fn check_in_rejects_oversized_batch() {
+fn finalize_rejects_an_oversized_list() {
     let (mut c, id) = setup(10);
-    let too_many: Vec<AccountId> = (0..=MAX_CHECK_IN_BATCH)
+    let too_many: Vec<AccountId> = (0..=MAX_CAPACITY)
         .map(|i| format!("guest{}.testnet", i).parse().unwrap())
         .collect();
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, too_many);
-}
-
-#[test]
-#[should_panic(expected = "Event is closed")]
-fn remove_cohost_requires_open() {
-    let (mut c, id) = setup(10);
-    ctx(&accounts(0), one_yocto());
-    c.finalize(id);
-    c.remove_cohost(id, accounts(1));
+    c.finalize(id, too_many);
 }
 
 #[test]
@@ -555,9 +512,8 @@ fn host_refunds_one_guest_and_last_guest_takes_the_seat() {
     // The freed seat can be taken again, and the pool still adds up.
     register(&mut c, id, &accounts(5));
     ctx(&accounts(1), one_yocto());
-    c.check_in(id, vec![accounts(3)]);
     ctx(&accounts(0), one_yocto());
-    c.finalize(id);
+    c.finalize(id, vec![accounts(3)]);
     assert_eq!(c.balance_of(accounts(3)).0, 30 * USDC);
 }
 
@@ -567,17 +523,6 @@ fn cohost_cannot_refund_a_guest() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(1), one_yocto());
-    c.refund_guest(id, accounts(2));
-}
-
-#[test]
-#[should_panic(expected = "Guest is already checked in")]
-fn cannot_refund_a_checked_in_guest() {
-    let (mut c, id) = setup(10);
-    register(&mut c, id, &accounts(2));
-    ctx(&accounts(1), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    ctx(&accounts(0), one_yocto());
     c.refund_guest(id, accounts(2));
 }
 
@@ -604,9 +549,8 @@ fn contract_account_can_host_and_a_cohost_checks_in() {
     register(&mut c, id, &accounts(3));
 
     ctx(&accounts(1), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
     ctx(&dao, one_yocto());
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2)]);
 
     assert_eq!(c.get_event(id).unwrap().status, EventStatus::Finalized);
     assert_eq!(c.get_event(id).unwrap().payout_per_attendee.0, 20 * USDC);
@@ -623,7 +567,7 @@ fn cohost_cannot_finalize_a_contract_hosted_event() {
     let mut c = Contract::new(usdc(), None, None);
     let id = c.create_event(meta(), U128(10 * USDC), 10, Some(vec![accounts(1)]), None);
     ctx(&accounts(1), one_yocto());
-    c.finalize(id);
+    c.finalize(id, vec![]);
 }
 
 #[test]
@@ -652,7 +596,7 @@ fn third_party_payment_for_a_missing_or_closed_event_is_kept_for_the_guest() {
     assert_eq!(c.balance_of(accounts(3)).0, 10 * USDC);
 
     ctx(&accounts(0), one_yocto());
-    c.finalize(id);
+    c.finalize(id, vec![]);
     let closed = format!(r#"{{"action":"register","event_id":{id},"guest":"{}"}}"#, accounts(4));
     let refund = pay(&mut c, &accounts(2), 10 * USDC, &closed);
     assert_eq!(refund, 0);
@@ -696,8 +640,7 @@ fn refunds_check_ins_and_dust_still_add_up_to_the_pool() {
     }
     ctx(&accounts(0), one_yocto());
     c.refund_guest(id, accounts(3));
-    c.check_in(id, vec![accounts(2), accounts(4)]);
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2), accounts(4)]);
 
     // 3 seats left × 10 USDC, split by 2 attendees.
     let pool = 30 * USDC;
@@ -718,7 +661,7 @@ fn refunds_check_ins_and_dust_still_add_up_to_the_pool() {
 fn empty_event_can_be_finalized() {
     let (mut c, id) = setup(10);
     ctx(&accounts(0), one_yocto());
-    c.finalize(id);
+    c.finalize(id, vec![]);
     assert_eq!(c.get_event(id).unwrap().status, EventStatus::Finalized);
     assert_eq!(c.balance_of(accounts(0)).0, 0);
 }
@@ -728,8 +671,8 @@ fn empty_event_can_be_finalized() {
 fn cannot_finalize_twice() {
     let (mut c, id) = setup(10);
     ctx(&accounts(0), one_yocto());
-    c.finalize(id);
-    c.finalize(id);
+    c.finalize(id, vec![]);
+    c.finalize(id, vec![]);
 }
 
 #[test]
@@ -737,7 +680,7 @@ fn cannot_finalize_twice() {
 fn cannot_abandon_a_finalized_event() {
     let (mut c, id) = setup(10);
     ctx(&accounts(0), one_yocto());
-    c.finalize(id);
+    c.finalize(id, vec![]);
     c.refund_if_abandoned(id);
 }
 
@@ -747,26 +690,14 @@ fn host_can_finalize_before_the_event_starts() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2)]);
     assert_eq!(c.get_event(id).unwrap().status, EventStatus::Finalized);
     assert_eq!(c.balance_of(accounts(2)).0, 10 * USDC);
 }
 
 #[test]
-fn cohost_can_check_in_after_the_event_has_ended() {
-    let (mut c, id) = setup(10);
-    register(&mut c, id, &accounts(2));
-    let after_end_ns = (meta().ends_at + 1) * 1_000_000;
-    ctx_at(&accounts(1), one_yocto(), after_end_ns);
-    c.check_in(id, vec![accounts(2)]);
-    assert_eq!(c.get_event(id).unwrap().attended_count, 1);
-    assert_eq!(c.get_event(id).unwrap().status, EventStatus::Open);
-}
-
-#[test]
 #[should_panic(expected = "Grace period has not passed")]
-fn check_in_after_the_end_does_not_open_the_abandon_refund() {
+fn the_end_alone_does_not_open_the_abandon_refund() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     let after_end_ns = (meta().ends_at + 1) * 1_000_000;
@@ -810,20 +741,6 @@ fn event_created_already_past_the_grace_period_can_be_refunded_immediately() {
     c.refund_if_abandoned(id);
     assert_eq!(c.get_event(id).unwrap().status, EventStatus::Cancelled);
     assert_eq!(c.balance_of(accounts(2)).0, 10 * USDC);
-}
-
-#[test]
-fn cohost_changes_need_no_storage_budget() {
-    let (mut c, id) = setup(10);
-    let extra: AccountId = "door.testnet".parse().unwrap();
-    ctx(&accounts(0), one_yocto());
-    c.add_cohost(id, extra.clone());
-    ctx(&accounts(0), one_yocto());
-    c.add_cohost(id, extra.clone());
-    assert_eq!(c.get_event(id).unwrap().cohosts.iter().filter(|a| **a == extra).count(), 1);
-    ctx(&accounts(0), one_yocto());
-    c.remove_cohost(id, extra.clone());
-    assert!(!c.get_event(id).unwrap().cohosts.contains(&extra));
 }
 
 #[test]
@@ -873,45 +790,12 @@ fn one_seat_fits_the_reserved_guest_size_for_a_guest_with_history() {
 }
 
 #[test]
-fn top_up_extends_an_existing_balance_only() {
-    let (mut c, id) = setup(10);
-    register(&mut c, id, &accounts(2));
-    ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
-    let refund = pay(
-        &mut c,
-        &accounts(4),
-        3 * USDC,
-        &format!(r#"{{"action":"top_up","account_id":"{}"}}"#, accounts(2)),
-    );
-    assert_eq!(refund, 0);
-    assert_eq!(c.balance_of(accounts(2)).0, 13 * USDC);
-}
-
-#[test]
-#[should_panic(expected = "Top-up needs an existing balance")]
-fn top_up_rejects_a_new_account() {
-    let (mut c, _) = setup(10);
-    pay(&mut c, &accounts(2), USDC, r#"{"action":"top_up"}"#);
-}
-
-#[test]
-#[should_panic(expected = "Not enough balance")]
-fn register_with_balance_rejects_a_short_balance() {
-    let (mut c, id) = setup(10);
-    ctx(&accounts(2), one_yocto());
-    c.register_with_balance(id);
-}
-
-#[test]
 #[should_panic(expected = "Nothing to withdraw")]
 fn withdraw_rejects_zero() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2)]);
     ctx(&accounts(2), one_yocto());
     let _ = c.withdraw(Some(U128(0)), None, None);
 }
@@ -922,8 +806,7 @@ fn withdraw_rejects_more_than_the_balance() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2)]);
     ctx(&accounts(2), one_yocto());
     let _ = c.withdraw(Some(U128(11 * USDC)), None, None);
 }
@@ -933,8 +816,7 @@ fn withdraw_schedules_a_token_transfer_and_a_callback() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2)]);
     ctx(&accounts(2), one_yocto());
     let other: AccountId = "other.testnet".parse().unwrap();
     let _ = c.withdraw(Some(U128(4 * USDC)), Some(other.clone()), Some(false));
@@ -959,8 +841,7 @@ fn payout_to_intents_names_the_owner_in_the_token_message() {
     let msg = format!(r#"{{"action":"register","event_id":{id},"guest":"{evm}"}}"#);
     pay(&mut c, &intents, 10 * USDC, &msg);
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![evm.clone()]);
-    c.finalize(id);
+    c.finalize(id, vec![evm.clone()]);
     // The owner path currently does not require 1 yocto. The relayer path
     // cannot require it: the web relayer calls this with no deposit.
     ctx(&evm, NearToken::from_yoctonear(0));
@@ -979,8 +860,7 @@ fn failed_withdraw_callback_restores_the_balance() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2)]);
     ctx(&accounts(2), one_yocto());
     let _ = c.withdraw(None, None, None);
     assert_eq!(c.balance_of(accounts(2)).0, 0);
@@ -1003,8 +883,7 @@ fn intents_callback_keeps_only_the_unused_amount() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2)]);
     ctx(&accounts(2), one_yocto());
     let _ = c.withdraw(None, None, Some(true));
     assert_eq!(c.balance_of(accounts(2)).0, 0);
@@ -1031,8 +910,7 @@ fn payout_to_intents_without_intents_panics() {
     let id = c.create_event(meta(), U128(10 * USDC), 10, None, None);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2)]);
     ctx(&accounts(2), NearToken::from_yoctonear(0));
     let _ = c.payout_to_intents(accounts(2), None);
 }
@@ -1049,8 +927,7 @@ fn finalize_does_not_wrap_a_huge_pool() {
         assert_eq!(refund, 0);
     }
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2), accounts(3)]);
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2), accounts(3)]);
 }
 
 #[test]
@@ -1066,8 +943,7 @@ fn large_but_safe_pool_splits_exactly() {
         assert_eq!(refund, 0);
     }
     ctx(&accounts(0), one_yocto());
-    c.check_in(big, vec![accounts(2), accounts(3)]);
-    c.finalize(big);
+    c.finalize(big, vec![accounts(2), accounts(3)]);
     let pool = deposit * 3;
     let share = pool / 2;
     assert_eq!(c.balance_of(accounts(2)).0, share);
@@ -1075,37 +951,6 @@ fn large_but_safe_pool_splits_exactly() {
     assert_eq!(c.balance_of(accounts(0)).0, pool - share * 2);
     assert_eq!(c.balance_of(accounts(4)).0, 0);
     let _ = id;
-}
-
-#[test]
-fn undo_twice_does_not_underflow() {
-    let (mut c, id) = setup(10);
-    register(&mut c, id, &accounts(2));
-    ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-    c.undo_check_in(id, accounts(2));
-    c.undo_check_in(id, accounts(2));
-    assert_eq!(c.get_event(id).unwrap().attended_count, 0);
-}
-
-#[test]
-#[should_panic(expected = "Only the host or a co-host")]
-fn removed_cohost_cannot_check_in() {
-    let (mut c, id) = setup(10);
-    register(&mut c, id, &accounts(2));
-    ctx(&accounts(0), one_yocto());
-    c.remove_cohost(id, accounts(1));
-    ctx(&accounts(1), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
-}
-
-#[test]
-#[should_panic(expected = "Only the host")]
-fn stranger_cannot_add_a_cohost() {
-    let (mut c, id) = setup(10);
-    let stranger: AccountId = "stranger.testnet".parse().unwrap();
-    ctx(&stranger, one_yocto());
-    c.add_cohost(id, "door.testnet".parse().unwrap());
 }
 
 #[test]
@@ -1119,12 +964,11 @@ fn cohost_cannot_cancel() {
 #[test]
 #[should_panic(expected = "Too many co-hosts")]
 fn eleventh_cohost_is_rejected() {
-    let (mut c, id) = setup(10);
-    for i in 0..MAX_COHOSTS {
-        ctx(&accounts(0), one_yocto());
-        let account: AccountId = format!("door{i}.testnet").parse().unwrap();
-        c.add_cohost(id, account);
-    }
+    ctx(&accounts(0), NearToken::from_near(5));
+    let mut c = Contract::new(usdc(), None, None);
+    let cohosts: Vec<AccountId> =
+        (0..=MAX_COHOSTS).map(|i| format!("door{i}.testnet").parse().unwrap()).collect();
+    c.create_event(meta(), U128(10 * USDC), 10, Some(cohosts), None);
 }
 
 #[test]
@@ -1187,11 +1031,76 @@ fn views_paginate_and_unknown_balances_are_zero() {
 
 #[test]
 #[should_panic(expected = "is not registered")]
-fn check_in_of_an_unknown_guest_reverts_the_batch() {
+fn finalize_with_an_unknown_guest_fails() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
-    c.check_in(id, vec![accounts(2), accounts(3)]);
+    c.finalize(id, vec![accounts(2), accounts(3)]);
+}
+
+#[test]
+#[should_panic(expected = "Near Events is paused")]
+fn pause_stops_new_events() {
+    let (mut c, _) = setup(10);
+    ctx(&accounts(0), one_yocto());
+    c.set_paused(true);
+    ctx(&accounts(0), NearToken::from_near(5));
+    c.create_event(meta(), U128(10 * USDC), 10, None, None);
+}
+
+#[test]
+#[should_panic(expected = "Near Events is paused")]
+fn pause_bounces_a_guests_own_payment() {
+    let (mut c, id) = setup(10);
+    ctx(&accounts(0), one_yocto());
+    c.set_paused(true);
+    register(&mut c, id, &accounts(2));
+}
+
+#[test]
+fn pause_keeps_a_payment_for_someone_else_and_payouts_still_work() {
+    let (mut c, id) = setup(10);
+    register(&mut c, id, &accounts(2));
+    ctx(&accounts(0), one_yocto());
+    c.set_paused(true);
+    assert!(c.is_paused());
+    let msg = format!(r#"{{"action":"register","event_id":{},"guest":"{}"}}"#, id, accounts(3));
+    assert_eq!(pay(&mut c, &accounts(4), 10 * USDC, &msg), 0);
+    assert_eq!(c.balance_of(accounts(3)).0, 10 * USDC);
+    assert_eq!(c.get_guest_status(id, accounts(3)), None);
+    ctx(&accounts(0), one_yocto());
+    c.finalize(id, vec![accounts(2)]);
+    assert_eq!(c.balance_of(accounts(2)).0, 10 * USDC);
+    ctx(&accounts(2), one_yocto());
+    let _ = c.withdraw(None, None, None);
+    assert_eq!(c.balance_of(accounts(2)).0, 0);
+}
+
+#[test]
+#[should_panic(expected = "Only the owner")]
+fn stranger_cannot_pause() {
+    let (mut c, _) = setup(10);
+    ctx(&"stranger.testnet".parse().unwrap(), one_yocto());
+    c.set_paused(true);
+}
+
+#[test]
+#[should_panic(expected = "Event not found")]
+fn dust_payment_for_a_new_name_is_rejected() {
+    let (mut c, _) = setup(10);
+    let msg = r#"{"action":"register","event_id":99,"guest":"made-up.testnet"}"#;
+    pay(&mut c, &accounts(4), MIN_DEPOSIT - 1, msg);
+}
+
+#[test]
+fn dust_payment_tops_up_an_existing_balance() {
+    let (mut c, id) = setup(10);
+    register(&mut c, id, &accounts(2));
+    ctx(&accounts(0), one_yocto());
+    c.finalize(id, vec![accounts(2)]);
+    let msg = format!(r#"{{"action":"register","event_id":99,"guest":"{}"}}"#, accounts(2));
+    assert_eq!(pay(&mut c, &accounts(4), 1, &msg), 0);
+    assert_eq!(c.balance_of(accounts(2)).0, 10 * USDC + 1);
 }
 
 fn function_calls() -> Vec<(String, Vec<u8>, u64, u128)> {
@@ -1261,12 +1170,10 @@ fn ticket_host_gets_every_ticket_after_start() {
     for g in [accounts(2), accounts(3), accounts(4)] {
         buy(&mut c, id, &g);
     }
-    ctx(&accounts(1), one_yocto());
-    c.check_in(id, vec![accounts(2)]);
     assert_eq!(c.get_event(id).unwrap().total_pool.0, 3 * TICKET);
 
     ctx_at(&accounts(0), one_yocto(), AFTER_START_NS);
-    c.finalize(id);
+    c.finalize(id, vec![accounts(2)]);
     // Attended or not, nobody gets a share: the host is paid for 3 tickets.
     let e = c.get_event(id).unwrap();
     assert_eq!(e.status, EventStatus::Finalized);
@@ -1283,7 +1190,7 @@ fn ticket_host_is_paid_even_if_nobody_is_checked_in() {
     buy(&mut c, id, &accounts(2));
     buy(&mut c, id, &accounts(3));
     ctx_at(&accounts(0), one_yocto(), AFTER_START_NS);
-    c.finalize(id);
+    c.finalize(id, vec![]);
     assert_eq!(c.balance_of(accounts(0)).0, 2 * TICKET);
     assert_eq!(c.balance_of(accounts(2)).0, 0);
 }
@@ -1294,7 +1201,7 @@ fn ticket_finalize_before_start_is_rejected() {
     let (mut c, id) = setup_tickets(10);
     buy(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
-    c.finalize(id);
+    c.finalize(id, vec![]);
 }
 
 #[test]
@@ -1302,7 +1209,7 @@ fn deposit_finalize_before_start_still_works() {
     let (mut c, id) = setup(10);
     register(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
-    c.finalize(id);
+    c.finalize(id, vec![]);
     assert_eq!(c.get_event(id).unwrap().status, EventStatus::Finalized);
 }
 
@@ -1338,7 +1245,7 @@ fn ticket_refund_guest_returns_the_full_ticket() {
     c.refund_guest(id, accounts(2));
     assert_eq!(c.balance_of(accounts(2)).0, TICKET);
     ctx_at(&accounts(0), one_yocto(), AFTER_START_NS);
-    c.finalize(id);
+    c.finalize(id, vec![]);
     assert_eq!(c.balance_of(accounts(0)).0, TICKET);
 }
 
@@ -1353,18 +1260,6 @@ fn ticket_short_payment_from_intents_stays_with_the_guest() {
 }
 
 #[test]
-fn ticket_can_be_bought_with_a_balance() {
-    let (mut c, id) = setup_tickets(10);
-    let top_up = format!(r#"{{"action":"register","event_id":{id},"guest":"{}"}}"#, accounts(2));
-    pay(&mut c, &"intents.near".parse().unwrap(), TICKET - 1, &top_up);
-    pay(&mut c, &accounts(2), 1, r#"{"action":"top_up"}"#);
-    ctx(&accounts(2), one_yocto());
-    c.register_with_balance(id);
-    assert_eq!(c.get_guest_status(id, accounts(2)), Some(GuestStatus::Registered));
-    assert_eq!(c.balance_of(accounts(2)).0, 0);
-}
-
-#[test]
 fn ticket_money_matches_the_usdc_held() {
     // Everything credited equals everything paid in: no USDC created or lost.
     let (mut c, id) = setup_tickets(10);
@@ -1374,7 +1269,7 @@ fn ticket_money_matches_the_usdc_held() {
     ctx(&accounts(0), one_yocto());
     c.refund_guest(id, accounts(5));
     ctx_at(&accounts(0), one_yocto(), AFTER_START_NS);
-    c.finalize(id);
+    c.finalize(id, vec![]);
     let total: u128 = [accounts(0), accounts(2), accounts(3), accounts(4), accounts(5)]
         .into_iter()
         .map(|a| c.balance_of(a).0)
