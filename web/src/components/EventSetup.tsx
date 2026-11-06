@@ -21,13 +21,11 @@ export function EventSetup({ event, integrate }: { event: EventView; integrate: 
       <h2 className="text-lg font-semibold tracking-tight">Add registration to your site</h2>
       <Snippet
         title="Button code"
-        note="Paste it where your site shows the event. Guests can return to the same button for their QR pass or payout."
         code={origin ? buttonCode(target) : ""}
         primary={integrate}
       />
       <Snippet
         title="AI prompt"
-        note="Send this to the coding agent working on your site. It adds the button for you."
         code={origin ? aiPrompt(target, event.mode ?? "Deposit") : ""}
         long
       />
@@ -39,12 +37,10 @@ export function EventSetup({ event, integrate }: { event: EventView; integrate: 
       <h2 className="text-lg font-semibold tracking-tight">Links</h2>
       <Snippet
         title="Registration link"
-        note="Use this in a message, or where your site builder does not allow scripts."
         code={origin ? checkoutLink(target) : ""}
       />
       <Snippet
         title="Event page"
-        note="Your full event page on Near Me."
         code={origin ? eventPageLink(target) : ""}
       />
       <div className="flex flex-wrap gap-3 pt-1">

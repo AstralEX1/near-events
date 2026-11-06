@@ -36,12 +36,13 @@ function IntegrateStart() {
 
   return (
     <form onSubmit={submit} className="max-w-2xl mx-auto space-y-4 pb-16">
-      <div className="space-y-3 pb-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Add registration to your site</h1>
-        <p className="text-muted">Paste your event link. We bring over the details, then you choose how guests pay.</p>
-      </div>
+      <h1 className="text-3xl font-semibold tracking-tight">Add registration to your site</h1>
       <label className="block space-y-1.5">
-        <span className="label">Luma or BaliSquad event link</span>
+        <span className="flex items-baseline justify-between gap-3" aria-live="polite">
+          <span className="label">Luma or BaliSquad event link</span>
+          {source && <span className="text-sm text-good">✓ {source}</span>}
+          {!source && link.trim() && <span className="text-sm text-warn">Not supported</span>}
+        </span>
         <input
           autoFocus
           className="lu-field w-full px-3 py-2 text-sm"
@@ -52,19 +53,9 @@ function IntegrateStart() {
           onChange={(e) => setLink(e.target.value)}
         />
       </label>
-      <div className="min-h-[1.875rem]" aria-live="polite">
-        {source && <span className="lu-chip">✓ {source} event</span>}
-        {!source && link.trim() && <p className="text-sm text-warn">Use a public event link from Luma or BaliSquad.</p>}
-      </div>
       <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={!source}>
         Continue
       </button>
-      <p className="text-sm text-muted">
-        No event page yet?{" "}
-        <Link href="/create" className="underline hover:text-text">
-          Create an event
-        </Link>
-      </p>
     </form>
   );
 }
@@ -106,30 +97,17 @@ function WidgetBuilder({ requested }: { requested: string }) {
   const mine = (event: EventView) => !!accountId && (event.host === accountId || event.cohosts.includes(accountId));
 
   return (
-    <div className="max-w-3xl space-y-8">
-      <div className="space-y-3">
-        <p className="text-sm text-muted">
-          <Link href="/create" className="hover:text-text">← Create event</Link>
-          {" · "}Integrate
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">Registration button</h1>
-        <p className="max-w-2xl text-muted">
-          Add one button to your event page. It opens checkout on Near Me; your page stays open behind it when the browser allows a separate window.
-          On phones it may open a new tab. After registering, guests can reopen the button for their QR pass or payout claim.
-        </p>
-      </div>
+    <div className="max-w-2xl mx-auto space-y-6 pb-16">
+      <h1 className="text-3xl font-semibold tracking-tight">Registration button</h1>
 
       {loading ? (
         <p className="text-sm text-muted">Loading events…</p>
       ) : loadError ? (
         <p className="text-sm text-warn">Could not load events. Check your connection and reload.</p>
       ) : list.length === 0 ? (
-        <div className="card p-5 space-y-2">
-          <p className="font-medium">Create an event to get a registration button.</p>
-          <Link href="/create" className="btn btn-accent inline-flex">Create event</Link>
-        </div>
+        <Link href="/create" className="btn btn-accent inline-flex">Create event</Link>
       ) : (
-        <div className="max-w-2xl space-y-6">
+        <div className="space-y-6">
           <Field label="Event">
             <select className="input" value={eventId} onChange={(e) => setEventId(e.target.value)}>
               {list.map((event) => (
@@ -150,33 +128,26 @@ function WidgetBuilder({ requested }: { requested: string }) {
               value={then}
               onChange={(e) => setThen(e.target.value)}
             />
-            <p className="text-xs text-muted">Guests can continue to your existing form after they pay.</p>
           </Field>
 
           <Snippet
             title="Button code"
-            note="After payment, the checkout shows the guest’s QR pass. This button can reopen the pass or payout page later."
             code={eventId ? buttonCode(target) : ""}
             disabled={!selected}
             placeholder="Choose an event first."
           />
           <Snippet
             title="AI prompt"
-            note="Send this to the coding agent working on your site. It adds the button for you."
             code={selected ? aiPrompt(target, selected.mode ?? "Deposit") : ""}
             long
             placeholder="Choose an event first."
           />
           <Snippet
             title="Direct checkout link"
-            note="Use this in a message or where your site builder does not allow scripts."
             code={eventId ? checkoutLink(target) : ""}
             disabled={!selected}
             placeholder="Choose an event first."
           />
-          <p className="text-sm text-muted">
-            Create events and manage guests in Near Me. On event day, guests show their QR pass; after the event closes, eligible guests can claim their payout from the same checkout page.
-          </p>
         </div>
       )}
     </div>

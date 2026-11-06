@@ -8,7 +8,7 @@ import { useWallet } from "@/lib/wallet";
 import { EventSetup } from "@/components/EventSetup";
 import { SignInOptions } from "@/components/SignIn";
 import { LOCAL_TZ, city, dayLabel, fromEpoch, gmtLabel, toEpoch } from "@/lib/time";
-import { detectEventSource, fitImportedEvent, IMPORT_ENDPOINT, type ImportedEvent } from "@/lib/eventImport";
+import { detectEventSource, fitImportedEvent, IMPORT_ENDPOINT, locationProblem, type ImportedEvent } from "@/lib/eventImport";
 
 
 const SLOTS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
@@ -128,17 +128,15 @@ function CreateEvent() {
 
   const amount = Number(form.deposit);
   const seats = Number(form.capacity);
-  const missing = !form.mode
-    ? "Choose Deposit or Ticket to continue."
-    : !(amount >= 0.1)
-      ? `Set the ${form.mode === "Ticket" ? "ticket price" : "deposit"}: at least 0.1 USDC.`
-      : !(Number.isInteger(seats) && seats >= 1 && seats <= 300)
-        ? "Set the capacity: 1 to 300 guests."
-        : null;
+  const amountOk = amount >= 0.1;
+  const seatsOk = Number.isInteger(seats) && seats >= 1 && seats <= 300;
+  const missing = !form.mode ? "Choose Deposit or Ticket" : !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? "Set the capacity: 1 to 300" : null;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!when || missing || !form.mode) return;
+    const badLocation = locationProblem(form.location);
+    if (badLocation) return setError(badLocation);
     if (!accountId) return setAskSignIn(true);
     if (when.end <= when.start) return setError("The event has to end after it starts.");
     setBusy(true);
@@ -152,7 +150,6 @@ function CreateEvent() {
       }
       const location = form.location.trim();
       const description = form.description.trim();
-      if (encoder.encode(location).length > 300) throw new Error("Location is too long. Shorten it and try again.");
       if (encoder.encode(description).length > 2000) throw new Error("Event details are too long. Shorten them and try again.");
       await send([
         {
@@ -189,7 +186,7 @@ function CreateEvent() {
   if (loadingImport) {
     return (
       <p className="max-w-2xl mx-auto text-sm text-muted" role="status">
-        Importing your event from {detectEventSource(importOnLoad ?? "") ?? "the link"}…
+        Importing…
       </p>
     );
   }
@@ -197,7 +194,6 @@ function CreateEvent() {
   return (
     <>
       <form onSubmit={submit} className="max-w-2xl mx-auto space-y-4 pb-40">
-          {integrate && <p className="text-sm text-muted">Registration for your website</p>}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="lu-chip">
               {accountId ? <span className="truncate max-w-44">{accountId}</span> : "Your events"}
@@ -244,12 +240,16 @@ function CreateEvent() {
           <div className="space-y-3">
             <label className="block space-y-1.5">
               <span className="label">Location (optional)</span>
-              <textarea
-                rows={1}
-                className="lu-field w-full px-3 py-2 text-sm resize-none [field-sizing:content]"
+              <input
+                className="lu-field w-full px-3 py-2 text-sm"
+                inputMode="url"
+                autoComplete="off"
                 value={form.location}
-                onChange={(e) => set("location")(e.target.value)}
-                placeholder="Venue or address"
+                onChange={(e) => {
+                  setError(null);
+                  set("location")(e.target.value);
+                }}
+                placeholder="Google Maps link"
               />
             </label>
             <label className="block space-y-1.5">
@@ -261,8 +261,7 @@ function CreateEvent() {
                 placeholder="Description, host contacts, and useful links"
               />
             </label>
-            {shortened && <p className="text-xs text-warn">We shortened the imported location or details to fit on chain. Check them before creating.</p>}
-            <p className="text-xs text-muted">Location and event details are public on Near Me and stored in the event’s NEAR metadata.</p>
+            {shortened && <p className="text-xs text-warn">Details shortened to fit.</p>}
           </div>
 
           <div className="space-y-2 pt-1">
@@ -272,7 +271,7 @@ function CreateEvent() {
               <div className="lu-row">
                 <Icon d="M12 8c-2.2 0-4 .9-4 2s1.8 2 4 2 4 .9 4 2-1.8 2-4 2m0-8V6m0 10v2M4 12a8 8 0 1016 0 8 8 0 00-16 0z" className="text-muted" />
                 <span className="flex-1">Guests pay</span>
-                <div className="flex gap-1 rounded-full p-0.5" style={{ background: "color-mix(in srgb, var(--text) 8%, transparent)" }} role="radiogroup" aria-label="Guests pay">
+                <div className={`flex gap-1 rounded-full p-0.5 ${form.mode ? "" : "ring-1 ring-accent"}`} style={{ background: "color-mix(in srgb, var(--text) 8%, transparent)" }} role="radiogroup" aria-label="Guests pay">
                   {(["Deposit", "Ticket"] as const).map((m) => (
                     <button
                       key={m}
@@ -292,32 +291,25 @@ function CreateEvent() {
                 label={amountLabel}
                 value={form.deposit ? `${form.deposit} USDC` : "Set"}
                 title={amountLabel}
-                help={form.mode === "Ticket" ? TICKET_HELP : form.mode === "Deposit" ? DEPOSIT_HELP : "What each guest pays, in USDC."}
+                help={form.mode === "Ticket" ? TICKET_HELP : form.mode === "Deposit" ? DEPOSIT_HELP : "USDC per guest."}
+                attention={!amountOk}
               >
                 <input className="input" type="number" min="0.1" step="0.01" required value={form.deposit} onChange={(e) => set("deposit")(e.target.value)} />
               </OptionRow>
-              <div className="lu-row">
-                <Icon d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" className="text-muted" />
-                {form.mode === "Ticket" ? (
-                  <>
-                    <span className="flex-1">You get paid after the event</span>
-                    <span className="text-muted text-sm">Refunds if cancelled</span>
-                  </>
-                ) : form.mode === "Deposit" ? (
-                  <>
-                    <span className="flex-1">Show-ups split no-shows</span>
-                    <span className="text-muted text-sm">Always on</span>
-                  </>
-                ) : (
-                  <span className="flex-1 text-muted">Choose how guests pay</span>
-                )}
-              </div>
+              {form.mode && (
+                <div className="lu-row">
+                  <Icon d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" className="text-muted" />
+                  <span className="flex-1">{form.mode === "Ticket" ? "You get paid after the event" : "Show-ups split no-shows"}</span>
+                  <span className="text-muted text-sm">{form.mode === "Ticket" ? "Refunds if cancelled" : "Always on"}</span>
+                </div>
+              )}
               <OptionRow
                 icon="M16 19v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9.5 10a3 3 0 100-6 3 3 0 000 6zM21 19v-1a4 4 0 00-3-3.9M16 4.1a3 3 0 010 5.8"
                 label="Capacity"
                 value={form.capacity || "Set"}
                 title="Max capacity"
                 help="Up to 300 guests. Registration closes when it's full."
+                attention={!seatsOk}
               >
                 <input className="input" type="number" min="1" max="300" required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
               </OptionRow>
@@ -331,22 +323,12 @@ function CreateEvent() {
                 <input className="input" value={form.cohosts} onChange={(e) => set("cohosts")(e.target.value)} placeholder="alice.near, bob.near" />
               </OptionRow>
             </div>
-            {!form.mode && (
-              <div className="text-xs text-muted space-y-1">
-                <p>Deposit: {DEPOSIT_HELP}</p>
-                <p>Ticket: {TICKET_HELP}</p>
-              </div>
-            )}
           </div>
 
           {error && <p className="text-sm text-warn break-words">{error}</p>}
-          {missing && <p className="text-sm text-muted">{missing}</p>}
-          <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy || !!missing}>
+          <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy || !!missing} title={missing ?? undefined}>
             {busy ? "Confirm in your wallet…" : "Create Event"}
           </button>
-          <p className="text-xs text-muted/80">
-            One event gives you a full Near Me page, a quick checkout link, and a button code for your site. Manage guests and check-in in the event admin.
-          </p>
       </form>
       {askSignIn && <SignInDialog onClose={() => setAskSignIn(false)} />}
     </>
@@ -530,14 +512,14 @@ function TzBox({ tz, at, onChange }: { tz: string; at: number; onChange: (tz: st
   );
 }
 
-function OptionRow({ icon, label, value, title, help, children }: { icon: string; label: string; value: string; title: string; help: string; children: ReactNode }) {
+function OptionRow({ icon, label, value, title, help, attention, children }: { icon: string; label: string; value: string; title: string; help: string; attention?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <button type="button" className="lu-row lu-hover text-left" onClick={() => setOpen(true)}>
         <Icon d={icon} className="text-muted" />
         <span className="flex-1">{label}</span>
-        <span className="text-muted font-medium">{value}</span>
+        <span className={`font-medium ${attention ? "text-accent" : "text-muted"}`}>{value}</span>
         <Icon d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4" size={14} className="text-muted" />
       </button>
       {open && (
