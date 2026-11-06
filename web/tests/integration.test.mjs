@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detectEventSource, fitImportedEvent } from "../src/lib/eventImport.ts";
+import { detectEventSource, fitImportedEvent, isGoogleMapsLink, locationProblem, lumaLocation, schemaOrgLocation } from "../src/lib/eventImport.ts";
 import { aiPrompt, buttonCode, checkoutLink, eventPageLink } from "../src/lib/integration.ts";
 
 test("detectEventSource recognises Luma and BaliSquad links only", () => {
@@ -15,18 +15,75 @@ test("detectEventSource recognises Luma and BaliSquad links only", () => {
   }
 });
 
-test("fitImportedEvent keeps imports within the escrow limits", () => {
-  const base = { title: "T", starts_at: 1, ends_at: 2 };
-  const small = { ...base, location: "Cafe\nMap: https://m.example/1", description: "Hello" };
+test("fitImportedEvent shortens long details and leaves the location alone", () => {
+  const base = { title: "T", starts_at: 1, ends_at: 2, location: "https://maps.app.goo.gl/abc" };
+  const small = { ...base, description: "Hello" };
   assert.deepEqual(fitImportedEvent(small), { event: small, shortened: false });
 
-  const longMap = { ...base, location: `Cafe, Bali\nMap: https://m.example/${"x".repeat(320)}`, description: "é".repeat(1500) };
-  const { event, shortened } = fitImportedEvent(longMap);
+  const { event, shortened } = fitImportedEvent({ ...base, description: "é".repeat(1500) });
   assert.equal(shortened, true);
-  assert.equal(event.location, "Cafe, Bali");
+  assert.equal(event.location, base.location);
   assert.ok(new TextEncoder().encode(event.description).length <= 2000);
   assert.ok(event.description.endsWith("…"));
-  assert.ok(new TextEncoder().encode(fitImportedEvent({ ...base, location: "a".repeat(400), description: "" }).event.location).length <= 300);
+});
+
+test("isGoogleMapsLink accepts Google Maps links only", () => {
+  for (const link of [
+    "https://www.google.com/maps/place/Cafe",
+    "https://google.com/maps?q=1,2",
+    "https://www.google.com/maps/search/?api=1&query=1,2",
+    "https://maps.google.com/?cid=123",
+    "https://maps.app.goo.gl/abc",
+    "https://goo.gl/maps/abc",
+  ]) assert.equal(isGoogleMapsLink(link), true, link);
+  for (const link of [
+    "",
+    "Jl. Pantai 1, Bali",
+    "http://maps.google.com/?cid=123",
+    "https://www.google.com/search?q=cafe",
+    "https://www.google.com/mapsfake",
+    "https://goo.gl/abc",
+    "https://maps.google.com.evil.example/",
+    "https://www.google.com@evil.example/maps",
+    "https://user:pw@www.google.com/maps",
+    "javascript:alert(1)",
+  ]) assert.equal(isGoogleMapsLink(link), false, link);
+});
+
+test("locationProblem allows empty or a Maps link and gives a short error otherwise", () => {
+  assert.equal(locationProblem(""), null);
+  assert.equal(locationProblem("   "), null);
+  assert.equal(locationProblem(" https://maps.app.goo.gl/abc "), null);
+  assert.equal(locationProblem("Warung Yess, Bali"), "Location must be a Google Maps link.");
+  assert.equal(locationProblem(`https://maps.google.com/?q=${"x".repeat(300)}`), "Map link is too long.");
+});
+
+test("lumaLocation builds a Maps link and never returns the address", () => {
+  const place = { full_address: "Warung Yess, Bali", address: "Warung Yess", place_id: "ChIJ1" };
+  const coordinate = { latitude: -8.64, longitude: 115.12 };
+  assert.equal(
+    lumaLocation({ geo_address_visibility: "public", geo_address_info: place, coordinate }),
+    "https://www.google.com/maps/search/?api=1&query=-8.64%2C115.12&query_place_id=ChIJ1",
+  );
+  assert.equal(
+    lumaLocation({ geo_address_visibility: "public", geo_address_info: { full_address: "Warung Yess, Bali" } }),
+    "https://www.google.com/maps/search/?api=1&query=Warung%20Yess%2C%20Bali",
+  );
+  assert.equal(lumaLocation({ geo_address_visibility: "guests-only", geo_address_info: place, coordinate }), "");
+  assert.equal(lumaLocation({ geo_address_visibility: "public" }), "");
+  assert.equal(lumaLocation({ geo_address_visibility: "public", geo_address_info: {} }), "");
+});
+
+test("schemaOrgLocation prefers the given Maps link, then coordinates, then text", () => {
+  const address = { streetAddress: "Jl. Pantai 1", addressLocality: "Canggu" };
+  const geo = { latitude: -8.78, longitude: 115.17 };
+  assert.equal(schemaOrgLocation({ name: "Cafe", address, geo, sameAs: "https://maps.google.com/?cid=19" }), "https://maps.google.com/?cid=19");
+  assert.equal(schemaOrgLocation({ sameAs: "http://maps.google.com/?cid=19" }), "https://maps.google.com/?cid=19");
+  assert.equal(schemaOrgLocation({ name: "Cafe", geo, sameAs: "https://cafe.example" }), "https://www.google.com/maps/search/?api=1&query=-8.78%2C115.17");
+  assert.equal(schemaOrgLocation({ name: "Cafe", address }), "https://www.google.com/maps/search/?api=1&query=Cafe%2C%20Jl.%20Pantai%201%2C%20Canggu");
+  assert.equal(schemaOrgLocation("Cafe"), "https://www.google.com/maps/search/?api=1&query=Cafe");
+  assert.equal(schemaOrgLocation({}), "");
+  assert.equal(schemaOrgLocation(undefined), "");
 });
 
 const target = { origin: "https://near.me", eventId: 7 };

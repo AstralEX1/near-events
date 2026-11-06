@@ -10,6 +10,7 @@ import { RegistrationCard } from "@/components/Registration";
 import { GuestGrid } from "@/components/EventParts";
 import { EVENTS_CONTRACT, EXPLORER_URL } from "@/lib/config";
 import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
+import { isGoogleMapsLink } from "@/lib/eventImport";
 
 /**
  * The hosted event page, laid out like Luma so hosts and guests feel at home.
@@ -99,7 +100,7 @@ export default function EventPage() {
               {event.metadata.location && (
                 <section className="space-y-1">
                   <h2 className="font-medium">Location</h2>
-                  <PublicText value={event.metadata.location} />
+                  <LocationValue value={event.metadata.location} />
                 </section>
               )}
               {event.metadata.description && (
@@ -121,6 +122,17 @@ export default function EventPage() {
           {event.status !== "Open" && <GuestGrid event={event} guests={guests} me={accountId} />}
         </section>
       </div>
+  );
+}
+
+/** A link shows as a short label; older events may hold a plain address, which stays as text. */
+function LocationValue({ value }: { value: string }) {
+  const link = value.trim();
+  if (!/^https?:\/\/\S+$/i.test(link)) return <PublicText value={value} />;
+  return (
+    <a href={link} target="_blank" rel="noopener noreferrer" className="text-sm text-muted underline underline-offset-2 hover:text-text">
+      {isGoogleMapsLink(link) ? "Google Maps" : "Map"}
+    </a>
   );
 }
 

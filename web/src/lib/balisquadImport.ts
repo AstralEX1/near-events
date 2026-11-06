@@ -1,4 +1,4 @@
-import type { ImportedEvent } from "./eventImport";
+import { schemaOrgLocation, type ImportedEvent } from "./eventImport";
 
 const ORIGIN = "https://balisquad.com";
 const HOSTS = new Set(["balisquad.com", "www.balisquad.com"]);
@@ -118,21 +118,6 @@ function eventDescription(html: string, fallback: string): string {
   return [description, links.length ? `Links:\n${[...new Set(links)].join("\n")}` : ""].filter(Boolean).join("\n\n");
 }
 
-function mapLink(place: JsonObject): string | null {
-  const url = publicUrl(place.sameAs);
-  if (url) {
-    const parsed = new URL(url);
-    if (parsed.hostname === "maps.google.com" || parsed.hostname === "maps.app.goo.gl" || (["google.com", "www.google.com"].includes(parsed.hostname) && parsed.pathname.startsWith("/maps"))) return url;
-  }
-  const geo = object(place.geo);
-  const latitude = geo?.latitude;
-  const longitude = geo?.longitude;
-  if (typeof latitude === "number" && Number.isFinite(latitude) && typeof longitude === "number" && Number.isFinite(longitude)) {
-    return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-  }
-  return null;
-}
-
 export function parseBaliSquadEvent(html: string, expectedSlug?: string): ImportedEvent | null {
   const scripts = html.matchAll(/<script\b(?=[^>]*\btype=["']application\/ld\+json["'])[^>]*>([\s\S]*?)<\/script>/gi);
   let event: JsonObject | null = null;
@@ -154,15 +139,6 @@ export function parseBaliSquadEvent(html: string, expectedSlug?: string): Import
   const ends_at = instant(event?.endDate);
   if (!title || !Number.isFinite(starts_at) || !Number.isFinite(ends_at) || ends_at <= starts_at) return null;
 
-  const place = object(event?.location);
-  const address = object(place?.address);
-  const location = [typeof event?.location === "string" ? event.location : "", place?.name, address?.streetAddress, address?.addressLocality, address?.addressRegion]
-    .filter((part): part is string => typeof part === "string" && !!part.trim())
-    .map((part) => part.trim())
-    .filter((part, index, all) => all.indexOf(part) === index);
-  const map = place ? mapLink(place) : null;
-  if (map) location.push(`Map: ${map}`);
-
   const organizer = object(event?.organizer);
   const hostName = typeof organizer?.name === "string" ? organizer.name.trim() : "";
   const hostUrl = publicUrl(organizer?.url);
@@ -173,7 +149,7 @@ export function parseBaliSquadEvent(html: string, expectedSlug?: string): Import
     title,
     starts_at,
     ends_at,
-    location: location.join("\n"),
+    location: schemaOrgLocation(event?.location),
     description: details.filter(Boolean).join("\n\n"),
   };
 }
