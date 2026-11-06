@@ -90,10 +90,10 @@
       if (this.isConnected) this._render();
     }
     _registered(detail) {
+      this._registeredEventId = String(detail.eventId);
       this.dispatchEvent(new CustomEvent("registered", { detail: detail, bubbles: true, composed: true }));
       if (this._button) {
-        this._button.textContent = "✓ You’re going";
-        this._button.disabled = true;
+        this._button.textContent = "View pass / claim";
       }
     }
     _render() {
@@ -126,7 +126,7 @@
       css.textContent = BUTTON_CSS;
       var b = document.createElement("button");
       b.type = "button";
-      b.textContent = this.getAttribute("label") || "Pay deposit";
+      b.textContent = this._registeredEventId === String(id) ? "View pass / claim" : this.getAttribute("label") || "Pay deposit";
       if (opts.accent) this.style.setProperty("--ne-accent", opts.accent);
       if (opts.radius) this.style.setProperty("--ne-radius", opts.radius + "px");
       b.addEventListener("click", function () {
@@ -144,9 +144,18 @@
         })
         .then(function (e) {
           if (!e || self._button !== b) return;
-          if (e.status !== "Open" || e.full) {
-            b.disabled = true;
-            b.textContent = e.full ? "Event is full" : "Registration closed";
+          if (self._registeredEventId === String(id)) {
+            b.textContent = "View pass / claim";
+            return;
+          }
+          if (e.status === "Finalized") {
+            b.textContent = e.mode === "Ticket" ? "View event" : "View payout";
+          } else if (e.status === "Cancelled") {
+            b.textContent = "View refund";
+          } else if (e.full) {
+            b.textContent = "Event full · view pass";
+          } else if (e.status !== "Open") {
+            b.textContent = "View event";
           } else if (!custom) {
             b.textContent = (e.mode === "Ticket" ? "Get ticket · " : "Pay deposit · ") + e.deposit_usdc + " USDC";
           }

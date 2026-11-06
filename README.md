@@ -76,17 +76,20 @@ Both print each step and end with the payouts landing (checked on 2026-11-05).
 
 ## Embed on your website
 
-Any business can take deposit-backed registrations on its own site with two lines:
+Add a registration button to an existing event page with two lines:
 
 ```html
 <script src="https://YOUR-NEAR-ME-HOST/embed.js" async></script>
-<near-event event="YOUR_EVENT_ID" accent="#ff401f"></near-event>
+<near-event event="YOUR_EVENT_ID" mode="button"></near-event>
 ```
 
-Hosts get a code builder with live preview at `/widget`; there is an iframe
-fallback, a bare `/p/{id}` payment link, and a `NearEvents.open(id)` call for
-custom buttons. Details: [docs/EMBED.md](docs/EMBED.md). Have an AI agent
-install it: [docs/AI_INSTALL.md](docs/AI_INSTALL.md).
+The button opens Near Me checkout in a separate window when the browser allows
+it; on phones it may open a new tab, and blocked pop-ups fall back to the
+current tab. After registering, the button stays available to reopen the guest's
+QR pass or, after the event closes, their payout or refund page; guests may need
+to sign in again. Hosts create and manage events in Near Me. The builder at
+`/widget` gives the button code and a direct `/p/{id}` checkout link. Existing
+event-card and iframe embeds remain supported. Details: [docs/EMBED.md](docs/EMBED.md).
 
 ## How it works
 
