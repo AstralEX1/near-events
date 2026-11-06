@@ -236,7 +236,7 @@ async function onButton(q: { id: string; data?: string; message?: Msg }) {
   if (kind === "u") {
     const g = guests[Number(arg)];
     if (!g || g.status !== "Registered") return say(chat, "That guest can’t be refunded (not on the list, or already checked in).");
-    const l = linkOrButton("Confirm refund", `${PUBLIC_URL()}/e/${id}/manage`);
+    const l = linkOrButton("Confirm refund", `${PUBLIC_URL()}/e/${id}/manage?tab=guests`);
     return say(chat, `Refund ${formatUsdc(e.deposit)} USDC to ${esc(short(g.account_id))}: open the check-in page and tap “Refund” next to them.${l.text}`, l.buttons);
   }
   if (kind === "p" || kind === "r") {
