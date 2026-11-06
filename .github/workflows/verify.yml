@@ -2,7 +2,7 @@ name: Verify Near Me
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, codex/audit-fixes]
 
 permissions:
   contents: read
@@ -37,3 +37,38 @@ jobs:
       - run: npm ci
       - run: node --test tests/embed.test.mjs
       - run: npm run build
+
+  escrow-wasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.97.1 --profile minimal
+      - name: Install cargo-near 0.22.0
+        shell: bash
+        run: |
+          archive=cargo-near-x86_64-unknown-linux-gnu.tar.gz
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://github.com/near/cargo-near/releases/download/cargo-near-v0.22.0/$archive" --output "$RUNNER_TEMP/$archive"
+          cd "$RUNNER_TEMP"
+          echo "9429064e30a427e96523f539cb255f3688d2345e5000d7d4e4873a8247247d1a  $archive" | sha256sum -c
+          tar -xzf "$archive"
+          echo "$RUNNER_TEMP/cargo-near-x86_64-unknown-linux-gnu" >> "$GITHUB_PATH"
+      - name: Build and hash escrow WASM
+        shell: bash
+        env:
+          RUSTUP_TOOLCHAIN: 1.97.1
+        run: |
+          release_dir="$RUNNER_TEMP/escrow-release"
+          mkdir -p "$release_dir"
+          cargo near build reproducible-wasm --manifest-path contracts/events/Cargo.toml --out-dir "$release_dir"
+          git rev-parse HEAD > "$release_dir/source-commit.txt"
+          cd "$release_dir"
+          sha256sum near_events.wasm > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: escrow-wasm-${{ github.sha }}
+          path: ${{ runner.temp }}/escrow-release/
+          if-no-files-found: error
