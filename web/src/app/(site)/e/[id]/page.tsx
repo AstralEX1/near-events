@@ -71,7 +71,7 @@ export default function EventPage() {
     <VisualBackdrop visual={visual} className="max-w-[928px] mx-auto rounded-3xl p-3 sm:p-6 shadow-sm">
       <div className="relative grid gap-8 md:grid-cols-[330px_1fr] items-start rounded-2xl bg-surface/70 p-3 sm:p-5 backdrop-blur-sm">
         <aside className="space-y-6">
-          <Cover event={event} visual={visual} coverUrl={details?.cover_url} className="aspect-square w-full rounded-2xl shadow-sm [&>span]:hidden" />
+          <Cover event={event} visual={visual} coverUrl={details?.cover_url} className="aspect-square w-full rounded-2xl shadow-sm" />
           <div>
             <div className="label pb-2 mb-3 border-b border-border">Hosted by</div>
             <div className="space-y-2.5">
@@ -153,6 +153,7 @@ export default function EventPage() {
           {event.status !== "Open" && <GuestGrid event={event} guests={guests} me={accountId} />}
         </section>
       </div>
+    </VisualBackdrop>
   );
 }
 
@@ -221,6 +222,5 @@ function MoreMenu({ id, isStaff }: { id: number; isStaff: boolean }) {
         </>
       )}
       </div>
-    </VisualBackdrop>
   );
 }

@@ -51,12 +51,13 @@ export function EventThemePicker({ value, title, coverUrl, onChange }: {
           const active = value.themeId === theme.id;
           const colors = resolveEventVisual({ themeId: theme.id, seed: value.seed }).colors;
           const icon = "icon" in theme ? theme.icon : undefined;
+          const iconClass = theme.id === "near" ? "brightness-0 invert" : "";
           return (
             <button key={theme.id} type="button" aria-pressed={active} onClick={() => onChange(createRandomVisual(theme.id))}
               className={`rounded-xl border p-2.5 text-left transition ${active ? "border-accent ring-1 ring-accent" : "border-border hover:border-muted"}`}>
               <span className="flex items-center gap-2 min-w-0">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white" style={{ background: `linear-gradient(140deg, ${colors[0]}, ${colors[1]})` }}>
-                  {icon ? <img src={icon} alt="" aria-hidden="true" className="h-5 w-5 object-contain brightness-0 invert" /> : theme.mark}
+                  {icon ? <img src={icon} alt="" aria-hidden="true" className={`h-5 w-5 object-contain ${iconClass}`} /> : theme.mark}
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium">{theme.name}</span>

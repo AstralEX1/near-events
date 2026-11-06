@@ -5,6 +5,7 @@ import { events } from "@/lib/near";
 import { readStaffToken } from "@/lib/staff";
 
 export async function GET(req: Request) {
+  if (rateLimited(req, 60)) return Response.json({ error: "Too many requests" }, { status: 429 });
   const raw = new URL(req.url).searchParams.get("ids") ?? "";
   const ids = raw.split(",").filter(Boolean).map(Number);
   if (ids.length > 50 || ids.some((id) => !Number.isInteger(id) || id < 0)) {

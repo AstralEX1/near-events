@@ -22,6 +22,7 @@ async function redis<T>(command: (string | number)[]): Promise<T> {
     method: "POST",
     headers: { Authorization: `Bearer ${redisToken()}`, "Content-Type": "application/json" },
     body: JSON.stringify(command),
+    signal: AbortSignal.timeout(5_000),
     cache: "no-store",
   });
   const json = await response.json();
