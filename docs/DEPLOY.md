@@ -45,13 +45,13 @@ balances on older accounts are outside the app flow and are not migrated.
 The 2026-11-06 release check found four events on the current
 `escrow-tp3.nearevents-11022103.testnet`, including one open event with a guest
 and 10 USDC. Its deployed code hash is
-`5SH6L4aZBsiQMj8UHZW7GeHrPbXTJeTZyneh4oNfxMx3`. CI reproducibly built
-`c4f5320`; its WASM SHA-256 is
-`38aaf4439f5481c8c5f1ffa01fe5086acb063dc9dc9d62dd8fad35ab909927d2`, with
-expected NEAR code hash `4pD2P4C589BXBiLhQ86GBGpsrUxZeVdKqp2woF1z4GPs`. The
-expected and deployed hashes differ. Do not upgrade this escrow or point the
-app at another account until access to the open event and its funds is
-preserved.
+`5SH6L4aZBsiQMj8UHZW7GeHrPbXTJeTZyneh4oNfxMx3`; read-only RPC returned
+254,164 bytes of deployed WASM. CI reproducibly built the current `867f6c0`
+candidate: its 268,797-byte WASM SHA-256 is
+`289bed7d5a650763fc23e8dc10fa5eec31cb75c9f0fda8b3785f99a29528f605`, with
+expected NEAR code hash `3jXDFKaP3wENet5xCfU8W9VnGqBJxjpYpStmbxPJW1Dv`. The
+code sizes and hashes differ. Do not upgrade this escrow or point the app at
+another account until access to the open event and its funds is preserved.
 
 1. Build from the committed public source with cargo-near 0.22.0 and
    `cargo near build reproducible-wasm --manifest-path contracts/events/Cargo.toml`.
