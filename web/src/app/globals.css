@@ -83,6 +83,28 @@ body {
 .input:focus { border-color: var(--accent); }
 .label { font-size: 0.85rem; color: var(--muted); font-weight: 500; }
 
+/* An event theme paints the whole page (EventPageBackground). Every theme is dark, so the tokens follow. */
+html[data-event-theme] {
+  color-scheme: dark;
+  --bg: #111114;
+  --surface: #1a1a1f;
+  --text: #f7f7f8;
+  --muted: #ffffffb8;
+  --border: #ffffff2e;
+  --accent: color-mix(in srgb, var(--event-mid) 78%, black);
+  --accent-soft: #ffffff24;
+  --good: #34d399;
+  --warn: #fdba74;
+}
+html[data-event-theme] header { background: #00000038; border-color: transparent; }
+html[data-event-theme] header .text-accent { color: var(--text); }
+html[data-event-theme] .lu-field,
+html[data-event-theme] .lu-row,
+html[data-event-theme] .lu-pill,
+html[data-event-theme] .lu-chip { background: #0000004d; }
+html[data-event-theme] .lu-hover:hover,
+html[data-event-theme] .lu-pill:hover { background: #00000070; }
+
 /* Embeds sit on someone else's page: transparent body, host-picked font and corners. */
 body:has(.embed-root) { background: transparent; }
 .embed { font-family: var(--embed-font); color: var(--text); }
