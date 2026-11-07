@@ -8,7 +8,7 @@ import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { Cover } from "@/components/ui";
 import { EventThemePicker } from "@/components/EventThemePicker";
-import { EventPageBackground } from "@/components/EventVisual";
+import { EventPageBackground, EventPoster } from "@/components/EventVisual";
 import { createRandomEventVisual, createRandomVisual, type EventVisualConfig } from "@/lib/event-visuals";
 import { rememberEventVisual } from "@/lib/event-visual-client";
 import { SignInOptions } from "@/components/SignIn";
@@ -78,6 +78,8 @@ function CreateEvent() {
   const [savesDone, setSavesDone] = useState(false);
   // Like Luma, the form is open to everyone; signing in is asked for on "Create Event".
   const [askSignIn, setAskSignIn] = useState(false);
+  // Integrate flow: after Import only a short summary is shown; "Edit details" opens the full form.
+  const [editing, setEditing] = useState(false);
   useEffect(() => {
     if (accountId) setAskSignIn(false);
   }, [accountId]);
@@ -323,6 +325,27 @@ function CreateEvent() {
   if (created && integrate && !detailsSaveError && !visualSaveError) return <p className="max-w-2xl mx-auto text-sm text-muted" role="status">Opening integration…</p>;
   if (created) return <Created event={created} visual={createdVisual} coverUrl={createdDetails?.cover_url} detailsSaveError={detailsSaveError} savingDetails={savingDetails} onRetry={retryDetailsSave} visualSaveError={visualSaveError} savingVisual={savingVisual} onRetryVisual={retryVisualSave} />;
 
+  const summaryReady = integrate && !!imported && !editing && !missing && !!when && when.end > when.start && !!form.title.trim() && !locationProblem(form.location);
+  if (summaryReady && when) {
+    return (
+      <>
+        <EventPageBackground visual={eventVisual} />
+        <ImportSummary
+          form={form}
+          when={when}
+          visual={eventVisual}
+          imported={imported}
+          busy={busy}
+          error={error}
+          onSubmit={submit}
+          onEdit={() => setEditing(true)}
+          backHref={startUrl({ mode: form.mode, amount: form.deposit, link: importOnArrival ?? undefined }, true)}
+        />
+        {askSignIn && <SignInDialog onClose={() => setAskSignIn(false)} />}
+      </>
+    );
+  }
+
   return (
     <>
       <EventPageBackground visual={eventVisual} />
@@ -491,6 +514,62 @@ function CreateEvent() {
       </form>
       {askSignIn && <SignInDialog onClose={() => setAskSignIn(false)} />}
     </>
+  );
+}
+
+/** Integrate flow, right after Import: what will be created, one button, and a way to edit details first. */
+function ImportSummary({ form, when, visual, imported, busy, error, onSubmit, onEdit, backHref }: {
+  form: { title: string; location: string; cover_url: string; deposit: string; capacity: string; mode: EventMode };
+  when: When;
+  visual: EventVisualConfig;
+  imported: string;
+  busy: boolean;
+  error: string | null;
+  onSubmit: (e: React.FormEvent) => void;
+  onEdit: () => void;
+  backHref: string;
+}) {
+  const start = fromEpoch(when.start, when.tz);
+  return (
+    <form onSubmit={onSubmit} className="max-w-xl mx-auto space-y-5 pb-16">
+      <div className="flex gap-4 items-center">
+        <EventPoster title={form.title} visual={visual} coverUrl={safeImageUrl(form.cover_url)} className="w-24 h-24 rounded-xl shrink-0 [&>span]:hidden" />
+        <div className="min-w-0">
+          <div className="text-sm text-good font-medium">✓ Imported from {imported}</div>
+          <h1 className="text-2xl font-semibold tracking-tight break-words">{form.title}</h1>
+        </div>
+      </div>
+      <dl className="lu-field divide-y divide-border text-sm">
+        <SummaryRow label="When">
+          {dayLabel(start.date)}, {start.time} {gmtLabel(when.tz, when.start)}
+        </SummaryRow>
+        {form.location.trim() && <SummaryRow label="Where">Google Maps</SummaryRow>}
+        <SummaryRow label={form.mode === "Ticket" ? "Ticket" : "Deposit"}>
+          {form.deposit} USDC · {form.capacity} seats
+        </SummaryRow>
+      </dl>
+      {error && <p className="text-sm text-warn break-words">{error}</p>}
+      <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy}>
+        {busy ? "Confirm in your wallet…" : "Integrate"}
+      </button>
+      <div className="flex items-center justify-between text-sm">
+        <Link href={backHref} className="text-muted hover:text-text">
+          Back
+        </Link>
+        <button type="button" className="text-muted hover:text-text underline underline-offset-4" onClick={onEdit}>
+          Edit details
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function SummaryRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 px-3 py-2.5">
+      <dt className="text-muted">{label}</dt>
+      <dd className="text-right">{children}</dd>
+    </div>
   );
 }
 
