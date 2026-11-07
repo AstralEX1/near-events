@@ -4,8 +4,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createRandomVisual, EVENT_FONTS, EVENT_LAYOUTS, EVENT_THEMES, eventPalettes, resolveEventVisual, shuffleEventVisual, withVisualOptions, type EventThemeId, type EventVisualConfig } from "@/lib/event-visuals";
 import { EventPoster } from "@/components/EventVisual";
 
-const SHUFFLE_ICON = "M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5";
-
 function ThemeMark({ visual, className = "" }: { visual: EventVisualConfig; className?: string }) {
   const { theme, colors, backgroundAsset, backgroundPosition, backgroundSize } = resolveEventVisual(visual);
   const icon = "icon" in theme ? theme.icon : undefined;
@@ -18,14 +16,6 @@ function ThemeMark({ visual, className = "" }: { visual: EventVisualConfig; clas
     >
       {icon ? <img src={icon} alt="" aria-hidden="true" className={`h-5 w-5 object-contain ${theme.id === "near" ? "brightness-0 invert" : ""}`} /> : <span className="truncate px-1">{theme.mark}</span>}
     </span>
-  );
-}
-
-function ShuffleIcon() {
-  return (
-    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d={SHUFFLE_ICON} />
-    </svg>
   );
 }
 
@@ -67,16 +57,13 @@ export function EventThemePicker({ value, title, coverUrl, onChange }: {
     <div ref={root} className="relative space-y-3">
       <EventPoster title={title.trim() || "Your event title"} visual={value} coverUrl={coverUrl} className="aspect-square w-full rounded-2xl shadow-lg" />
 
-      <div className="lu-field flex items-center overflow-hidden">
-        <button ref={trigger} type="button" className="lu-hover flex min-w-0 flex-1 items-center gap-2.5 p-2 text-left" aria-label={`Theme: ${selected.theme.name}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <div className="lu-field overflow-hidden">
+        <button ref={trigger} type="button" className="lu-hover flex w-full items-center gap-2.5 p-2 text-left" aria-label={`Theme: ${selected.theme.name}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
           <ThemeMark visual={value} className="h-9 w-12 shrink-0 rounded-lg" />
           <span className="min-w-0">
             <span className="block text-xs text-muted">Theme</span>
             <span className="block truncate text-sm font-medium">{selected.theme.name}</span>
           </span>
-        </button>
-        <button type="button" className="lu-hover flex h-[52px] w-11 shrink-0 items-center justify-center text-muted" aria-label="Change theme variant" title="Change variant" onClick={() => onChange(shuffleEventVisual(value))}>
-          <ShuffleIcon />
         </button>
       </div>
 
