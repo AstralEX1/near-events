@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, type CSSProperties, type ReactNode } from "react";
 import { resolveEventVisual, type EventVisualConfig } from "@/lib/event-visuals";
 
 function layerCount(images: string): number {
@@ -43,6 +43,32 @@ export function VisualBackdrop({ visual, className = "", children }: { visual: E
       />
       <div aria-hidden="true" className="absolute inset-0 z-0 bg-black/[0.06]" />
       <div className="relative z-10 flex h-full w-full flex-col justify-end">{children}</div>
+    </div>
+  );
+}
+
+/** Paints the whole page, header included, with an event theme while it is mounted. */
+export function EventPageBackground({ visual }: { visual: EventVisualConfig }) {
+  const resolved = resolveEventVisual(visual);
+  const mid = resolved.colors[1];
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.eventTheme = "";
+    return () => {
+      delete root.dataset.eventTheme;
+    };
+  }, []);
+  useEffect(() => {
+    document.documentElement.style.setProperty("--event-mid", mid);
+    return () => {
+      document.documentElement.style.removeProperty("--event-mid");
+    };
+  }, [mid]);
+  return (
+    <div aria-hidden="true" className="fixed inset-0 -z-10" data-event-page-background={`${visual.themeId}:${visual.seed}`}>
+      <VisualBackdrop visual={visual} className="h-full w-full" />
+      {/* Photos can be bright; the form on top has to stay readable. */}
+      <div className={`absolute inset-0 ${resolved.backgroundAsset ? "bg-black/45" : "bg-black/20"}`} />
     </div>
   );
 }

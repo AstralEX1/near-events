@@ -1,11 +1,3 @@
-export const EVENT_THEME_GROUPS = [
-  { id: "blockchain", label: "Blockchain" },
-  { id: "paradise", label: "Paradise" },
-  { id: "ai", label: "AI" },
-] as const;
-
-export type EventThemeGroup = (typeof EVENT_THEME_GROUPS)[number]["id"];
-
 export const EVENT_THEMES = [
   { id: "ethereum", name: "Ethereum", group: "blockchain", note: "Iridescent facets", mark: "Ξ", icon: "/landing/icons/eth.svg" },
   { id: "bitcoin", name: "Bitcoin", group: "blockchain", note: "Warm copper grain", mark: "₿", icon: "/landing/icons/btc.svg" },
@@ -38,7 +30,8 @@ export interface ResolvedEventVisual {
   texture: string;
   colors: [string, string, string];
   fontFamily: string;
-  layout: "center" | "lower" | "offset";
+  font: number;
+  layout: (typeof LAYOUTS)[number];
   variant: number;
 }
 
@@ -133,6 +126,14 @@ const FONTS = [
   '"Trebuchet MS", "Helvetica Neue", sans-serif',
   'ui-monospace, SFMono-Regular, Menlo, monospace',
 ] as const;
+const LAYOUTS = ["center", "lower", "offset"] as const;
+
+export const EVENT_FONTS = FONTS;
+export const EVENT_LAYOUTS = LAYOUTS;
+
+export function eventPalettes(themeId: EventThemeId): [string, string, string][] {
+  return PALETTES[themeId];
+}
 
 export function isEventThemeId(value: unknown): value is EventThemeId {
   return typeof value === "string" && EVENT_THEMES.some((theme) => theme.id === value);
@@ -150,6 +151,45 @@ export function createRandomVisual(themeId: EventThemeId): EventVisualConfig {
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) crypto.getRandomValues(seed);
   else seed[0] = Math.floor(Math.random() * 0x1_0000_0000);
   return { themeId, seed: seed[0] };
+}
+
+/** A random look of the same theme that visibly differs: another palette, or another photo for Paradise. */
+export function shuffleEventVisual(current: EventVisualConfig): EventVisualConfig {
+  const before = resolveEventVisual(current);
+  const paradise = current.themeId === "paradise";
+  let next = createRandomVisual(current.themeId);
+  for (;;) {
+    const after = resolveEventVisual(next);
+    if (paradise ? after.backgroundAsset !== before.backgroundAsset : after.variant !== before.variant) return next;
+    next = createRandomVisual(current.themeId);
+  }
+}
+
+/** Rewrites 4 seed bits so that (seed >>> shift) % modulus equals target. Lower bits may change. */
+function withSeedField(seed: number, shift: number, modulus: number, target: number): number {
+  for (let bits = 0; bits < 16; bits++) {
+    const candidate = ((seed & ~(0xf << shift)) | (bits << shift)) >>> 0;
+    if ((candidate >>> shift) % modulus === target) return candidate;
+  }
+  return seed;
+}
+
+/**
+ * Color, font and title position all come from the saved seed, so choosing them
+ * changes only the seed. Fields are set from the highest bits down, because each
+ * field reads every bit above its own.
+ */
+export function withVisualOptions(config: EventVisualConfig, options: { variant?: number; layout?: number; font?: number }): EventVisualConfig {
+  const seed = config.seed >>> 0;
+  const font = options.font ?? (seed >>> 12) % FONTS.length;
+  const photo = (seed >>> 8) % PARADISE_BACKGROUNDS.length;
+  const layout = options.layout ?? (seed >>> 4) % LAYOUTS.length;
+  const variant = options.variant ?? seed % 3;
+  let next = ((seed & ~(0x3 << 12)) | (font << 12)) >>> 0;
+  next = withSeedField(next, 8, PARADISE_BACKGROUNDS.length, photo);
+  next = withSeedField(next, 4, LAYOUTS.length, layout);
+  next = withSeedField(next, 0, 3, variant);
+  return { themeId: config.themeId, seed: next };
 }
 
 export function createRandomEventVisual(): EventVisualConfig {
@@ -171,7 +211,7 @@ export function resolveEventVisual(config: EventVisualConfig): ResolvedEventVisu
   const safeSeed = config.seed >>> 0;
   const theme = EVENT_THEMES.find((item) => item.id === config.themeId) ?? EVENT_THEMES[0];
   const variant = safeSeed % 3;
-  const layout = (["center", "lower", "offset"] as const)[(safeSeed >>> 4) % 3];
+  const layout = LAYOUTS[(safeSeed >>> 4) % LAYOUTS.length];
   const aiPanel = AI_PANEL_POSITION[theme.id] ?? null;
   const paradiseImage = theme.id === "paradise" ? PARADISE_BACKGROUNDS[(safeSeed >>> 8) % PARADISE_BACKGROUNDS.length] : null;
   return {
@@ -186,6 +226,7 @@ export function resolveEventVisual(config: EventVisualConfig): ResolvedEventVisu
     texture: TEXTURES[theme.id][variant],
     colors: PALETTES[theme.id][variant],
     fontFamily: FONTS[(safeSeed >>> 12) % FONTS.length],
+    font: (safeSeed >>> 12) % FONTS.length,
     layout,
     variant,
   };

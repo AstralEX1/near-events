@@ -8,6 +8,7 @@ import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { Cover } from "@/components/ui";
 import { EventThemePicker } from "@/components/EventThemePicker";
+import { EventPageBackground } from "@/components/EventVisual";
 import { createRandomEventVisual, createRandomVisual, type EventVisualConfig } from "@/lib/event-visuals";
 import { rememberEventVisual } from "@/lib/event-visual-client";
 import { SignInOptions } from "@/components/SignIn";
@@ -324,7 +325,12 @@ function CreateEvent() {
 
   return (
     <>
-      <form onSubmit={submit} className="max-w-2xl mx-auto space-y-4 pb-40">
+      <EventPageBackground visual={eventVisual} />
+      <form onSubmit={submit} className="max-w-[920px] mx-auto pb-40 grid gap-6 md:gap-8 md:grid-cols-[300px_minmax(0,1fr)] items-start">
+        <div className="relative z-20 md:sticky md:top-20">
+          <EventThemePicker value={eventVisual} title={form.title} coverUrl={safeImageUrl(form.cover_url)} onChange={setEventVisual} />
+        </div>
+        <div className="min-w-0 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="lu-chip">
               {accountId ? <span className="truncate max-w-44">{accountId}</span> : "Your events"}
@@ -362,10 +368,8 @@ function CreateEvent() {
             onChange={(e) => set("title")(e.target.value)}
             placeholder="Event Name"
             aria-label="Event name"
-            className="w-full resize-none bg-transparent text-[40px] leading-[1.15] font-semibold tracking-tight outline-none placeholder:text-muted/50 [field-sizing:content]"
+            className="w-full resize-none bg-transparent text-[40px] leading-[1.15] font-semibold tracking-tight outline-none placeholder:text-muted/75 [field-sizing:content]"
           />
-
-          <EventThemePicker value={eventVisual} title={form.title} coverUrl={safeImageUrl(form.cover_url)} onChange={setEventVisual} />
 
           {when && <WhenBlock when={when} onChange={setWhen} />}
 
@@ -483,6 +487,7 @@ function CreateEvent() {
           <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy || !!missing} title={missing}>
             {busy ? "Confirm in your wallet…" : integrate ? "Integrate" : "Create Event"}
           </button>
+        </div>
       </form>
       {askSignIn && <SignInDialog onClose={() => setAskSignIn(false)} />}
     </>
