@@ -13,6 +13,7 @@ import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
 import { isGoogleMapsLink, type EventDetails } from "@/lib/eventImport";
 import { useEventVisual } from "@/lib/event-visual-client";
 import { VisualBackdrop } from "@/components/EventVisual";
+import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 
 /**
  * The hosted event page, laid out like Luma so hosts and guests feel at home.
@@ -26,6 +27,7 @@ export default function EventPage() {
   const [guests, setGuests] = useState<GuestView[]>([]);
   const [details, setDetails] = useState<EventDetails | null>(null);
   const [detailsUnavailable, setDetailsUnavailable] = useState(false);
+  const [doorTeam, setDoorTeam] = useState<string[]>([]);
   const visual = useEventVisual(id, event?.metadata.title ?? "");
 
   const load = useCallback(async () => {
@@ -38,6 +40,7 @@ export default function EventPage() {
     setDetails(null);
     setDetailsUnavailable(false);
     if (e) {
+      cohostsApi.get(id).then(setDoorTeam).catch(() => setDoorTeam([]));
       void fetch(`/api/event-details?e=${encodeURIComponent(String(id))}`, { cache: "no-store" })
         .then(async (response) => {
           if (!response.ok) throw new Error("Event details are unavailable");
@@ -62,7 +65,7 @@ export default function EventPage() {
   if (event === null) return <p>Event not found.</p>;
 
   const me = guests.find((g) => g.account_id === accountId);
-  const isStaff = !!accountId && (accountId === event.host || event.cohosts.includes(accountId));
+  const isStaff = !!accountId && (accountId === event.host || doorTeam.includes(accountId));
 
   const going = guests.map((g) => g.account_id);
 
@@ -75,7 +78,7 @@ export default function EventPage() {
           <div>
             <div className="label pb-2 mb-3 border-b border-border">Hosted by</div>
             <div className="space-y-2.5">
-              {[event.host, ...event.cohosts].map((a, i) => (
+              {[event.host, ...doorTeam].map((a, i) => (
                 <Link key={a} href={`/u/${encodeURIComponent(a)}`} className="flex items-center gap-2 text-sm hover:text-accent">
                   <Avatar account={a} size={24} />
                   <span className="truncate font-medium">{shortAccount(a)}</span>

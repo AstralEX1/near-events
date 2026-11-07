@@ -53,7 +53,7 @@ interface WalletState {
   /** Signs and sends calls, one transaction each, in order. */
   send: (calls: Call[]) => Promise<void>;
   /**
-   * A server token for door check-in (host / co-host). Asks the wallet to sign
+   * A server token for door check-in (host / door team). Asks the wallet to sign
    * a message once (Google/email: an unsent transaction), then reuses it.
    */
   staffToken: () => Promise<string>;

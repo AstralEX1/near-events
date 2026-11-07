@@ -181,8 +181,8 @@ function sendEvent(chat: number, e: EventView) {
   if (open)
     rows.splice(1, 0, [{ text: "Check in at the door", callback_data: `c:${e.id}:0` }], [
       { text: "Close & pay out", callback_data: `p:${e.id}` },
-      { text: "Refund one guest", callback_data: `f:${e.id}:0` },
-    ], [{ text: "Cancel & refund everyone", callback_data: `r:${e.id}` }]);
+      { text: "Cancel & refund everyone", callback_data: `r:${e.id}` },
+    ]);
   rows.push([{ text: "Website button", callback_data: `w:${e.id}` }]);
   return say(chat, eventText(e), rows);
 }
@@ -221,21 +221,6 @@ async function onButton(q: { id: string; data?: string; message?: Msg }) {
     await setCheckIn(id, g.account_id, true, "telegram");
     await say(chat, `✅ ${esc(short(g.account_id))} checked in.`);
     return checkInKeyboard(chat, { ...e, attended_count: e.attended_count + 1 }, guests.map((x) => (x === g ? { ...x, status: "Attended" } : x)), 0);
-  }
-  if (kind === "f") {
-    // Pick who; the refund itself is confirmed by the host on the manage page.
-    const waiting = guests.map((g, i) => ({ g, i })).filter(({ g }) => g.status === "Registered");
-    if (waiting.length === 0) return say(chat, "Nobody to refund: every guest is checked in or there are no guests.");
-    const page = Number(arg) || 0;
-    const rows: Button[][] = waiting.slice(page * PAGE, page * PAGE + PAGE).map(({ g, i }) => [{ text: short(g.account_id), callback_data: `u:${id}:${i}` }]);
-    if ((page + 1) * PAGE < waiting.length) rows.push([{ text: "More →", callback_data: `f:${id}:${page + 1}` }]);
-    return say(chat, "Whose deposit should go back? Their spot frees up.", rows);
-  }
-  if (kind === "u") {
-    const g = guests[Number(arg)];
-    if (!g || g.status !== "Registered") return say(chat, "That guest can’t be refunded (not on the list, or already checked in).");
-    const l = linkOrButton("Confirm refund", `${PUBLIC_URL()}/e/${id}/manage?tab=guests`);
-    return say(chat, `Refund ${formatUsdc(e.deposit)} USDC to ${esc(short(g.account_id))}: open the check-in page and tap “Refund” next to them.${l.text}`, l.buttons);
   }
   if (kind === "p" || kind === "r") {
     // Moving money is the host's call: they confirm it with their own account.

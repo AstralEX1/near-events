@@ -56,10 +56,9 @@ const payAddress = async (who, token, addr, amount) => {
 const now = Date.now();
 const DEPOSIT = "1000000"; // 1 USDC
 const eventId = await call(host, EVENTS, "create_event", {
-  metadata: { title: "Intents smoke test", description: "Automated Tidepool run", location: "Online", cover_url: null, starts_at: now, ends_at: now + 3600_000 },
+  metadata: { title: "Intents smoke test", starts_at: now, ends_at: now + 3600_000 },
   deposit: DEPOSIT,
   capacity: 5,
-  cohosts: null,
 });
 console.log("1. event", eventId);
 

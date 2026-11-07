@@ -27,10 +27,9 @@ const call = (who, contractId, methodName, args, deposit = 0n, gas = 100n * TGAS
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const create = (title, startsAt) =>
   call(host, EVENTS, "create_event", {
-    metadata: { title, description: "Automated ticket run", location: "Online", cover_url: null, starts_at: startsAt, ends_at: startsAt + 3600_000 },
+    metadata: { title, starts_at: startsAt, ends_at: startsAt + 3600_000 },
     deposit: PRICE,
     capacity: 5,
-    cohosts: null,
     mode: "Ticket",
   });
 const buy = (eventId) =>
@@ -45,7 +44,7 @@ if (BigInt(await view("ft_balance_of", { account_id: GUEST }, USDC)) < 2n * BigI
 const startsAt = Date.now() + 60_000;
 const eventId = await create("Ticket smoke test", startsAt);
 const e = await view("get_event", { event_id: eventId });
-console.log("1. event", eventId, "mode", e.mode, "price", e.price);
+console.log("1. event", eventId, "mode", e.mode, "price", e.deposit);
 
 // 2. Guest buys a ticket.
 await buy(eventId);

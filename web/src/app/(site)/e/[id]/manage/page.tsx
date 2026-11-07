@@ -11,7 +11,7 @@ import { Avatar, StatusPill, shortAccount } from "@/components/ui";
 import { QrScanner } from "@/components/Qr";
 import { IntegrationGuide } from "@/components/IntegrationGuide";
 import { Overview } from "./Overview";
-import { LOCAL_TZ, fromEpoch, toEpoch } from "@/lib/time";
+import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 
 type Tab = "overview" | "guests" | "registration" | "integration";
 const TABS: { id: Tab; label: string }[] = [
@@ -40,6 +40,7 @@ function ManageEvent() {
   const { accountId, send, staffToken } = useWallet();
   const [event, setEvent] = useState<EventView | null>(null);
   const [guests, setGuests] = useState<GuestView[]>([]);
+  const [doorTeam, setDoorTeam] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -61,7 +62,8 @@ function ManageEvent() {
   const load = useCallback(async () => {
     const e = await events.get(id);
     if (!e) throw new Error("Event not found.");
-    const g = await events.guests(id);
+    const [g, team] = await Promise.all([events.guests(id), cohostsApi.get(id).catch(() => null)]);
+    if (team) setDoorTeam(team);
     // Door check-ins live on our server until finalize puts them on-chain.
     if (e.status === "Open") {
       const marks = await checkIns.list(id);
@@ -95,11 +97,11 @@ function ManageEvent() {
   if (!event) return <p className="text-muted px-1" role="status">{error ?? "Loading…"}</p>;
 
   const isHost = accountId === event.host;
-  const isStaff = isHost || (!!accountId && event.cohosts.includes(accountId));
+  const isStaff = isHost || (!!accountId && doorTeam.includes(accountId));
   if (!isStaff) {
     return (
       <p className="px-1">
-        Only the host and co-hosts can manage this event.{" "}
+        Only the host and the door team can manage this event.{" "}
         <Link href={`/e/${id}`} className="text-accent">
           Back to event
         </Link>
@@ -119,6 +121,12 @@ function ManageEvent() {
     } finally {
       setBusy(false);
     }
+  };
+
+  /** Host only: replaces the door team kept on our server (no transaction). */
+  const saveDoorTeam = async (list: string[]) => {
+    const token = await staffToken();
+    setDoorTeam(await cohostsApi.save(token, id, list));
   };
 
   /** Marks guests at the door on our server (no transaction). */
@@ -256,16 +264,16 @@ function ManageEvent() {
               setScanNote(null);
             }}
             onFinalize={finalizeEvent}
-            onCancel={() => run("cancel", { event_id: id }, ticket ? "Cancel the event and refund every ticket?" : "Cancel the event and refund every guest deposit?")}
+            onCancel={() =>
+              run(
+                "cancel",
+                { event_id: id },
+                `Cancel this event?\n\nEveryone gets their money back: ${event.guest_count} ${ticket ? "ticket" : "deposit"}${event.guest_count === 1 ? "" : "s"} (${formatUsdc(event.total_pool)} USDC) return to the guests' Near Me balances.\n\nThis cannot be undone.`,
+              )
+            }
+            doorTeam={doorTeam}
+            onSaveDoorTeam={saveDoorTeam}
           />
-          {isHost && event.metadata_editable && (
-            <EventMetadataEditor
-              key={`${event.metadata.title}:${event.metadata.starts_at}:${event.metadata.ends_at}`}
-              event={event}
-              busy={busy}
-              onUpdate={(title, starts_at, ends_at) => run("update_event", { event_id: id, title, starts_at, ends_at })}
-            />
-          )}
         </>
       )}
 
@@ -293,9 +301,6 @@ function ManageEvent() {
           onCheckInOne={(account) => mark([account], true)}
           onCheckInSelected={() => mark([...selected], true)}
           onUndo={(account) => mark([account], false)}
-          onRefund={(account) =>
-            run("refund_guest", { event_id: id, account_id: account }, `Return ${account}’s ${ticket ? "ticket money" : "deposit"} and free their spot?`)
-          }
           onExport={exportCsv}
           onInvite={() => {
             setTab("registration");
@@ -320,65 +325,6 @@ function ManageEvent() {
   );
 }
 
-function EventMetadataEditor({
-  event,
-  busy,
-  onUpdate,
-}: {
-  event: EventView;
-  busy: boolean;
-  onUpdate: (title: string, starts_at: number, ends_at: number) => void;
-}) {
-  const initialStart = fromEpoch(event.metadata.starts_at, LOCAL_TZ);
-  const initialEnd = fromEpoch(event.metadata.ends_at, LOCAL_TZ);
-  const initialStartValue = `${initialStart.date}T${initialStart.time}`;
-  const initialEndValue = `${initialEnd.date}T${initialEnd.time}`;
-  const [title, setTitle] = useState(event.metadata.title);
-  const [start, setStart] = useState(initialStartValue);
-  const [end, setEnd] = useState(initialEndValue);
-  const [error, setError] = useState<string | null>(null);
-
-  const submit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const normalizedTitle = title.trim();
-    if (!normalizedTitle) return setError("Add an event name.");
-    if (new TextEncoder().encode(normalizedTitle).length > 120) {
-      return setError("Title is too long. Shorten it and try again.");
-    }
-    const starts_at = start === initialStartValue ? event.metadata.starts_at : toEpoch(start.slice(0, 10), start.slice(11, 16), LOCAL_TZ);
-    const ends_at = end === initialEndValue ? event.metadata.ends_at : toEpoch(end.slice(0, 10), end.slice(11, 16), LOCAL_TZ);
-    if (starts_at <= Date.now()) return setError("The new start time must be in the future.");
-    if (ends_at < starts_at) return setError("The end time cannot be before the start time.");
-    setError(null);
-    onUpdate(normalizedTitle, starts_at, ends_at);
-  };
-
-  return (
-    <form onSubmit={submit} className="card p-4 space-y-3">
-      <h2 className="font-medium">Edit event</h2>
-      <label className="block space-y-1 text-sm">
-        <span>Event name</span>
-        <input className="input" required maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} />
-      </label>
-      <p className="text-xs text-muted">Times use your local time ({LOCAL_TZ.replaceAll("_", " ")}).</p>
-      <div className="grid sm:grid-cols-2 gap-3">
-        <label className="block space-y-1 text-sm">
-          <span>Starts</span>
-          <input className="input" type="datetime-local" required value={start} onChange={(e) => setStart(e.target.value)} />
-        </label>
-        <label className="block space-y-1 text-sm">
-          <span>Ends</span>
-          <input className="input" type="datetime-local" required value={end} onChange={(e) => setEnd(e.target.value)} />
-        </label>
-      </div>
-      {error && <p role="alert" className="text-sm text-warn">{error}</p>}
-      <button type="submit" className="btn btn-primary" disabled={busy}>
-        {busy ? "Saving…" : "Save changes"}
-      </button>
-    </form>
-  );
-}
-
 function GuestsTab({
   open,
   isHost,
@@ -398,7 +344,6 @@ function GuestsTab({
   onCheckInOne,
   onCheckInSelected,
   onUndo,
-  onRefund,
   onExport,
   onInvite,
   ticket,
@@ -422,7 +367,6 @@ function GuestsTab({
   onCheckInOne: (a: string) => void;
   onCheckInSelected: () => void;
   onUndo: (a: string) => void;
-  onRefund: (a: string) => void;
   onExport: () => void;
   onInvite: () => void;
   ticket: boolean;
@@ -532,16 +476,6 @@ function GuestsTab({
                   ) : (
                     open && (
                       <div className="flex items-center gap-1 shrink-0">
-                        {isHost && (
-                          <button
-                            type="button"
-                            className="h-10 px-2 text-xs text-muted hover:text-warn"
-                            disabled={busy}
-                            onClick={() => onRefund(g.account_id)}
-                          >
-                            Refund
-                          </button>
-                        )}
                         <button
                           type="button"
                           className={`btn !py-2 !px-3 text-sm ${queued ? "btn-accent" : "btn-ghost"}`}
@@ -626,19 +560,6 @@ function RegistrationTab({
         />
       </section>
 
-      {event.cohosts.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-sm font-medium text-muted">Door team</h2>
-          <ul className="space-y-2">
-            {event.cohosts.map((a) => (
-              <li key={a} className="flex items-center gap-2 text-sm">
-                <Avatar account={a} size={24} />
-                <span className="truncate">{shortAccount(a)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
     </div>
   );
 }

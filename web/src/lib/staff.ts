@@ -1,5 +1,6 @@
-// Who may mark guests at the door: the event's host or one of its co-hosts
-// (both read from the contract). A browser proves its NEAR account once, then
+// Who may mark guests at the door: the event's host (read from the contract)
+// or a member of its door team (kept on this server, lib/cohosts.ts). A
+// browser proves its NEAR account once, then
 // holds a short-lived token signed by this server.
 //
 // Proofs:
@@ -12,6 +13,7 @@ import { JsonRpcProvider, baseDecode, decodeTransaction } from "near-api-js";
 import { verifyMessage } from "near-api-js/nep413";
 import { EVENTS_CONTRACT, RPC_URL } from "./config";
 import { events } from "./near";
+import { getCohosts } from "./cohosts";
 import { STAFF_MESSAGE, STAFF_PROOF_METHOD } from "./staffShared";
 
 const TOKEN_TTL_S = 12 * 60 * 60;
@@ -38,10 +40,11 @@ export function readStaffToken(token: string | null | undefined): string | null 
   return Buffer.from(acc, "base64url").toString();
 }
 
-/** Is `accountId` the host or a co-host of this event? Returns the event when yes. */
+/** Is `accountId` the host or on the door team of this event? Returns the event when yes. */
 export async function staffEvent(eventId: number, accountId: string) {
   const e = await events.get(eventId);
-  if (!e || (e.host !== accountId && !e.cohosts.includes(accountId))) return null;
+  if (!e) return null;
+  if (e.host !== accountId && !(await getCohosts(eventId)).includes(accountId)) return null;
   return e;
 }
 
