@@ -3,10 +3,12 @@
 Current status (2026-11-08): Vercel project `near-me-testnet` is linked from
 `web/`; the hosted `/e/4` flow last passed on 2026-11-07 with faucet-USDC
 registration, host-only event-detail save to Upstash, and off-chain check-in.
-It uses the Upstash Redis database `NearMeTestnet`. After Vercel CLI login, a
-production deployment from clean remote `main` commit `5176910` reached READY.
-The production home page and `/e/4` both returned HTTP 200. Local uncommitted
-StageShow timing edits were excluded from this deploy.
+It uses the Upstash Redis database `NearMeTestnet`. After the latest
+`git-main` production deployment failed, a clean production deployment from
+remote `main` commit `5176910` reached READY. The project domain
+`near-event-me.vercel.app` was attached and the production home page and `/e/4`
+both returned HTTP 200. Production still serves snapshot `5176910`; later main
+commit `c0c6b2a` and local uncommitted StageShow/demo edits are not deployed.
 PR #21 merged to `main` on 2026-11-08 as `e8329a6`; its TP5 contract was
 separately deployed and verified on a disposable testnet account. The follow-up
 main commit `0e25579` carries the remaining eight uncommitted StageShow/demo

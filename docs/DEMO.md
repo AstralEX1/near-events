@@ -1,15 +1,15 @@
 # Demo video script (about 2 minutes)
 
-The hosted Vercel testnet demo at https://near-me-testnet.vercel.app/e/4 uses
-Upstash Redis and was last verified on 2026-11-07 with a faucet-USDC
-registration, event-detail save, and off-chain check-in. The app still targets
-TP4; the separately QA-verified TP5 contract is not the hosted target. For a
-clean recording, create a fresh event on Vercel or run
+The hosted Vercel testnet demo at https://near-event-me.vercel.app/e/4 uses
+Upstash Redis. Event 4 last passed a faucet-USDC registration, event-detail
+save, and off-chain check-in on 2026-11-07. On 2026-11-08, the new production
+domain returned HTTP 200 for `/` and `/e/4`. The app still targets TP4; the
+separately QA-verified TP5 contract is not the hosted target. For a clean
+recording, create a fresh event on Vercel or run
 the app locally (`npm --prefix web run dev`). Do not present mainnet payment or
 EVM flows as live until the release checks in
 [`DEPLOY.md`](DEPLOY.md) pass. Add a separate
-mainnet clip only after those checks. A local uptime check on 2026-11-08 could
-not resolve the Vercel hostname because DNS/network access was unavailable.
+mainnet clip only after those checks.
 (Updated 2026-11-08, Codex)
 
 | Time | Show | Say |
