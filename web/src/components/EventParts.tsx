@@ -31,7 +31,6 @@ export function RulesBox({ event }: { event: EventView }) {
           <div className="font-semibold text-accent">Good to know</div>
           <ul className="list-disc pl-5 mt-1 space-y-0.5">
             <li>If the host cancels, or never closes the event within 30 days, everyone gets the ticket money back.</li>
-            <li>The host can also refund one guest who asks in time.</li>
             <li>No platform fee.</li>
           </ul>
         </div>
@@ -55,7 +54,7 @@ export function RulesBox({ event }: { event: EventView }) {
         <div className="font-semibold text-accent">Good to know</div>
         <ul className="list-disc pl-5 mt-1 space-y-0.5">
           <li>You can’t cancel once you’re registered.</li>
-          <li>Only a check-in by the host or a co-host counts.</li>
+          <li>Only a check-in by the host or their door team counts.</li>
           <li>If the host cancels, or never closes the event within 30 days, everyone gets their deposit back.</li>
           <li>The money is held by a NEAR smart contract, not the organizer. No platform fee.</li>
         </ul>

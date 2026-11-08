@@ -10,7 +10,7 @@ const GUEST = [
 ];
 
 const HOST = [
-  ["Create the event", "Title, time, place, deposit and capacity. Add the people who will check guests in as co-hosts."],
+  ["Create the event", "Title, time, place, deposit and capacity. Add the people who will check guests in as your door team; you can change it later."],
   ["Share it", "Send the link, or put a card or button on your own website from the “For your website” page."],
   ["Check people in", "On the event day open Manage, press “Scan QR codes” and scan guests, then press Check in. Search works too. Marks are saved on Near Me, no transaction per guest."],
   ["Close the event", "Finalize shows who came and what each gets, then pays out. Nobody checked in? Everyone simply gets their deposit back."],

@@ -14,20 +14,28 @@ fee, and creating an event is free.
   use an EVM wallet. Mainnet EVM and FastAuth release checks are still pending.
 - Free for hosts: the escrow pays the storage for a new event, so a host needs
   no NEAR to create one.
-- The host is a person (any NEAR account) with optional co-hosts at the door.
+- The host is a person (any NEAR account) with an optional door team (co-hosts)
+  kept on the Near Me server; only the host can close or cancel.
 - In Deposit mode the host records who showed up but cannot take the pool. In
-  Ticket mode ticket funds go to the host after the event starts. Anyone can
-  refund guests after an event is abandoned for 30 days.
+  Ticket mode ticket funds go to the host after the event starts. The host can
+  cancel and refund everyone at any time; anyone can do it 30 days after the
+  event ended if the host never closed it.
 
 Hackathon track focus: Real-World Money (USDC, NEAR Intents, gasless onboarding).
 
 ## Live on testnet
 
-As last recorded on 2026-11-06, the app uses the verified `escrow-tp4`
-deployment. Its code hash and USDC storage registration were checked, but the
-live registration/payment smoke, hosted demo setup, and mainnet release checks
-were still pending. Treat mainnet flows below as implementation details until
-those checks are confirmed complete.
+The app uses the verified `escrow-tp4` deployment. A hosted test event verified
+registration with faucet USDC, event-detail saving, and off-chain check-in.
+The Vercel demo is [near-me-testnet.vercel.app](https://near-me-testnet.vercel.app/e/4);
+it uses Upstash Redis for hosted event details and check-ins. The local env file
+is `/Users/astralex/nearhackathon/web/.env.local` (git-ignored, mode 600); secret
+values are not documented here. Mainnet release checks remain pending.
+
+The slim TP5 contract is included in the current source and was verified
+separately on a disposable testnet account. The hosted app still uses TP4;
+TP5 has an incompatible state layout and needs a fresh account plus a separately
+approved app switch. See [deployment and QA status](docs/DEPLOY.md).
 
 | What | Account |
 |---|---|
@@ -50,14 +58,17 @@ npm install
 npm run dev                     # http://localhost:3000
 ```
 
+For this workspace, that file is `/Users/astralex/nearhackathon/web/.env.local`.
+It contains local Upstash connection settings and `APP_SECRET`; keep it private.
+
 1. Open http://localhost:3000 and go to `/events`. Open and past events are read
    live from the testnet contract.
 2. Open an event and connect a NEAR wallet. Google/email sign-in needs the
    FastAuth settings described in `docs/DEPLOY.md`.
 3. Click “Register · 5 USDC”. On testnet the test USDC comes from the faucet, then
    the deposit goes into the escrow and you appear under “going”.
-4. Create your own event at `/create` (free) and add a friend as co-host.
-5. As host or co-host open “Manage & check in guests” and tick who came. The
+4. Create your own event at `/create` (free) and add a friend to the door team.
+5. As host or door team open “Manage & check in guests” and tick who came. The
    first tick asks your wallet to sign a message once; the
    marks are kept on our server, no transaction per guest. The page shows what
    each attendee will receive.
@@ -106,7 +117,7 @@ Registration. Existing event-card and iframe embeds remain supported. Details:
 ```
 guest ──(any chain via 1Click | USDC from a NEAR wallet | Google login)──► NEAR Intents
                                                                               │
-host / co-host ── create_event / finalize(attended) ──► escrow contract (NEAR)
+host ──────────── create_event / finalize(attended) ──► escrow contract (NEAR)
                                                                               │
                    pool / attendees → internal balances → withdraw through Intents
                                    (any chain via 1Click, or any Intents account)
@@ -121,18 +132,17 @@ checks it is only a Near Me registration and submits it to `intents.near`
 
 | Method | Who | What |
 |---|---|---|
-| `create_event(metadata, deposit, capacity, cohosts)` | anyone (caller = host) | free: the contract pays storage from its own balance; max 5 open events per host, capacity ≤ 300, deposit ≥ 0.1 USDC; up to 10 co-hosts, fixed after creation |
+| `create_event(metadata, deposit, capacity, mode)` | anyone (caller = host) | `metadata` = `{title, starts_at, ends_at}`. Free: the contract pays storage from its own balance; max 5 open events per host, at most 1000 events per contract (then a new escrow is deployed), capacity ≤ 300, deposit ≥ 0.1 USDC. Title and times cannot be changed later |
 | `ft_transfer_call` → `ft_on_transfer` | guest / friend / verifier | `{"action":"register","event_id":N,"guest":"..."}` |
-| `update_event(event_id, title, starts_at, ends_at)` | host (+1 yocto) | edit the title and times before the event starts |
-| `refund_guest` | host (+1 yocto) | refund one guest and free their seat while the event is open |
 | `finalize(event_id, attended)` | host (+1 yocto) | `attended` = guests checked in at the door (kept off-chain on our server until now). Deposit: pool ÷ attendees, remainder to host, empty list → full refund. Ticket: all ticket money to the host after the start |
-| `set_paused(paused)` | owner = the account that ran `new` (+1 yocto) | stops new events and registrations; payouts, refunds and withdrawals keep working |
-| `cancel`, `refund_if_abandoned` | host (+1 yocto) / anyone after event end + 30 days | refund every guest payment |
-| `cleanup_event(event_id, limit)` | anyone, 7 days after close | deletes up to 100 guest records so their storage NEAR returns to the contract; payouts stay on balances |
+| `cancel(event_id)` | host any time while open; anyone after event end + 30 days (+1 yocto) | refund every guest payment |
 | `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to a NEAR account (e.g. a 1Click deposit address) or into NEAR Intents |
 | `payout_to_intents(account_id)` | owner or configured relayer | moves that account's balance into *its own* Intents balance; how EVM-wallet guests get paid |
 
-Views include `storage_pool` (NEAR left for free event creation) and `open_events_of(account)`.
+Views: `get_event`, `get_recent_events(limit ≤ 100)`, `get_guests`,
+`get_guest_status`, `get_guest_statuses(account_id, event_ids ≤ 100)`, `balance_of`.
+There is no pause, owner, event editing or single-guest refund. The door team,
+location, description and cover live on the Near Me server, not in the escrow.
 
 Init is private and runs atomically with deploy. Set `relayer` at initialization
 for an escrow accepting EVM guests. Privileged mutators require exactly 1 yoctoNEAR.

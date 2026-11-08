@@ -1,7 +1,7 @@
 import { rateLimited } from "@/lib/ratelimit";
 import { issueStaffToken, verifyMpcProof, verifyWalletProof, type MpcProof, type WalletProof } from "@/lib/staff";
 
-// A host or co-host proves their NEAR account once and gets a token for the
+// A host or door-team member proves their NEAR account once and gets a token for the
 // door (see lib/staff.ts). The token alone grants nothing: every check-in
 // still checks that the account is staff of that event.
 export async function POST(req: Request) {

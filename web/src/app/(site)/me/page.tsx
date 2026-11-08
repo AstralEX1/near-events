@@ -9,6 +9,8 @@ import { useWallet } from "@/lib/wallet";
 import { oneClickStatus } from "@/lib/oneclickClient";
 import { intentsUsdcBalance } from "@/lib/intents";
 import { Avatar, Cover, shortAccount } from "@/components/ui";
+import { SignInOptions } from "@/components/SignIn";
+import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 
 export default function Me() {
   const { accountId, kind, signIn } = useWallet();
@@ -17,6 +19,7 @@ export default function Me() {
   const [inIntents, setInIntents] = useState<bigint | null>(null);
   const [cashOutStatus, setCashOutStatus] = useState("");
   const [mine, setMine] = useState<EventView[]>([]);
+  const [doorTeams, setDoorTeams] = useState<Record<number, string[]>>({});
 
   const load = useCallback(async () => {
     if (!accountId) return;
@@ -28,8 +31,13 @@ export default function Me() {
     setBalance(BigInt(b));
     if (HAS_INTENTS) intentsUsdcBalance(accountId).then(setInIntents).catch(() => setInIntents(null));
     setWallet(BigInt(w));
-    const statuses = await events.guestStatuses(accountId, all.map((e) => e.id));
-    setMine(all.filter((e, i) => statuses[i] || e.host === accountId || e.cohosts.includes(accountId)));
+    const ids = all.map((e) => e.id);
+    const [statuses, teams] = await Promise.all([
+      events.guestStatuses(accountId, ids),
+      cohostsApi.many(ids).catch((): Record<number, string[]> => ({})),
+    ]);
+    setDoorTeams(teams);
+    setMine(all.filter((e, i) => statuses[i] || e.host === accountId || teams[e.id]?.includes(accountId)));
   }, [accountId]);
 
   useEffect(() => {
@@ -79,8 +87,8 @@ export default function Me() {
 
       {(
         [
-          ["Going", mine.filter((e) => e.host !== accountId && !e.cohosts.includes(accountId)), "Nothing yet."],
-          ["Hosting", mine.filter((e) => e.host === accountId || e.cohosts.includes(accountId)), "You aren’t hosting anything."],
+          ["Going", mine.filter((e) => e.host !== accountId && !doorTeams[e.id]?.includes(accountId)), "Nothing yet."],
+          ["Hosting", mine.filter((e) => e.host === accountId || doorTeams[e.id]?.includes(accountId)), "You aren’t hosting anything."],
         ] as [string, EventView[], string][]
       ).map(([title, list, empty]) => (
         <div key={title}>

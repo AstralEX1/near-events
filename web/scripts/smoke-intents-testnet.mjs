@@ -27,6 +27,17 @@ const guest = new Account(GUEST, provider, key(GUEST));
 const view = (method, args = {}, contractId = EVENTS) => provider.callFunction({ contractId, method, args });
 const call = (who, contractId, methodName, args, deposit = 0n, gas = 100n * TGAS) =>
   who.callFunction({ contractId, methodName, args, deposit, gas });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const waitFor = async (read, matches, description, timeoutMs = 30_000) => {
+  const deadline = Date.now() + timeoutMs;
+  let value;
+  while (Date.now() < deadline) {
+    value = await read();
+    if (matches(value)) return value;
+    await sleep(500);
+  }
+  throw new Error(`Timed out waiting for ${description}; last value: ${String(value)}`);
+};
 const api = async (path, body) => {
   const r = await fetch(`${API}${path}`, {
     ...(body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {}),
@@ -56,12 +67,12 @@ const payAddress = async (who, token, addr, amount) => {
 const now = Date.now();
 const DEPOSIT = "1000000"; // 1 USDC
 const eventId = await call(host, EVENTS, "create_event", {
-  metadata: { title: "Intents smoke test", description: "Automated Tidepool run", location: "Online", cover_url: null, starts_at: now, ends_at: now + 3600_000 },
+  metadata: { title: "Intents smoke test", starts_at: now, ends_at: now + 3600_000 },
   deposit: DEPOSIT,
   capacity: 5,
-  cohosts: null,
 });
 console.log("1. event", eventId);
+const escrowBalanceBefore = BigInt(await view("balance_of", { account_id: GUEST }));
 
 // 2. Guest gets test tokens and pays the deposit through 1Click. Tidepool
 // rejects same-asset quotes (mainnet 1Click allows USDC → USDC), so pay in USDT.
@@ -94,15 +105,19 @@ const unused = await call(guest, VERIFIER, "ft_withdraw", {
 }, 1n, 200n * TGAS);
 assert.equal(unused, "0", "The duplicate must consume zero USDC");
 assert.equal(await intentsBalance(GUEST), beforeDuplicate);
-assert.equal(await view("balance_of", { account_id: GUEST }), "0");
+assert.equal(BigInt(await view("balance_of", { account_id: GUEST })), escrowBalanceBefore);
 
 // 3. Check in and close.
 await call(host, EVENTS, "finalize", { event_id: eventId, attended: [GUEST] }, 1n, 300n * TGAS);
-const balance = await view("balance_of", { account_id: GUEST });
-assert.equal(balance, DEPOSIT);
+const balance = BigInt(await waitFor(
+  () => view("balance_of", { account_id: GUEST }),
+  (value) => BigInt(value) === escrowBalanceBefore + BigInt(DEPOSIT),
+  "Deposit payout to guest",
+));
+const eventPayout = balance - escrowBalanceBefore;
 
 // 4. Half goes to Base Sepolia through 1Click, straight from the escrow.
-const half = (BigInt(balance) / 2n).toString();
+const half = (eventPayout / 2n).toString();
 const out = (await api("/v0/quote", {
   dry: false, swapType: "EXACT_INPUT", slippageTolerance: 100, originAsset: USDC_ASSET, depositType: "ORIGIN_CHAIN",
   destinationAsset: "nep141:base-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet", amount: half,
@@ -114,8 +129,13 @@ await requireDelivery(out.depositAddress);
 
 // 5. The rest goes into the host's NEAR Intents account (like a near.com wallet).
 const before = BigInt(await view("mt_balance_of", { account_id: HOST, token_id: USDC_ASSET }, VERIFIER));
-await call(guest, EVENTS, "withdraw", { amount: null, receiver_id: HOST, to_intents: true }, 1n, 200n * TGAS);
-const after = BigInt(await view("mt_balance_of", { account_id: HOST, token_id: USDC_ASSET }, VERIFIER));
-assert.equal(after - before, BigInt(balance) - BigInt(out.amountIn));
-assert.equal(await view("balance_of", { account_id: GUEST }), "0");
+const remaining = eventPayout - BigInt(out.amountIn);
+await call(guest, EVENTS, "withdraw", { amount: remaining.toString(), receiver_id: HOST, to_intents: true }, 1n, 200n * TGAS);
+const after = BigInt(await waitFor(
+  () => view("mt_balance_of", { account_id: HOST, token_id: USDC_ASSET }, VERIFIER),
+  (value) => BigInt(value) === before + remaining,
+  "remaining payout in host Intents balance",
+));
+assert.equal(after - before, remaining);
+assert.equal(BigInt(await view("balance_of", { account_id: GUEST })), escrowBalanceBefore);
 console.log("Tidepool delivery, registration, duplicate refund and cash-out passed");

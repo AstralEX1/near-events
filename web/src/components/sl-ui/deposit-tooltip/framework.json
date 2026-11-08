@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "variant": "tooltip-overlay",
+  "kind": "react-adapter",
+  "rendering": "client-widget",
+  "status": "verified-client-widget",
+  "formats": [
+    "html",
+    "css",
+    "javascript",
+    "react",
+    "nextjs"
+  ],
+  "react": "Component.jsx",
+  "nextjs": "NextClient.jsx",
+  "required": [
+    "Component.jsx",
+    "react-controller.mjs",
+    "react-font.mjs",
+    "instrument-sans-variable.woff2"
+  ],
+  "tested": {
+    "react": true,
+    "nextjs": true
+  },
+  "verification": {
+    "controllerSHA256": "217318ecb2011bb88a4b087f8280f800e3f56f68952eaa36ea0ea3739d6c4682",
+    "runtimeSHA256": "66c4db91086728682138f5e9b77b04f881c94730f4d6034da4397f39443e08be",
+    "scope": "Client mount, generic input/activation, focus, host geometry, runtime reduced motion, isolated instances and cleanup in React StrictMode and production Next.js; source control typography/SVG fingerprint at320px.",
+    "limitations": "Not exhaustive application-state or real-backend verification. No meaningful widget SSR. Original default-size constraints and generic activation limits are recorded below.",
+    "notes": []
+  }
+}

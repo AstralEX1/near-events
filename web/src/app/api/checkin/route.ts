@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   const { event, account, on } = (await req.json().catch(() => ({}))) as { event?: number; account?: string; on?: boolean };
   if (!Number.isInteger(event) || typeof account !== "string") return Response.json({ error: "Bad request" }, { status: 400 });
   const e = await staffEvent(event!, staff);
-  if (!e) return Response.json({ error: "Only the host or a co-host can check guests in" }, { status: 403 });
+  if (!e) return Response.json({ error: "Only the host or the door team can check guests in" }, { status: 403 });
   if (e.status !== "Open") return Response.json({ error: "The event is closed" }, { status: 409 });
   if ((await events.guestStatus(event!, account).catch(() => null)) == null)
     return Response.json({ error: `${account} is not registered` }, { status: 404 });

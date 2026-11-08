@@ -29,15 +29,11 @@ const now = Date.now();
 const eventId = await call(host, EVENTS, "create_event", {
   metadata: {
     title: "Smoke test meetup",
-    description: "Automated testnet run",
-    location: "Online",
-    cover_url: null,
     starts_at: now,
     ends_at: now + 3600_000,
   },
   deposit: "10000000",
   capacity: 5,
-  cohosts: [GUEST],
 });
 console.log("event", eventId);
 

@@ -36,9 +36,30 @@ await contract.signAndSendTransaction({
 });
 const deployed = await provider.viewAccount({ accountId: id });
 if (deployed.code_hash !== expectedHash) throw new Error("Deployed bytecode does not match the input WASM");
-for (const [method, expected] of Object.entries({ usdc: USDC, intents, relayer: RELAYER })) {
-  const actual = await provider.callFunction({ contractId: id, method, args: {} });
-  if (actual !== expected) throw new Error(`Unexpected contract configuration: ${method}`);
+// The escrow has no config views. Its borsh state starts with `usdc` and
+// `intents` and ends with `relayer`, so compare those bytes directly.
+const borshString = (value) => {
+  const bytes = Buffer.from(value, "utf8");
+  const len = Buffer.alloc(4);
+  len.writeUInt32LE(bytes.length);
+  return Buffer.concat([len, bytes]);
+};
+const borshOption = (value) => (value == null ? Buffer.from([0]) : Buffer.concat([Buffer.from([1]), borshString(value)]));
+const stateResponse = await fetch("https://test.rpc.fastnear.com", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    jsonrpc: "2.0", id: "state", method: "query",
+    params: { request_type: "view_state", finality: "final", account_id: id, prefix_base64: Buffer.from("STATE").toString("base64") },
+  }),
+}).then((r) => r.json());
+const stateEntry = stateResponse.result?.values?.find((v) => Buffer.from(v.key, "base64").toString() === "STATE");
+if (!stateEntry) throw new Error("Could not read the escrow state");
+const state = Buffer.from(stateEntry.value, "base64");
+const head = Buffer.concat([borshString(USDC), borshOption(intents)]);
+const tail = borshOption(RELAYER);
+if (!state.subarray(0, head.length).equals(head) || !state.subarray(state.length - tail.length).equals(tail)) {
+  throw new Error("Unexpected contract configuration");
 }
 // The escrow must hold a USDC storage registration to receive deposits.
 await deployer.callFunction({ contractId: USDC, methodName: "storage_deposit", args: { account_id: id, registration_only: true }, deposit: BigInt(parseNearAmount("0.0125")), gas: 30_000_000_000_000n });

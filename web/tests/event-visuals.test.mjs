@@ -1,38 +1,41 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EVENT_FONTS, EVENT_LAYOUTS, resolveEventVisual, shuffleEventVisual, validEventVisual, withVisualOptions } from "../src/lib/event-visuals.ts";
+import {
+  EVENT_THEME_GROUPS,
+  EVENT_THEMES,
+  fallbackEventVisual,
+  isEventThemeId,
+  resolveEventVisual,
+  validEventVisual,
+} from "../src/lib/event-visuals.ts";
 
-const SEEDS = [0, 1, 0xffff_ffff, 0xa5a5a5a5, 123456789];
+test("every event theme belongs to a picker group and resolves consistently", () => {
+  const groups = new Set(EVENT_THEME_GROUPS.map((group) => group.id));
 
-test("withVisualOptions changes one choice and keeps the others", () => {
-  for (const seed of SEEDS) {
-    const before = resolveEventVisual({ themeId: "paradise", seed });
-    for (let variant = 0; variant < 3; variant++) {
-      const config = withVisualOptions(before.config, { variant });
-      const after = resolveEventVisual(config);
-      assert.ok(validEventVisual(config));
-      assert.equal(after.variant, variant);
-      assert.deepEqual([after.font, after.layout, after.backgroundAsset], [before.font, before.layout, before.backgroundAsset]);
-    }
-    EVENT_FONTS.forEach((_, font) => {
-      const after = resolveEventVisual(withVisualOptions(before.config, { font }));
-      assert.equal(after.font, font);
-      assert.deepEqual([after.variant, after.layout, after.backgroundAsset], [before.variant, before.layout, before.backgroundAsset]);
-    });
-    EVENT_LAYOUTS.forEach((layout, index) => {
-      const after = resolveEventVisual(withVisualOptions(before.config, { layout: index }));
-      assert.equal(after.layout, layout);
-      assert.deepEqual([after.variant, after.font, after.backgroundAsset], [before.variant, before.font, before.backgroundAsset]);
-    });
+  for (const theme of EVENT_THEMES) {
+    assert.ok(groups.has(theme.group));
+    assert.ok(isEventThemeId(theme.id));
+
+    const config = { themeId: theme.id, seed: 123456789 };
+    const first = resolveEventVisual(config);
+    const second = resolveEventVisual(config);
+
+    assert.ok(validEventVisual(config));
+    assert.equal(first.theme.id, theme.id);
+    assert.deepEqual(first, second);
+    assert.equal(first.colors.length, 3);
+    assert.ok(first.texture.length > 0);
   }
 });
 
-test("shuffleEventVisual always gives a visibly different look of the same theme", () => {
-  for (const seed of SEEDS) {
-    const near = shuffleEventVisual({ themeId: "near", seed });
-    assert.equal(near.themeId, "near");
-    assert.notEqual(resolveEventVisual(near).variant, resolveEventVisual({ themeId: "near", seed }).variant);
-    const paradise = shuffleEventVisual({ themeId: "paradise", seed });
-    assert.notEqual(resolveEventVisual(paradise).backgroundAsset, resolveEventVisual({ themeId: "paradise", seed }).backgroundAsset);
-  }
+test("event visual validation and fallback selection stay deterministic", () => {
+  assert.equal(isEventThemeId("not-a-theme"), false);
+  assert.equal(validEventVisual({ themeId: "near", seed: -1 }), false);
+  assert.equal(validEventVisual({ themeId: "near", seed: 0x1_0000_0000 }), false);
+  assert.equal(validEventVisual({ themeId: "not-a-theme", seed: 1 }), false);
+  assert.equal(validEventVisual({ themeId: "near", seed: 0xffff_ffff }), true);
+
+  const fallback = fallbackEventVisual(42, "Community dinner");
+  assert.ok(validEventVisual(fallback));
+  assert.deepEqual(fallback, fallbackEventVisual(42, "Community dinner"));
 });
