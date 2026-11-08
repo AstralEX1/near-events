@@ -4,10 +4,12 @@ Current status (2026-11-08): Vercel project `near-me-testnet` is linked from
 `web/`; the hosted `/e/4` flow last passed on 2026-11-07 with faucet-USDC
 registration, host-only event-detail save to Upstash, and off-chain check-in.
 It uses the Upstash Redis database `NearMeTestnet`.
-PR #21's TP5 contract was separately deployed and verified on a disposable
-testnet account; its state layout is incompatible with TP4. The Vercel app
-still targets TP4. No contract upgrade, app-default switch, or mainnet release
-has happened. Upstash reported `NearMeTestnet` active on 2026-11-08. A local
+PR #21 merged to `main` on 2026-11-08 as `e8329a6`; its TP5 contract was
+separately deployed and verified on a disposable testnet account. The follow-up
+main commit `0e25579` carries the remaining eight uncommitted StageShow/demo
+files. TP5 state layout is incompatible with TP4. The Vercel app still targets
+TP4. No contract upgrade, app-default switch, or mainnet release has happened.
+Upstash reported `NearMeTestnet` active on 2026-11-08. A local
 request that day could not resolve the Vercel hostname because this environment
 had no DNS/network access, so live uptime was not rechecked. Hosted secret
 values are intentionally not documented here.
@@ -110,11 +112,13 @@ for future storage commitments.
    refund agree with the final balance and receipt status.
 
 
-## PR #21 testnet QA
+## PR #21 testnet QA and merge
 
 Tested on 2026-11-07 by Codex against the PR head 4d0c93eb7e11dc9b481cc428996e95d7f1e19a68 in a separate worktree. GitHub Actions run 42367737200 passed web, contracts, and escrow-wasm. The downloaded artifact was built from that commit; its SHA-256 is 8107a7f92098e79aa1522a853adec0a950977ba4a463bfd8c2e8c5bd6508c387. Its NEAR code hash is 9ggN7z1oTekunzEceJGv6ufRwaW6smrfiUGNSt2HeRRG, matching the deployed code on escrow-tp5.tp5-codex-qa-20261107-a.testnet.
 
 The disposable deployment used usdc.tidepool-sandbox.testnet, verifier.tidepool-sandbox.testnet, and a fresh test relayer. Test accounts were tp5-codex-qa-20261107-a.testnet, host-b.tp5-codex-qa-20261107-b.testnet, guest-1.tp5-codex-qa-20261107-b.testnet, guest-2.tp5-codex-qa-20261107-b.testnet, guest-3.tp5-codex-qa-20261107-b.testnet, guest-4.tp5-codex-qa-20261107-b.testnet, stranger.tp5-codex-qa-20261107-b.testnet, and relayer.tp5-codex-qa-20261107-b.testnet. No credentials are recorded here.
+
+PR #21 was merged on 2026-11-08 as `e8329a603600bd08bc57733d0b24e5cffe25b2df`. Its final head `267f6d60b3434bc4df0e4b4ebc7ff70f5dc1abe8` passed GitHub Actions run [42441930530](https://github.com/AstralEX1/NearHackathon/actions/runs/42441930530): web tests and production build, contracts including both sandbox scenarios, and reproducible escrow WASM. The original main worktree also held eight later StageShow/demo changes; they were committed and pushed in `0e25579`. GitHub Actions run [42443470979](https://github.com/AstralEX1/NearHackathon/actions/runs/42443470979) then passed web (tests and production build), contracts/sandbox, and reproducible escrow WASM on that follow-up main commit. No deployment or app-default switch was part of the merge.
 
 | Handoff cases | Result | Testnet transaction evidence |
 |---|---|---|

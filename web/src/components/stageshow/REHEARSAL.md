@@ -24,8 +24,8 @@ The first app-native review identified compact cover visibility, QR generation, 
 
 ## Build and limits
 
-- `npm run build` was attempted. The default Turbopack run did not finish; the webpack build could not resolve `next/font/google` because this sandbox could not reach Google Fonts. Font configuration was left unchanged, so a production build is not verified.
-- `./node_modules/.bin/tsc --noEmit --pretty false` passed after the final app-native screen changes.
-- No unit tests were run. The revised Stageshow film and layout gates remain pending because the required Chrome binary is unavailable.
+- GitHub Actions run `42443470979` passed the web test suite and Next.js production build on the final merged source. A separate local production build attempt did not finish and was stopped.
+- `./node_modules/.bin/next typegen` followed by `./node_modules/.bin/tsc --noEmit --pretty false` passed after the final app-native screen changes.
+- The web unit suite passed in GitHub Actions; no Stageshow-specific unit tests were added. The revised film and layout gates remain pending because the required Chrome binary is unavailable.
 - Touch hardware, actual wallet/chain/storage flows, real QR scanning, other browsers, and production deployment were not checked.
 - Earlier film-sampling gaps and layout results apply to the superseded faux-phone scene only.
