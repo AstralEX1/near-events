@@ -81,13 +81,16 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 @media (max-width: 860px) { .cards { grid-template-columns: minmax(0, 1fr); } }
 .card { background: var(--soft); border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 14px; min-width: 0; transition: transform .25s ease; }
 .card:hover { transform: translateY(-4px); }
-.card .ill { height: 150px; border-radius: 16px; overflow: hidden; background: #ddd; }
-.card .ill img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card .ill { aspect-ratio: 3 / 2; border-radius: 16px; overflow: hidden; background: var(--soft); }
+.theme-art { display: block; }
+.theme-art img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .card h3 { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
 .card p { color: var(--muted); font-size: 16px; }
 .why { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 8px; margin-bottom: clamp(40px, 6vw, 64px); }
 @media (max-width: 860px) { .why { grid-template-columns: minmax(0, 1fr); } }
-.why article { border-top: 2px solid var(--ink); padding-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.why article { border-top: 2px solid var(--ink); padding-top: 14px; display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 6px 14px; align-items: center; }
+.why-art { grid-column: 1; grid-row: 1 / span 2; width: 88px; aspect-ratio: 3 / 2; border-radius: 12px; overflow: hidden; background: var(--bg); }
+.why article strong, .why article span { grid-column: 2; }
 .why strong { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
 .why span { color: var(--muted); font-size: 15px; line-height: 1.45; }
 
@@ -260,17 +263,17 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       </div>
       <div class="cards">
         <article class="card reveal">
-          <div class="ill"><img src="https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&amp;fit=crop&amp;w=800&amp;q=70" alt="" width="800" height="500" loading="lazy" /></div>
+          <picture class="ill theme-art"><source srcset="/landing/illustrations/event-shoe-dark.png" media="(prefers-color-scheme: dark)" /><img src="/landing/illustrations/event-shoe.png" alt="" width="1536" height="1024" loading="lazy" decoding="async" /></picture>
           <h3>RSVPs are pretty meaningless</h3>
           <p>People say yes to five free events and pick one that evening. Half the list never walks in.</p>
         </article>
         <article class="card reveal">
-          <div class="ill"><img src="https://images.unsplash.com/photo-1555244162-803834f70033?auto=format&amp;fit=crop&amp;w=800&amp;q=70" alt="" width="800" height="500" loading="lazy" /></div>
+          <picture class="ill theme-art"><source srcset="/landing/illustrations/event-costs-wallet-dark.png" media="(prefers-color-scheme: dark)" /><img src="/landing/illustrations/event-costs-wallet.png" alt="" width="1536" height="1024" loading="lazy" decoding="async" /></picture>
           <h3>Food and rooms still cost money</h3>
           <p>Free for guests isn’t free for you. You budget for 60, thirty show — or the hall looks full online and serious people can’t get a seat.</p>
         </article>
         <article class="card reveal">
-          <div class="ill"><img src="https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&amp;fit=crop&amp;w=800&amp;q=70" alt="" width="800" height="500" loading="lazy" /></div>
+          <picture class="ill theme-art"><source srcset="/landing/illustrations/attendee-community-dark.png" media="(prefers-color-scheme: dark)" /><img src="/landing/illustrations/attendee-community.png" alt="" width="1536" height="1024" loading="lazy" decoding="async" /></picture>
           <h3>Tickets scare people off</h3>
           <p>Charge $10 and your crowd goes to the free meetup across the street. A deposit isn’t a ticket — it’s skin in the game.</p>
         </article>
@@ -287,9 +290,9 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       </div>
 
       <div class="why reveal">
-        <article><strong>Filters before RSVP</strong><span>Only people willing to put skin in the game take a seat.</span></article>
-        <article><strong>Loss aversion after</strong><span>Once the deposit is in, skipping the night actually costs something.</span></article>
-        <article><strong>No-shows pay the room</strong><span>Who comes gets their money back plus a share of what the absentees left.</span></article>
+        <article><picture class="why-art theme-art"><source srcset="/landing/illustrations/qr-event-pass-dark.png" media="(prefers-color-scheme: dark)" /><img src="/landing/illustrations/qr-event-pass.png" alt="" width="1536" height="1024" loading="lazy" decoding="async" /></picture><strong>Filters before RSVP</strong><span>Only people willing to put skin in the game take a seat.</span></article>
+        <article><picture class="why-art theme-art"><source srcset="/landing/illustrations/commitment-pass-dark.png" media="(prefers-color-scheme: dark)" /><img src="/landing/illustrations/commitment-pass.png" alt="" width="1536" height="1024" loading="lazy" decoding="async" /></picture><strong>Loss aversion after</strong><span>Once the deposit is in, skipping the night actually costs something.</span></article>
+        <article><picture class="why-art theme-art"><source srcset="/landing/illustrations/door-check-in-dark.png" media="(prefers-color-scheme: dark)" /><img src="/landing/illustrations/door-check-in.png" alt="" width="1536" height="1024" loading="lazy" decoding="async" /></picture><strong>No-shows pay the room</strong><span>Who comes gets their money back plus a share of what the absentees left.</span></article>
       </div>
 
       <div class="steps">

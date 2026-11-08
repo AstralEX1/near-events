@@ -11,11 +11,13 @@ import { Avatar, StatusPill, shortAccount } from "@/components/ui";
 import { QrScanner } from "@/components/Qr";
 import { IntegrationGuide } from "@/components/IntegrationGuide";
 import { Overview } from "./Overview";
+import { PublicDetailsEditor } from "./PublicDetailsEditor";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 
-type Tab = "overview" | "guests" | "registration" | "integration";
+type Tab = "overview" | "event" | "guests" | "registration" | "integration";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "event", label: "Event page" },
   { id: "guests", label: "Guests" },
   { id: "registration", label: "Registration" },
   { id: "integration", label: "Integration" },
@@ -51,7 +53,7 @@ function ManageEvent() {
   const [origin, setOrigin] = useState("");
 
   const tabParam = search.get("tab");
-  const tab: Tab = tabParam === "guests" || tabParam === "registration" || tabParam === "integration" ? tabParam : "overview";
+  const tab: Tab = tabParam === "event" || tabParam === "guests" || tabParam === "registration" || tabParam === "integration" ? tabParam : "overview";
 
   const setTab = (t: Tab) => {
     const q = new URLSearchParams(search.toString());
@@ -308,6 +310,10 @@ function ManageEvent() {
           onFinalize={finalizeEvent}
         />
       )}
+
+      {tab === "event" && (isHost
+        ? <PublicDetailsEditor eventId={id} title={event.metadata.title} />
+        : <p className="text-sm text-muted">Only the event host can edit its public page.</p>)}
 
       {tab === "registration" && (
         <RegistrationTab

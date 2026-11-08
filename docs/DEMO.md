@@ -1,10 +1,16 @@
 # Demo video script (about 2 minutes)
 
-As last recorded on 2026-11-06, record the app against testnet
-(`npm --prefix web run dev`) after the `escrow-tp4` payment smoke passes. Do not
-present mainnet payment or EVM flows as live until the release checks in
+The hosted Vercel testnet demo at https://near-me-testnet.vercel.app/e/4 uses
+Upstash Redis and was last verified on 2026-11-07 with a faucet-USDC
+registration, event-detail save, and off-chain check-in. The app still targets
+TP4; the separately QA-verified TP5 contract is not the hosted target. For a
+clean recording, create a fresh event on Vercel or run
+the app locally (`npm --prefix web run dev`). Do not present mainnet payment or
+EVM flows as live until the release checks in
 [`DEPLOY.md`](DEPLOY.md) pass. Add a separate
-mainnet clip only after those checks. (Updated 2026-11-07, Codex)
+mainnet clip only after those checks. A local uptime check on 2026-11-08 could
+not resolve the Vercel hostname because DNS/network access was unavailable.
+(Updated 2026-11-08, Codex)
 
 | Time | Show | Say |
 |---|---|---|
@@ -17,6 +23,6 @@ mainnet clip only after those checks. (Updated 2026-11-07, Codex)
 | 1:50–2:00 | *Withdraw* on the event page or `/me` | "Guests can withdraw their payout through the available Intents path. Built at NEAR HACKATHON." |
 
 Before recording:
-- Run the testnet smoke against `escrow-tp4` and use the verified result; the deployment itself did not include a live payment.
+- The hosted smoke on event 4 is complete; run a fresh testnet smoke for a newly created demo event before recording it.
 - Seed a fresh event with `node web/scripts/seed-demo.mjs` (see the README for setup).
 - Use a second browser profile for the co-host so both views are signed in.

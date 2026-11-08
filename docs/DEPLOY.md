@@ -1,12 +1,21 @@
 # Web app hosting and escrow release
 
-Status last checked on 2026-11-07: escrow-tp4 behavior was verified with
-transactions and the local UI (step 4), and the separate disposable escrow-tp5
-PR #21 candidate was also verified as documented below. The app still targets
-tp4. The Vercel hosting steps had not been run. Recheck before using this as a
-current deployment status.
+Current status (2026-11-08): Vercel project `near-me-testnet` is linked from
+`web/`; the hosted `/e/4` flow last passed on 2026-11-07 with faucet-USDC
+registration, host-only event-detail save to Upstash, and off-chain check-in.
+It uses the Upstash Redis database `NearMeTestnet`.
+PR #21's TP5 contract was separately deployed and verified on a disposable
+testnet account; its state layout is incompatible with TP4. The Vercel app
+still targets TP4. No contract upgrade, app-default switch, or mainnet release
+has happened. Upstash reported `NearMeTestnet` active on 2026-11-08. A local
+request that day could not resolve the Vercel hostname because this environment
+had no DNS/network access, so live uptime was not rechecked. Hosted secret
+values are intentionally not documented here.
 
-## Vercel (recommended)
+## Vercel setup reference
+
+The current project is linked from `web/` and was deployed manually. Use these
+steps when setting up or relinking a Vercel project:
 1. Import the public repo in Vercel, **Root Directory = `web`**, framework Next.js
    (defaults for build `next build` and output are fine).
 2. Environment variables (Project → Settings → Environment Variables):
@@ -29,10 +38,9 @@ current deployment status.
    client (docs.auth.near.org → apply). Wallet and EVM login work
    anywhere.
 
-The Telegram bot's chat/event mapping and unfinished drafts are stored in
-`web/.data/telegram.json`, without a Redis adapter. This file is not durable on
-an ephemeral/serverless host; add persistent storage before enabling the bot
-webhook there. Check-ins and public event details use Upstash separately.
+Telegram bot work is outside the current project scope. Existing code and
+historical data remain parked; do not configure a bot token or webhook. Web
+check-ins, co-hosts and public event details use Upstash separately.
 
 For mainnet, switch the three `NEXT_PUBLIC_*` values to the mainnet escrow,
 `17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1` (USDC), and a
@@ -91,8 +99,10 @@ for future storage commitments.
    reopened the QR through `/e/1` and `/p/1`. Event 0 was finalized and its 1 USDC
    payout withdrawn to Intents. The ERC-191 registration and relayed-refund smoke
    passed on event 2. The direct ticket smoke script timed out waiting for an RPC
-   receipt, but read-only chain views confirmed its registration and pool. Vercel,
-   hosted sign-in/check-in, and Upstash behavior remain unchecked.
+   receipt, but read-only chain views confirmed its registration and pool. A
+   separate hosted check on event 4 then verified the Vercel app, Upstash save,
+   host-authorized event details, faucet-USDC registration, and off-chain
+   check-in. See the current deployment status above.
 5. Before enabling mainnet cross-chain payments, verify 1Click credits the
    guest's Intents account, the wallet signs registration and the escrow records it.
    Repeat with ERC-191 through the app relayer. Verify that a rejected registration
@@ -120,6 +130,6 @@ The disposable deployment used usdc.tidepool-sandbox.testnet, verifier.tidepool-
 
 The Tidepool 1Click smoke also passed through test USDT → Intents USDC → registration, duplicate-payment refund, and split cross-chain/Intents payout. The script confirmed successful delivery and balances, but did not record transaction hashes.
 
-Local verification: node --test tests/*.test.mjs passed 19/19, including door-team input validation. The smoke scripts now wait for eventual RPC state and compare balance deltas so previous disposable test balances do not invalidate a run. In the PR worktree, /e/21 rendered the finalized Ticket as “Paid out”; /e/22 showed the host and off-chain door-team member, then after removal showed no door member and rendered the checked-in guest as paid out. Signed disposable accounts passed /api/cohosts and /api/checkin authorization, add/remove, and stale-token rejection. /create and /create?flow=widget loaded; without a connected wallet, Continue remained disabled even for a valid amount. Wallet-driven creation, on-screen Door team validation hints, the Manage edit/cancel controls, /me and /u aggregation, and Telegram were not exercised; Telegram also lacked a bot token.
+Local verification: node --test tests/*.test.mjs passed 19/19, including door-team input validation. The smoke scripts now wait for eventual RPC state and compare balance deltas so previous disposable test balances do not invalidate a run. In the PR worktree, /e/21 rendered the finalized Ticket as “Paid out”; /e/22 showed the host and off-chain door-team member, then after removal showed no door member and rendered the checked-in guest as paid out. Signed disposable accounts passed /api/cohosts and /api/checkin authorization, add/remove, and stale-token rejection. /create and /create?flow=widget loaded; without a connected wallet, Continue remained disabled even for a valid amount. Wallet-driven creation, on-screen Door team validation hints, the Manage edit/cancel controls, and /me and /u aggregation were not exercised. Telegram bot flows are outside scope and were not tested.
 
-The wrong-token case (#7) was not run because it requires a second escrow initialized with a separate test token. The 1,000-event limit (#26) was not run, as directed. The account default in web/src/lib/config.ts remains escrow-tp4.nearevents-11022103.testnet; no mainnet or real-money flow was used. This local QA report has not been posted as a PR comment.
+The wrong-token case (#7) was not run because it requires a second escrow initialized with a separate test token. The 1,000-event limit (#26) was not run, as directed. The account default in web/src/lib/config.ts remains escrow-tp4.nearevents-11022103.testnet; no mainnet or real-money flow was used. This QA report is kept here as the verification record for PR #21; no separate PR comment was posted.

@@ -9,6 +9,7 @@ import { useWallet } from "@/lib/wallet";
 import { oneClickStatus } from "@/lib/oneclickClient";
 import { intentsUsdcBalance } from "@/lib/intents";
 import { Avatar, Cover, shortAccount } from "@/components/ui";
+import { SignInOptions } from "@/components/SignIn";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 
 export default function Me() {

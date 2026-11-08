@@ -25,11 +25,17 @@ Hackathon track focus: Real-World Money (USDC, NEAR Intents, gasless onboarding)
 
 ## Live on testnet
 
-As last recorded on 2026-11-06, the app uses the verified `escrow-tp4`
-deployment. Its code hash and USDC storage registration were checked, but the
-live registration/payment smoke, hosted demo setup, and mainnet release checks
-were still pending. Treat mainnet flows below as implementation details until
-those checks are confirmed complete.
+The app uses the verified `escrow-tp4` deployment. A hosted test event verified
+registration with faucet USDC, event-detail saving, and off-chain check-in.
+The Vercel demo is [near-me-testnet.vercel.app](https://near-me-testnet.vercel.app/e/4);
+it uses Upstash Redis for hosted event details and check-ins. The local env file
+is `/Users/astralex/nearhackathon/web/.env.local` (git-ignored, mode 600); secret
+values are not documented here. Mainnet release checks remain pending.
+
+The slim TP5 contract is included in the current source and was verified
+separately on a disposable testnet account. The hosted app still uses TP4;
+TP5 has an incompatible state layout and needs a fresh account plus a separately
+approved app switch. See [deployment and QA status](docs/DEPLOY.md).
 
 | What | Account |
 |---|---|
@@ -51,6 +57,9 @@ cp .env.example .env.local      # add local server settings from docs/DEPLOY.md 
 npm install
 npm run dev                     # http://localhost:3000
 ```
+
+For this workspace, that file is `/Users/astralex/nearhackathon/web/.env.local`.
+It contains local Upstash connection settings and `APP_SECRET`; keep it private.
 
 1. Open http://localhost:3000 and go to `/events`. Open and past events are read
    live from the testnet contract.
