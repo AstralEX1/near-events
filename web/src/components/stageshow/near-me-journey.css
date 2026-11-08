@@ -80,8 +80,8 @@
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.45;
-  transition: opacity 500ms ease, transform 500ms ease;
-  animation: nm-screen-arrive 500ms cubic-bezier(0.25, 0.8, 0.25, 1) both;
+  transition: opacity 700ms cubic-bezier(0.22, 0.72, 0.23, 1), transform 700ms cubic-bezier(0.22, 0.72, 0.23, 1);
+  animation: nm-screen-arrive 700ms cubic-bezier(0.22, 0.72, 0.23, 1) both;
 }
 
 /* StageShow resets element defaults outside CSS layers. Restore the same link
@@ -130,7 +130,7 @@
 }
 
 .nm-browser-screen[data-exiting] {
-  animation: nm-screen-exit 500ms ease forwards;
+  animation: nm-screen-exit 700ms cubic-bezier(0.22, 0.72, 0.23, 1) forwards;
 }
 
 .nm-screen-deck {

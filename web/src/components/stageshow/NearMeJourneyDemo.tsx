@@ -58,39 +58,39 @@ const CURSOR_REST = {
 };
 
 const story = async (a: Act<Journey>) => {
-  await a.wait(600);
-  await a.scroll("page-scroll", "registration-card", { duration: 500 });
+  await a.wait(800);
+  await a.scroll("page-scroll", "registration-card", { duration: 700 });
   a.mark("register");
   await a.click("join");
   a.put({ phase: 1 });
-  await a.move(CURSOR_REST, { duration: 420 });
+  await a.move(CURSOR_REST, { duration: 550 });
   a.mark("pass");
 
-  await a.wait(2500);
+  await a.wait(4000);
   a.mark("check-in");
   a.put({ phase: 1.5 });
-  await a.wait(600);
+  await a.wait(1200);
   await a.click("open-guests");
   a.put({ phase: 2.5 });
-  await a.wait(600);
+  await a.wait(800);
   a.put({ phase: 2.7 });
-  await a.wait(400);
+  await a.wait(1500);
   a.mark("check-in-click");
   await a.click("check-in");
   a.put({ phase: 3 });
 
-  await a.wait(2300);
+  await a.wait(2800);
   a.mark("closeout");
   a.put({ phase: 3.5 });
-  await a.wait(600);
+  await a.wait(1100);
   a.mark("close");
   await a.click("close");
   a.put({ phase: 4 });
-  await a.wait(500);
+  await a.wait(900);
   a.put({ phase: 5 });
-  await a.move(CURSOR_REST, { duration: 420 });
+  await a.move(CURSOR_REST, { duration: 550 });
   a.mark("payout");
-  await a.wait(2600);
+  await a.wait(3800);
 };
 
 function useSystemTheme(): Theme {
