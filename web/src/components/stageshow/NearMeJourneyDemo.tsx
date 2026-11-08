@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Stage,
   Swap,
@@ -10,6 +10,8 @@ import {
 } from "./kit";
 import { Avatar, DateBadge, StatusPill } from "@/components/ui";
 import { EventPoster, VisualBackdrop } from "@/components/EventVisual";
+import { AccountQr } from "@/components/Qr";
+import { HeaderPreview } from "@/components/Header";
 import "./kit/stageshow.css";
 import "./near-me-journey.css";
 
@@ -57,6 +59,7 @@ const CURSOR_REST = {
 
 const story = async (a: Act<Journey>) => {
   await a.wait(600);
+  await a.scroll("page-scroll", "registration-card", { duration: 500 });
   a.mark("register");
   await a.click("join");
   a.put({ phase: 1 });
@@ -67,8 +70,11 @@ const story = async (a: Act<Journey>) => {
   a.mark("check-in");
   a.put({ phase: 1.5 });
   await a.wait(600);
-  a.put({ phase: 2 });
-  await a.wait(650);
+  await a.click("open-guests");
+  a.put({ phase: 2.5 });
+  await a.wait(600);
+  a.put({ phase: 2.7 });
+  await a.wait(400);
   a.mark("check-in-click");
   await a.click("check-in");
   a.put({ phase: 3 });
@@ -77,10 +83,10 @@ const story = async (a: Act<Journey>) => {
   a.mark("closeout");
   a.put({ phase: 3.5 });
   await a.wait(600);
-  a.put({ phase: 4 });
-  await a.wait(500);
   a.mark("close");
   await a.click("close");
+  a.put({ phase: 4 });
+  await a.wait(500);
   a.put({ phase: 5 });
   await a.move(CURSOR_REST, { duration: 420 });
   a.mark("payout");
@@ -188,10 +194,13 @@ function AppScreen({ phase, compact }: { phase: number; compact: boolean }) {
           exiting={phase > 1}
         />
       )}
-      {phase >= 1.5 && phase < 4 && (
+      {phase >= 1.5 && phase < 2.7 && (
+        <HostOverview key="overview" compact={compact} exiting={phase >= 2.5} />
+      )}
+      {phase >= 2.5 && phase < 4 && (
         <HostGuestList
           key="guests"
-          phase={phase >= 3 ? 3 : 2}
+          phase={phase >= 3 ? 3 : phase >= 2.5 ? 2.5 : 2}
           compact={compact}
           exiting={phase > 3}
         />
@@ -204,24 +213,8 @@ function AppScreen({ phase, compact }: { phase: number; compact: boolean }) {
   );
 }
 
-function AppHeader({ compact = false }: { compact?: boolean }) {
-  return (
-    <header className="nm-site-header">
-      <div className="nm-site-header__inner">
-        <div className="nm-brand">
-          <span className="nm-brand__mark">N</span>
-          <span>Near Me</span>
-        </div>
-        <span className="nm-network">testnet</span>
-        <nav className="nm-site-nav" aria-label="Main navigation">
-          {!compact && <span>Events</span>}
-          <span>Create</span>
-          <span>Integrate</span>
-          <span className="nm-signin">Sign in</span>
-        </nav>
-      </div>
-    </header>
-  );
+function AppHeader({ path = "/e/4", accountId = null }: { path?: string; accountId?: string | null }) {
+  return <HeaderPreview path={path} accountId={accountId} />;
 }
 
 function GuestEventPage({
@@ -233,10 +226,19 @@ function GuestEventPage({
   compact: boolean;
   exiting?: boolean;
 }) {
+  const mainRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!compact || phase < 5) return;
+    requestAnimationFrame(() => {
+      mainRef.current?.querySelector<HTMLElement>('[data-target="registration-card"]')?.scrollIntoView({ block: "start" });
+    });
+  }, [compact, phase]);
+
   return (
     <div className="nm-browser-screen" data-compact={compact || undefined} data-exiting={exiting || undefined}>
-      <AppHeader compact={compact} />
-      <main className="nm-site-main">
+      <AppHeader accountId={phase >= 1 ? "kai.mori.near" : null} />
+      <main ref={mainRef} className="nm-site-main ss-scroll" data-target="page-scroll">
         <VisualBackdrop visual={EVENT_VISUAL} className="nm-event-backdrop">
             <div className="nm-event-layout-inner">
               <aside className="nm-event-aside">
@@ -280,28 +282,36 @@ function GuestEventPage({
                 </div>
 
                 {phase >= 5 ? (
-                  <div className="card overflow-hidden bg-surface/80">
+                  <div className="card overflow-hidden bg-surface/80" data-target="registration-card">
                     <div className="nm-registration-heading">Registration</div>
                     <div className="nm-registration-body nm-payout-copy">
                       <p>You showed up. 10 of 15 came. You have <strong>15 USDC</strong>.</p>
-                      <button type="button" className="btn btn-accent w-full" aria-label="Withdraw 15 USDC">Withdraw 15 USDC</button>
-                      <p className="text-xs text-muted">Ready to withdraw from your Near Me balance.</p>
+                      <div className="nm-cashout-preview">
+                        <div className="nm-cashout-title">Withdraw to any chain or wallet</div>
+                        <input className="input" placeholder="Amount (all: 15 USDC)" readOnly aria-label="Withdrawal amount" />
+                        <select className="input nm-cashout-destination" defaultValue="near-intents" aria-label="Withdrawal destination">
+                          <option value="near-intents">USDC in NEAR Intents (near.com and other Intents wallets)</option>
+                        </select>
+                        <input className="input font-mono text-sm" value="kai.mori.near" readOnly aria-label="Recipient account" />
+                        <div className="btn btn-primary w-full" aria-hidden="true">Withdraw 15 USDC</div>
+                        <p className="text-xs text-muted">Through NEAR Intents. If a swap fails, the USDC returns to your NEAR Intents balance.</p>
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="card overflow-hidden bg-surface/80">
+                  <div className="card overflow-hidden bg-surface/80" data-target="registration-card">
                     <div className="nm-registration-heading">Registration</div>
                     <div className="nm-registration-body">
                       {phase < 1 ? (
                         <>
                           <button type="button" className="btn btn-accent w-full !py-3.5" data-target="join">
-                            Join · 10 USDC
+                            Register · 10 USDC
                           </button>
                           <p className="nm-registration-note">Come and get your deposit back plus a share of the no-shows.</p>
                         </>
                       ) : (
                         <div className="nm-next-steps">
-                          <img className="nm-qr" src="/near-me-demo-qr.svg" alt="" />
+                          <div className="nm-qr-frame"><AccountQr account="kai.mori.near" size={compact ? 112 : 132} /></div>
                           <div>
                             <h2>You’re going</h2>
                             <p className="nm-registration-note">Show this code at the door to get checked in.</p>
@@ -321,8 +331,8 @@ function GuestEventPage({
     );
 }
 
-function HostHeader({ compact }: { compact: boolean }) {
-  return <AppHeader compact={compact} />;
+function HostHeader() {
+  return <AppHeader path="/e/4/manage" accountId="maya.rahman.near" />;
 }
 
 function ManageHeading() {
@@ -351,11 +361,54 @@ function ManageTabs({ selected }: { selected: "overview" | "guests" }) {
   );
 }
 
-function HostGuestList({ phase, compact, exiting = false }: { phase: number; compact: boolean; exiting?: boolean }) {
-  const checkedIn = phase >= 3;
+function HostOverview({ compact, exiting = false }: { compact: boolean; exiting?: boolean }) {
   return (
     <div className="nm-browser-screen" data-compact={compact || undefined} data-exiting={exiting || undefined}>
-      <HostHeader compact={compact} />
+      <HostHeader />
+      <main className="nm-site-main nm-manage-main">
+        <ManageHeading />
+        <ManageTabs selected="overview" />
+        <section className="nm-manage-summary">
+          <div>
+            <span className="nm-manage-eyebrow">At a Glance</span>
+            <h2>15 Going <span>· 9 in</span></h2>
+            {!compact && <p>~15 USDC each if you close now</p>}
+          </div>
+        </section>
+        <section className="nm-overview-actions">
+          <div className="card nm-overview-tile">
+            <strong>Invite Guests</strong>
+            <span>Share page or payment link</span>
+          </div>
+          <button type="button" className="card nm-overview-tile" data-target="open-guests">
+            <strong>Check In Guests</strong>
+            <span>Scan QR at the door</span>
+          </button>
+          <div className="card nm-overview-tile">
+            <strong>Guest List</strong>
+            <span>Paid deposits below</span>
+          </div>
+        </section>
+        <section className="nm-recent-registrations">
+          <h2>Recent Registrations</h2>
+          <div className="card nm-recent-row">
+            <Avatar account="kai.mori.near" size={36} />
+            <span>kai.mori.near</span>
+            <span className="nm-checked-pill">Going</span>
+          </div>
+        </section>
+      </main>
+      <SiteFooter compact={compact} />
+    </div>
+  );
+}
+
+function HostGuestList({ phase, compact, exiting = false }: { phase: number; compact: boolean; exiting?: boolean }) {
+  const checkedIn = phase >= 3;
+  const scanned = phase >= 2.5 && !checkedIn;
+  return (
+    <div className="nm-browser-screen" data-compact={compact || undefined} data-exiting={exiting || undefined}>
+      <HostHeader />
       <main className="nm-site-main nm-manage-main">
         <ManageHeading />
         <ManageTabs selected="guests" />
@@ -365,13 +418,23 @@ function HostGuestList({ phase, compact, exiting = false }: { phase: number; com
             <h2>15 Going <span>·</span> <Swap id={checkedIn ? "ten-in" : "nine-in"}>{checkedIn ? "10" : "9"}</Swap> in</h2>
             {!compact && <p>~15 USDC each if you close now</p>}
           </div>
-          <button type="button" className="btn btn-ghost nm-scan-button">Scan QR codes</button>
         </section>
+        {scanned && (
+          <section className="nm-scan-preview card">
+            <div className="nm-scan-preview__frame"><span /></div>
+            <div className="nm-scan-preview__copy">
+              <h2>Scan guest codes</h2>
+              <p><strong>kai.mori.near</strong> queued. Confirm check-in when ready.</p>
+            </div>
+            <button type="button" className="btn btn-accent nm-scan-confirm" data-target="check-in">Check in 1 scanned guest</button>
+          </section>
+        )}
         <section className="nm-guest-list">
           <div className="nm-guest-list__header">
             <h2>Guest List</h2>
-            <span>15 registered</span>
+            <button type="button" className="btn btn-ghost !py-1.5 text-sm" disabled>Download CSV</button>
           </div>
+          <div className="nm-guest-search"><input className="input text-sm" placeholder="Find by account" aria-label="Find guest" readOnly /></div>
           <div className="nm-guest-row" data-focused={!checkedIn || undefined}>
             <Avatar account="kai.mori.near" size={36} />
             <div className="nm-guest-row__copy">
@@ -381,7 +444,7 @@ function HostGuestList({ phase, compact, exiting = false }: { phase: number; com
             {checkedIn ? (
               <span className="nm-checked-pill">✓ In</span>
             ) : (
-              <button type="button" className="btn btn-ghost !py-2 !px-3 text-sm" data-target="check-in">Check in</button>
+              <button type="button" className="btn btn-ghost !py-2 !px-3 text-sm">Check in</button>
             )}
           </div>
           <div className="nm-guest-row">
@@ -406,19 +469,19 @@ function HostCloseout({ phase, compact }: { phase: number; compact: boolean }) {
   const closed = phase >= 4;
   return (
     <div className="nm-browser-screen" data-compact={compact || undefined}>
-      <HostHeader compact={compact} />
+      <HostHeader />
       <main className="nm-site-main nm-manage-main">
         <ManageHeading />
         <ManageTabs selected="overview" />
         <section className="nm-closeout-summary">
           <div className="nm-manage-eyebrow">At a Glance</div>
           <h2>15 Going <span>· 10 in</span></h2>
-          <p>~15 USDC each if you close now</p>
+          <p>{closed ? "15 USDC each ready to withdraw" : "~15 USDC each if you close now"}</p>
         </section>
         <section className="card nm-closeout-card">
           <div>
             <h2>{closed ? "Event closed" : "The event is over. Close it to pay out."}</h2>
-            <p>10 of 15 checked in. Closing splits 150 USDC: 15 USDC each.</p>
+            <p>{closed ? "10 of 15 checked in. Each guest can withdraw 15 USDC." : "10 of 15 checked in. Closing splits 150 USDC: 15 USDC each."}</p>
           </div>
           <button type="button" className="btn btn-accent" data-target="close">
             {closed ? "Event closed" : "Close event & pay out"}
