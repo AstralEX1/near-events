@@ -3,16 +3,19 @@
 Current status (2026-11-08): Vercel project `near-me-testnet` is linked from
 `web/`; the hosted `/e/4` flow last passed on 2026-11-07 with faucet-USDC
 registration, host-only event-detail save to Upstash, and off-chain check-in.
-It uses the Upstash Redis database `NearMeTestnet`.
+It uses the Upstash Redis database `NearMeTestnet`. After Vercel CLI login, a
+production deployment from clean remote `main` commit `5176910` reached READY.
+The production home page and `/e/4` both returned HTTP 200. Local uncommitted
+StageShow timing edits were excluded from this deploy.
 PR #21 merged to `main` on 2026-11-08 as `e8329a6`; its TP5 contract was
 separately deployed and verified on a disposable testnet account. The follow-up
 main commit `0e25579` carries the remaining eight uncommitted StageShow/demo
 files. TP5 state layout is incompatible with TP4. The Vercel app still targets
 TP4. No contract upgrade, app-default switch, or mainnet release has happened.
-Upstash reported `NearMeTestnet` active on 2026-11-08. A local
-request that day could not resolve the Vercel hostname because this environment
-had no DNS/network access, so live uptime was not rechecked. Hosted secret
-values are intentionally not documented here.
+Upstash reported `NearMeTestnet` active on 2026-11-08. An earlier local request
+that day could not resolve the Vercel hostname; the production checks above
+confirmed the hostname was reachable after authentication. Hosted secret values
+are intentionally not documented here.
 
 ## Vercel setup reference
 
