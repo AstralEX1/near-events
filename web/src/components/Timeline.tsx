@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { formatUsdc, priceLabel, type EventView } from "@/lib/near";
+import { formatUsdc, priceLabel, isTicket, type EventView } from "@/lib/near";
 import { Cover } from "./ui";
 
 /** Luma-style list: a date on the left, that day's events as cards on the right. */
@@ -24,7 +24,7 @@ export function Timeline({ items, empty }: { items: EventView[]; empty: string }
             </div>
             <div className="space-y-3">
               {list.map((e) => (
-                <Link key={e.id} href={`/e/${e.id}`} className="card p-4 flex gap-4 hover:border-accent/40 transition-colors">
+                <Link key={e.id} href={`/e/${e.id}`} className="gc-list-card p-5 flex gap-4">
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="text-sm text-muted">
                       {new Date(e.metadata.starts_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
@@ -33,7 +33,7 @@ export function Timeline({ items, empty }: { items: EventView[]; empty: string }
                     <div className="text-sm pt-1">
                       {e.status === "Finalized" ? (
                         <span className="text-muted">
-                          {e.attended_count} of {e.guest_count} came · {formatUsdc(e.payout_per_attendee)} USDC each
+                          {e.attended_count} of {e.guest_count} came{!isTicket(e) && ` · ${formatUsdc(e.payout_per_attendee)} USDC per checked-in guest`}
                         </span>
                       ) : e.status === "Cancelled" ? (
                         <span className="text-muted">Cancelled</span>

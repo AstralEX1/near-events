@@ -69,7 +69,7 @@ export default function EmbedCard() {
   };
 
   return (
-    <div ref={root} className="embed p-px" style={embedVars(style)}>
+    <div ref={root} className="embed p-px" data-theme={style.theme} style={embedVars(style)}>
       {event === undefined && <div className="card p-4 text-sm text-muted">{loadError ? "Could not load this deposit. Check your connection and reload." : "Loading…"}</div>}
       {event === null && <div className="card p-4 text-sm text-muted">This deposit was not found.</div>}
       {event && (

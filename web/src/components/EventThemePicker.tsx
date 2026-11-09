@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createRandomVisual, EVENT_THEME_GROUPS, EVENT_THEMES, resolveEventVisual, type EventThemeGroup, type EventVisualConfig } from "@/lib/event-visuals";
-import { EventPoster, VisualBackdrop } from "@/components/EventVisual";
+import { EventPoster } from "@/components/EventVisual";
 
 export function EventThemePicker({ value, title, coverUrl, onChange }: {
   value: EventVisualConfig;
@@ -10,7 +10,7 @@ export function EventThemePicker({ value, title, coverUrl, onChange }: {
   coverUrl?: string | null;
   onChange: (visual: EventVisualConfig) => void;
 }) {
-  const [group, setGroup] = useState<EventThemeGroup>("blockchain");
+  const [group, setGroup] = useState<EventThemeGroup>("near-me");
   const [open, setOpen] = useState(false);
   const selected = resolveEventVisual(value);
   useEffect(() => setGroup(selected.theme.group), [selected.theme.group]);
@@ -18,27 +18,11 @@ export function EventThemePicker({ value, title, coverUrl, onChange }: {
   const heading = title.trim() || "Your event title";
 
   return (
-    <section className="space-y-3" aria-label="Event theme">
-      <div className="grid grid-cols-[minmax(0,1fr)_7rem] sm:grid-cols-[minmax(0,1fr)_8rem] gap-3 items-end">
-        <VisualBackdrop visual={value} className="h-24 sm:h-32 rounded-xl p-2 flex items-end text-white">
-          <div className="relative max-w-full truncate rounded-lg bg-black/30 backdrop-blur-sm px-2 py-1 text-[11px] font-medium">
-            {selected.theme.group === "paradise" ? "Paradise · Bali & islands" : `${selected.theme.name} background`}
-          </div>
-        </VisualBackdrop>
-        <div className="space-y-2">
-          <button
-            id="event-theme-toggle"
-            type="button"
-            className="btn btn-ghost w-full !py-1.5 text-sm"
-            aria-expanded={open}
-            aria-controls="event-theme-options"
-            aria-label={open ? "Close event theme settings" : `Change event theme, current theme ${selected.theme.name}`}
-            onClick={() => setOpen((value) => !value)}
-          >
-            {open ? "Done" : "Theme"}
-          </button>
-          <EventPoster title={heading} visual={value} coverUrl={coverUrl} className="aspect-square rounded-xl shadow-sm" />
-        </div>
+    <section className="space-y-4" aria-label="Event theme">
+      <EventPoster title={heading} visual={value} coverUrl={coverUrl} className="aspect-square w-full rounded-3xl" />
+      <div className="flex items-center justify-between gap-3">
+        <div><div className="text-sm font-medium">{selected.theme.name}</div><p className="text-xs text-muted">Your event, your look</p></div>
+        <button id="event-theme-toggle" type="button" className="btn btn-ghost text-sm" aria-expanded={open} aria-controls="event-theme-options" onClick={() => setOpen(!open)}>{open ? "Done" : "Change theme"}</button>
       </div>
 
       <div id="event-theme-options" hidden={!open} className="space-y-3 rounded-xl border border-border bg-surface p-3">
@@ -71,8 +55,8 @@ export function EventThemePicker({ value, title, coverUrl, onChange }: {
                 <button key={theme.id} type="button" aria-pressed={active} onClick={() => onChange(createRandomVisual(theme.id))}
                   className={`rounded-xl border p-2.5 text-left transition ${active ? "border-accent ring-1 ring-accent" : "border-border hover:border-muted"}`}>
                   <span className="flex items-center gap-2 min-w-0">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white" style={{ background: `linear-gradient(140deg, ${colors[0]}, ${colors[1]})` }}>
-                      {icon ? <img src={icon} alt="" aria-hidden="true" className={`h-5 w-5 object-contain ${iconClass}`} /> : theme.mark}
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white" style={{ background: theme.group === "near-me" ? colors[1] : `linear-gradient(140deg, ${colors[0]}, ${colors[1]})`, color: theme.group === "near-me" ? colors[0] : undefined }}>
+                      {icon ? <img src={icon} alt="" aria-hidden="true" className={`h-5 w-5 object-contain ${iconClass}`} /> : theme.group === "near-me" ? "n" : theme.mark}
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium">{theme.name}</span>

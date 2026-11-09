@@ -212,7 +212,7 @@ function ManageEvent() {
   const payUrl = `${origin}/p/${id}`;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-16">
+    <div className="max-w-4xl mx-auto space-y-7 pb-16">
       {/* Header — Luma: breadcrumb + title + Event Page */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -224,7 +224,7 @@ function ManageEvent() {
             <span className="text-muted">Manage</span>
           </p>
           <div className="flex items-center gap-2.5 mt-1 min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight truncate">{event.metadata.title}</h1>
+            <h1 className="gc-page-title break-words">{event.metadata.title}</h1>
             {event.status !== "Open" && <StatusPill status={event.status} />}
           </div>
         </div>
@@ -234,15 +234,13 @@ function ManageEvent() {
       </div>
 
       {/* Tabs */}
-      <nav className="flex gap-5 border-b border-border overflow-x-auto" aria-label="Manage sections">
+      <nav className="gc-manage-tabs" aria-label="Manage sections">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`pb-3 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
-              tab === t.id ? "border-text text-text" : "border-transparent text-muted hover:text-text"
-            }`}
+            aria-pressed={tab === t.id}
           >
             {t.label}
           </button>

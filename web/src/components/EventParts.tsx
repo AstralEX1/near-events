@@ -30,7 +30,7 @@ export function RulesBox({ event }: { event: EventView }) {
         <div>
           <div className="font-semibold text-accent">Good to know</div>
           <ul className="list-disc pl-5 mt-1 space-y-0.5">
-            <li>If the host cancels, or never closes the event within 30 days, everyone gets the ticket money back.</li>
+            <li>If the host cancels, refunds go to your Near Me balance. If the event stays open for 30 days, a refund can be requested.</li>
             <li>No platform fee.</li>
           </ul>
         </div>
@@ -47,7 +47,7 @@ export function RulesBox({ event }: { event: EventView }) {
             The host checks you in at the door. Deposits of people who don’t come are <b>split equally among those who
             came</b>.
           </li>
-          <li>After the event your deposit and your share land in your balance. Withdraw any time.</li>
+          <li>After the host closes the event, your deposit and share are credited to your Near Me balance. You can then withdraw.</li>
         </ul>
       </div>
       <div>
@@ -55,7 +55,7 @@ export function RulesBox({ event }: { event: EventView }) {
         <ul className="list-disc pl-5 mt-1 space-y-0.5">
           <li>You can’t cancel once you’re registered.</li>
           <li>Only a check-in by the host or their door team counts.</li>
-          <li>If the host cancels, or never closes the event within 30 days, everyone gets their deposit back.</li>
+          <li>If the host cancels, refunds go to your Near Me balance. If the event stays open for 30 days, a refund can be requested.</li>
           <li>The money is held by a NEAR smart contract, not the organizer. No platform fee.</li>
         </ul>
       </div>
@@ -152,10 +152,10 @@ export function NextSteps({ event, accountId }: { event: EventView; accountId: s
   const url = typeof window === "undefined" ? "" : `${window.location.origin}/e/${event.id}`;
   const [cal, setCal] = useState(false);
   return (
-    <div className="flex gap-5 items-center">
-      <AccountQr account={accountId} size={132} />
-      <div className="space-y-1.5 min-w-0">
-        <div className="font-semibold text-xl">You’re going</div>
+    <div className="gc-pass">
+      <div className="gc-pass-code"><AccountQr account={accountId} size={160} /></div>
+      <div className="gc-pass-copy space-y-2 min-w-0">
+        <div className="font-semibold text-xl">You’re on the list.</div>
         <p className="text-sm text-muted">Show this code at the door to get checked in.</p>
         {cal ? (
           <div className="flex gap-3 text-sm font-medium">

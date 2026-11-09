@@ -70,8 +70,6 @@ export function embedReturnPath(value: string | null, eventId: number): string |
   }
 }
 
-const LIGHT = { "--bg": "#ffffff", "--surface": "#ffffff", "--text": "#16161a", "--muted": "#6b6b76", "--border": "#ebebef" };
-const DARK = { "--bg": "#111114", "--surface": "#1a1a1f", "--text": "#f2f2f4", "--muted": "#9a9aa6", "--border": "#2a2a31" };
 const FONTS = {
   geist: "var(--font-geist-sans), system-ui, sans-serif",
   poppins: "var(--font-poppins), system-ui, sans-serif",
@@ -81,10 +79,9 @@ const FONTS = {
 /** CSS variables that override the app theme inside the embed. */
 export function embedVars(s: EmbedStyle): CSSProperties {
   const vars: Record<string, string> = { "--embed-font": FONTS[s.font] };
-  if (s.theme === "light") Object.assign(vars, LIGHT);
-  if (s.theme === "dark") Object.assign(vars, DARK);
   if (s.accent) {
     vars["--accent"] = s.accent;
+    vars["--on-accent"] = "#ffffff";
     vars["--accent-soft"] = `color-mix(in srgb, ${s.accent} 14%, transparent)`;
   }
   vars["--embed-display"] = s.display === "serif" ? "var(--font-serif), Georgia, serif" : vars["--embed-font"];

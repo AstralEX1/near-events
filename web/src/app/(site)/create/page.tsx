@@ -72,7 +72,7 @@ function CreateEvent() {
   const [created, setCreated] = useState<EventView | null>(null);
   const [createdDetails, setCreatedDetails] = useState<EventDetails | null>(null);
   const [createdCohosts, setCreatedCohosts] = useState<string[]>([]);
-  const [eventVisual, setEventVisual] = useState<EventVisualConfig>({ themeId: "near", seed: 0 });
+  const [eventVisual, setEventVisual] = useState<EventVisualConfig>({ themeId: "studio", seed: 0 });
   const [createdVisual, setCreatedVisual] = useState<EventVisualConfig | null>(null);
   const [detailsSaveError, setDetailsSaveError] = useState<string | null>(null);
   const [savingDetails, setSavingDetails] = useState(false);
@@ -327,11 +327,11 @@ function CreateEvent() {
   return (
     <>
       <EventPageBackground visual={eventVisual} />
-      <form onSubmit={submit} className="max-w-[920px] mx-auto pb-40 grid gap-6 md:gap-8 md:grid-cols-[300px_minmax(0,1fr)] items-start">
-        <div className="relative z-20 md:sticky md:top-20">
+      <form onSubmit={submit} className="max-w-[920px] mx-auto pb-40 grid grid-cols-1 gap-6 md:gap-8 md:grid-cols-[300px_minmax(0,1fr)] items-start">
+        <div className="relative min-w-0 z-20 md:sticky md:top-20">
           <EventThemePicker value={eventVisual} title={form.title} coverUrl={safeImageUrl(form.cover_url)} onChange={setEventVisual} />
         </div>
-        <div className="min-w-0 space-y-4">
+        <div className="gc-create-form min-w-0 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="lu-chip">
               {accountId ? <span className="truncate max-w-44">{accountId}</span> : "Your events"}
@@ -572,10 +572,10 @@ function DTRow({ label, dot, date, time, onChange, invalid }: { label: string; d
   const dateRef = useRef<HTMLInputElement>(null);
   const [slots, setSlots] = useState(false);
   return (
-    <div className="flex items-center gap-3 py-1">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1">
       <span className={`relative z-10 w-2.5 h-2.5 rounded-full shrink-0 ${dot === "fill" ? "bg-muted" : "border border-muted bg-[var(--bg)]"}`} />
       <span className="flex-1 text-muted">{label}</span>
-      <div className={`flex rounded-lg gap-px ${invalid ? "ring-1 ring-warn" : ""}`}>
+      <div className={`flex ml-auto rounded-lg gap-px ${invalid ? "ring-1 ring-warn" : ""}`}>
         <label className="lu-pill rounded-l-lg relative cursor-pointer w-[124px]">
           {dayLabel(date)}
           <input

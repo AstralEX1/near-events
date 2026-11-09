@@ -1,4 +1,5 @@
 export const EVENT_THEME_GROUPS = [
+  { id: "near-me", label: "Near Me" },
   { id: "blockchain", label: "Blockchain" },
   { id: "paradise", label: "Paradise" },
   { id: "ai", label: "AI" },
@@ -7,6 +8,12 @@ export const EVENT_THEME_GROUPS = [
 export type EventThemeGroup = (typeof EVENT_THEME_GROUPS)[number]["id"];
 
 export const EVENT_THEMES = [
+  { id: "studio", name: "Studio", group: "near-me", note: "Soft lavender", mark: "near me" },
+  { id: "garden", name: "Garden", group: "near-me", note: "Fresh sage", mark: "near me" },
+  { id: "sunset", name: "Sunset", group: "near-me", note: "Warm apricot", mark: "near me" },
+  { id: "afterhours", name: "Afterhours", group: "near-me", note: "Deep aubergine", mark: "near me" },
+  { id: "paper", name: "Paper", group: "near-me", note: "Quiet and simple", mark: "near me" },
+  { id: "photo", name: "Photo", group: "near-me", note: "A place to meet", mark: "near me" },
   { id: "ethereum", name: "Ethereum", group: "blockchain", note: "Iridescent facets", mark: "Ξ", icon: "/landing/icons/eth.svg" },
   { id: "bitcoin", name: "Bitcoin", group: "blockchain", note: "Warm copper grain", mark: "₿", icon: "/landing/icons/btc.svg" },
   { id: "base", name: "Base", group: "blockchain", note: "Electric blue layers", mark: "BASE" },
@@ -60,6 +67,12 @@ const AI_PANEL_POSITION: Partial<Record<EventThemeId, string>> = {
 };
 
 const PALETTES: Record<EventThemeId, [string, string, string][]> = {
+  studio: [["#24212e", "#c3b6f2", "#e8dff7"], ["#24212e", "#d3c7f4", "#eee8fa"], ["#24212e", "#b9c4ed", "#e3e7f6"]],
+  garden: [["#253b30", "#cedfcb", "#e7eee0"], ["#253b30", "#bbd5c5", "#deeadc"], ["#253b30", "#d8dfbb", "#edf0da"]],
+  sunset: [["#4a292c", "#f3b99f", "#f8dfc9"], ["#4a292c", "#efc4af", "#fae8d4"], ["#4a292c", "#edb5b7", "#f6d9d5"]],
+  afterhours: [["#f7f5f0", "#24212e", "#c3b6f2"], ["#f7f5f0", "#30243a", "#d3b4dd"], ["#f7f5f0", "#202c32", "#b6cfcd"]],
+  paper: [["#24212e", "#f0e9de", "#c3b6f2"], ["#24212e", "#ebe7e0", "#cedfcb"], ["#24212e", "#f4e8dd", "#f3b99f"]],
+  photo: [["#24212e", "#cedfcb", "#f7f5f0"], ["#24212e", "#c3b6f2", "#f7f5f0"], ["#24212e", "#f3b99f", "#f7f5f0"]],
   ethereum: [["#171735", "#6959d9", "#8ce4de"], ["#172b42", "#536ad0", "#d8b8ff"], ["#32204a", "#ab79d6", "#89daca"]],
   bitcoin: [["#2b190c", "#f7931a", "#ffd783"], ["#381b10", "#d36a16", "#ffe5ad"], ["#271d18", "#b66d3a", "#f4b158"]],
   base: [["#061e47", "#165dff", "#8cc8ff"], ["#102b70", "#3875ff", "#b5dbff"], ["#071936", "#2861dd", "#74e4ff"]],
@@ -74,6 +87,9 @@ const PALETTES: Record<EventThemeId, [string, string, string][]> = {
 };
 
 const TEXTURES: Record<EventThemeId, string[]> = {
+  studio: ["none", "none", "none"], garden: ["none", "none", "none"],
+  sunset: ["none", "none", "none"], afterhours: ["none", "none", "none"],
+  paper: ["none", "none", "none"], photo: ["none", "none", "none"],
   ethereum: [
     "repeating-linear-gradient(135deg, #ffffff18 0 1px, transparent 1px 18px), repeating-linear-gradient(45deg, #c5b5ff12 0 1px, transparent 1px 24px)",
     "radial-gradient(ellipse at 80% 20%, #ffffff30 0 1px, transparent 2px), repeating-radial-gradient(ellipse at 50% 50%, #d4c8ff19 0 1px, transparent 2px 24px)",
@@ -153,17 +169,14 @@ export function createRandomVisual(themeId: EventThemeId): EventVisualConfig {
 }
 
 export function createRandomEventVisual(): EventVisualConfig {
-  const seed = new Uint32Array(1);
-  if (typeof crypto !== "undefined" && "getRandomValues" in crypto) crypto.getRandomValues(seed);
-  else seed[0] = Math.floor(Math.random() * 0x1_0000_0000);
-  const theme = EVENT_THEMES[seed[0] % EVENT_THEMES.length];
-  return { themeId: theme.id, seed: (seed[0] ^ 0xa5a5a5a5) >>> 0 };
+  return createRandomVisual("studio");
 }
 
 export function fallbackEventVisual(eventId: number, title: string): EventVisualConfig {
   let h = (eventId ^ 0x9e3779b9) >>> 0;
   for (let i = 0; i < title.length; i++) h = Math.imul(h ^ title.charCodeAt(i), 0x85ebca6b) >>> 0;
-  const theme = EVENT_THEMES[h % EVENT_THEMES.length];
+  const legacyThemes = EVENT_THEMES.filter((item) => item.group !== "near-me");
+  const theme = legacyThemes[h % legacyThemes.length];
   return { themeId: theme.id, seed: h };
 }
 
@@ -177,15 +190,15 @@ export function resolveEventVisual(config: EventVisualConfig): ResolvedEventVisu
   return {
     config: { themeId: theme.id, seed: safeSeed },
     theme,
-    backgroundAsset: paradiseImage ?? (aiPanel ? AI_TEXTURE_SHEET : null),
+    backgroundAsset: theme.id === "photo" ? "/event-themes/paradise/canggu-nomad.jpg" : paradiseImage ?? (aiPanel ? AI_TEXTURE_SHEET : null),
     backgroundPosition: aiPanel ?? "center",
     backgroundSize: aiPanel ? "500% 100%" : "cover",
-    coverAsset: aiPanel ? AI_TEXTURE_SHEET : null,
+    coverAsset: theme.id === "photo" ? "/event-themes/paradise/canggu-nomad.jpg" : aiPanel ? AI_TEXTURE_SHEET : null,
     coverPosition: aiPanel ?? "center",
     coverSize: aiPanel ? "500% 100%" : "cover",
     texture: TEXTURES[theme.id][variant],
     colors: PALETTES[theme.id][variant],
-    fontFamily: FONTS[(safeSeed >>> 12) % FONTS.length],
+    fontFamily: theme.group === "near-me" ? "var(--font-display)" : FONTS[(safeSeed >>> 12) % FONTS.length],
     layout,
     variant,
   };
