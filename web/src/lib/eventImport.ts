@@ -99,14 +99,22 @@ export function lumaLocation(event: Record<string, unknown>): string {
 
 /** Google Maps link for a schema.org event location, which is a Place or plain text. */
 export function schemaOrgLocation(location: unknown): string {
+  if (Array.isArray(location)) return location.map(schemaOrgLocation).find(Boolean) ?? "";
   const place = record(location);
   if (!place) return text(location) ? mapsSearchLink(text(location)) : "";
-  const given = text(place.sameAs).replace(/^http:/i, "https:");
+  const given = [place.sameAs, place.url]
+    .flatMap((value) => Array.isArray(value) ? value : [value])
+    .map((value) => text(value).replace(/^http:/i, "https:"))
+    .find(isGoogleMapsLink) ?? "";
   if (isGoogleMapsLink(given)) return given;
   const geo = record(place.geo);
-  if (geo && finite(geo.latitude) && finite(geo.longitude)) return mapsSearchLink(`${geo.latitude},${geo.longitude}`);
-  const address = record(place.address);
-  const query = [place.name, address?.streetAddress, address?.addressLocality, address?.addressRegion]
+  const latitude = typeof geo?.latitude === "string" && geo.latitude.trim() ? Number(geo.latitude) : geo?.latitude;
+  const longitude = typeof geo?.longitude === "string" && geo.longitude.trim() ? Number(geo.longitude) : geo?.longitude;
+  if (finite(latitude) && finite(longitude)) return mapsSearchLink(String(latitude) + "," + String(longitude));
+  const addressValue = place.address;
+  const address = record(addressValue);
+  const country = record(address?.addressCountry)?.name ?? address?.addressCountry;
+  const query = [place.name, typeof addressValue === "string" ? addressValue : "", address?.streetAddress, address?.addressLocality, address?.addressRegion, address?.postalCode, country]
     .map(text)
     .filter((part, index, all) => part && all.indexOf(part) === index)
     .join(", ");

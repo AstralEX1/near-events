@@ -32,8 +32,8 @@ const DEPOSIT = "1000000";
 
 const now = Date.now();
 const eventId = await call(host, EVENTS, "create_event", {
-  metadata: { title: "Signed intent smoke test", description: "Automated Tidepool run", location: "Online", cover_url: null, starts_at: now, ends_at: now + 3600_000 },
-  deposit: DEPOSIT, capacity: 5, cohosts: null,
+  metadata: { title: "Signed intent smoke test", starts_at: now, ends_at: now + 3600_000 },
+  deposit: DEPOSIT, capacity: 5,
 });
 console.log("1. event", eventId, "guest", guest.slice(0, 10) + "…");
 

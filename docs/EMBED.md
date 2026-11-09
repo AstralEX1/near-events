@@ -129,7 +129,7 @@ your event page ── button ──► Near Me checkout window
 
 ## Host setup
 
-1. Start at **Integrate** (`/widget`) with your event link, or at `/create`. Add the door person as a co-host.
+1. Start at **Integrate** (`/widget`) with your event link, or at `/create`. Add the door person to the door team.
 2. Copy the button code, AI prompt or checkout link from that event’s Manage → Integration tab. Integrate takes you there after signing.
 3. Add it to your event page.
 4. Manage registrations and check-in in Near Me. Close the event there; eligible

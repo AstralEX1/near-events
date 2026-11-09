@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatUsdc, isTicket, priceLabel, type EventView, type GuestView } from "@/lib/near";
 import { Avatar, Cover, DateBadge, shortAccount } from "@/components/ui";
+import { cohostsProblem, splitCohosts } from "@/lib/cohostsShared";
 
 /** How many of the newest guests the Overview shows before "All Guests". */
 const RECENT_GUESTS = 5;
@@ -18,6 +19,9 @@ type Props = {
   onCheckIn: () => void;
   onFinalize: () => void;
   onCancel: () => void;
+  /** Door team kept on our server; only the host can change it. */
+  doorTeam: string[];
+  onSaveDoorTeam: (list: string[]) => Promise<void>;
 };
 
 /**
@@ -26,7 +30,7 @@ type Props = {
  * invitations: closing the event is the one thing a host must not miss, so it
  * jumps to the top as soon as the event is over.
  */
-export function Overview({ event, guests, origin, isHost, busy, onGuests, onCheckIn, onFinalize, onCancel }: Props) {
+export function Overview({ event, guests, origin, isHost, busy, onGuests, onCheckIn, onFinalize, onCancel, doorTeam, onSaveDoorTeam }: Props) {
   const [sharing, setSharing] = useState(false);
   const id = event.id;
   const open = event.status === "Open";
@@ -36,7 +40,7 @@ export function Overview({ event, guests, origin, isHost, busy, onGuests, onChec
   const over = open && Date.now() > event.metadata.ends_at;
 
   const closeCard = (
-    <CloseEvent event={event} isHost={isHost} busy={busy} over={over} onFinalize={onFinalize} onCancel={onCancel} />
+    <CloseEvent event={event} isHost={isHost} busy={busy} over={over} onFinalize={onFinalize} />
   );
 
   return (
@@ -69,8 +73,10 @@ export function Overview({ event, guests, origin, isHost, busy, onGuests, onChec
 
       {!over && closeCard}
 
+      {open && isHost && <CancelEvent event={event} busy={busy} onCancel={onCancel} />}
+
       <Divider />
-      <HostsSection event={event} onGuests={onGuests} />
+      <HostsSection event={event} isHost={isHost} doorTeam={doorTeam} onSave={onSaveDoorTeam} onGuests={onGuests} />
 
       <Divider />
       <section className="space-y-3">
@@ -381,14 +387,12 @@ function CloseEvent({
   busy,
   over,
   onFinalize,
-  onCancel,
 }: {
   event: EventView;
   isHost: boolean;
   busy: boolean;
   over: boolean;
   onFinalize: () => void;
-  onCancel: () => void;
 }) {
   const ticket = isTicket(event);
   const pool = BigInt(event.total_pool);
@@ -439,9 +443,6 @@ function CloseEvent({
           <button type="button" className={`btn ${over ? "btn-accent" : "btn-primary"} !py-2 text-sm`} disabled={busy || tooEarly} onClick={onFinalize}>
             {ticket ? "Close event & get paid" : "Close event & pay out"}
           </button>
-          <button type="button" className="text-sm text-muted hover:text-warn" disabled={busy} onClick={onCancel}>
-            Cancel event &amp; refund everyone
-          </button>
         </div>
       ) : (
         <p className="text-sm text-muted">Only the host ({shortAccount(event.host)}) can close the event. You can check guests in.</p>
@@ -450,22 +451,96 @@ function CloseEvent({
   );
 }
 
+/* ---------- Cancel ---------- */
+
+/** Host only, while open. The contract refunds every guest in the same call. */
+function CancelEvent({ event, busy, onCancel }: { event: EventView; busy: boolean; onCancel: () => void }) {
+  const ticket = isTicket(event);
+  return (
+    <section className="card p-4 space-y-3 border-warn/40">
+      <div>
+        <h2 className="font-semibold">Cancel event</h2>
+        <p className="text-sm text-muted mt-0.5">
+          Everyone gets their money back.{" "}
+          {event.guest_count > 0
+            ? `${event.guest_count} ${ticket ? (event.guest_count === 1 ? "ticket" : "tickets") : (event.guest_count === 1 ? "deposit" : "deposits")} (${formatUsdc(event.total_pool)} USDC) go back to the guests' Near Me balances, ready to withdraw.`
+            : "Nobody has paid yet."}{" "}
+          This cannot be undone.
+        </p>
+      </div>
+      <button type="button" className="btn btn-ghost !py-2 text-sm text-warn border-warn/50 hover:bg-warn/10" disabled={busy} onClick={onCancel}>
+        Cancel event &amp; refund everyone
+      </button>
+    </section>
+  );
+}
+
 /* ---------- Hosts ---------- */
 
-function HostsSection({ event, onGuests }: { event: EventView; onGuests: () => void }) {
+function HostsSection({ event, isHost, doorTeam, onSave, onGuests }: {
+  event: EventView;
+  isHost: boolean;
+  doorTeam: string[];
+  onSave: (list: string[]) => Promise<void>;
+  onGuests: () => void;
+}) {
   const open = event.status === "Open";
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    const problem = cohostsProblem(text);
+    if (problem) return setError(problem);
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(splitCohosts(text));
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <section className="space-y-3">
-      <div>
-        <h2 className="text-lg font-semibold">Hosts</h2>
-        <p className="text-sm text-muted mt-0.5">Co-hosts are set when the event is created. They can check guests in; only the host can close or cancel.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Hosts</h2>
+          <p className="text-sm text-muted mt-0.5">The door team can check guests in; only the host can close or cancel.</p>
+        </div>
+        {isHost && open && !editing && (
+          <button type="button" className="btn btn-ghost !py-1.5 text-sm shrink-0" onClick={() => { setText(doorTeam.join(", ")); setError(null); setEditing(true); }}>
+            Edit door team
+          </button>
+        )}
       </div>
       <ul className="card divide-y divide-border overflow-hidden">
         <HostRow account={event.host} badge="Host" />
-        {event.cohosts.map((a) => (
+        {doorTeam.map((a) => (
           <HostRow key={a} account={a} badge="Door team" />
         ))}
       </ul>
+      {editing && (
+        <div className="card p-3 sm:p-4 space-y-2">
+          <label className="block space-y-1 text-sm">
+            <span>NEAR accounts that can check guests in, separated by commas</span>
+            <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="alice.near, bob.near" />
+          </label>
+          {error && <p role="alert" className="text-sm text-warn break-words">{error}</p>}
+          <div className="flex gap-2">
+            <button type="button" className="btn btn-primary !py-1.5 text-sm" disabled={saving} onClick={save}>
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button type="button" className="btn btn-ghost !py-1.5 text-sm" disabled={saving} onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       <button type="button" className="text-sm text-muted hover:text-text inline-flex items-center gap-1.5" onClick={onGuests}>
         <ScanIcon size={14} /> {open ? "Open check-in and the guest list" : "Open the guest list"}
       </button>

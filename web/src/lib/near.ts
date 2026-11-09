@@ -7,10 +7,9 @@ export type EventMode = "Deposit" | "Ticket";
 
 export const isTicket = (e: { mode?: EventMode }) => e.mode === "Ticket";
 
+/** What the escrow keeps about an event. Location, description and cover live off-chain (api/event-details). */
 export interface EventMetadata {
   title: string;
-  description: string;
-  location: string;
   starts_at: number;
   ends_at: number;
 }
@@ -18,9 +17,7 @@ export interface EventMetadata {
 export interface EventView {
   id: number;
   host: string;
-  cohosts: string[];
   metadata: EventMetadata;
-  metadata_editable?: boolean;
   /** What each guest pays: the deposit, or the ticket price when `mode` is "Ticket". */
   deposit: string;
   mode: EventMode;
@@ -33,8 +30,6 @@ export interface EventView {
   created_at: number;
   /** When the event was finalized or cancelled; 0 while open. */
   closed_at: number;
-  /** Guest records still on chain; 0 after the guest list was cleaned up (7+ days after close). */
-  stored_guests: number;
 }
 
 export interface GuestView {
@@ -68,21 +63,21 @@ export async function view<T>(method: string, args: object = {}, contractId = EV
   return JSON.parse(new TextDecoder().decode(new Uint8Array(json.result.result)));
 }
 
+/** The contract returns at most this many recent events and batched guest statuses. */
+export const RECENT_LIMIT = 100;
+
 export const events = {
-  list: async () => {
-    const count = await view<number>("get_events_count");
-    const from = Math.max(0, count - 50);
-    return (await view<EventView[]>("get_events", { from_index: from, limit: 50 })).reverse();
-  },
+  /** The newest events first, up to 100. */
+  list: () => view<EventView[]>("get_recent_events", { limit: RECENT_LIMIT }),
   get: (id: number) => view<EventView | null>("get_event", { event_id: id }),
   guests: (id: number) => view<GuestView[]>("get_guests", { event_id: id, from_index: 0, limit: 300 }),
   guestStatus: (id: number, account: string) =>
     view<GuestStatus | null>("get_guest_status", { event_id: id, account_id: account }),
-  guestStatuses: (account: string, ids: number[]) => Promise.all(
-    ids.map((id) => view<GuestStatus | null>("get_guest_status", { event_id: id, account_id: account })),
-  ),
+  /** One call for up to 100 events, in the order of `ids`. */
+  guestStatuses: (account: string, ids: number[]) => ids.length === 0
+    ? Promise.resolve([] as (GuestStatus | null)[])
+    : view<(GuestStatus | null)[]>("get_guest_statuses", { account_id: account, event_ids: ids.slice(0, RECENT_LIMIT) }),
   balance: (account: string) => view<string>("balance_of", { account_id: account }),
-  openEventsOf: (account: string) => view<number>("open_events_of", { account_id: account }),
 };
 
 export const usdc = {

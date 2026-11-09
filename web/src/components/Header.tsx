@@ -11,9 +11,28 @@ import { SignInMenu } from "./SignIn";
 export function Header() {
   const { accountId, signOut } = useWallet();
   const path = usePathname() || "/";
+  return <HeaderContent accountId={accountId} signOut={signOut} path={path} />;
+}
+
+/** The same header shell with a safe sample sign-in state for the Stageshow scene. */
+export function HeaderPreview({ path = "/e/4", accountId = null }: { path?: string; accountId?: string | null }) {
+  return <HeaderContent accountId={accountId} path={path} preview />;
+}
+
+function HeaderContent({
+  accountId,
+  signOut,
+  path,
+  preview = false,
+}: {
+  accountId: string | null;
+  signOut?: () => void;
+  path: string;
+  preview?: boolean;
+}) {
 
   return (
-    <header className="sticky top-0 z-10 backdrop-blur bg-bg/90 border-b border-border">
+    <header className={`sticky top-0 z-10 backdrop-blur bg-bg/90 border-b border-border${preview ? " nm-app-header" : ""}`}>
       <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-2 sm:gap-4 whitespace-nowrap">
         <Link href="/" className="font-semibold tracking-tight flex items-center gap-2">
           <span className="inline-flex w-7 h-7 rounded-lg bg-accent text-white text-[13px] font-bold items-center justify-center">
@@ -46,12 +65,20 @@ export function Header() {
                 <Avatar account={accountId} size={24} />
                 <span className="hidden sm:inline max-w-40 truncate">{shortAccount(accountId)}</span>
               </Link>
-              <button type="button" className="text-muted hover:text-text" onClick={signOut}>
-                Sign out
-              </button>
+              {preview ? (
+                <span className="nm-signout-preview">Sign out</span>
+              ) : (
+                <button type="button" className="text-muted hover:text-text" onClick={signOut}>
+                  Sign out
+                </button>
+              )}
             </>
           ) : (
-            <SignInMenu />
+            preview ? (
+              <span className="btn btn-primary !py-1.5" aria-hidden="true">Sign in</span>
+            ) : (
+              <SignInMenu />
+            )
           )}
         </nav>
       </div>

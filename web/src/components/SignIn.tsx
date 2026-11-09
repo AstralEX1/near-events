@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@/lib/wallet";
 import { HAS_INTENTS } from "@/lib/config";
 
@@ -48,18 +48,83 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
 
 export function SignInMenu() {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => element.offsetParent !== null);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === panel)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === panel)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [open]);
+
+  const close = () => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
+
   return (
     <div className="relative">
-      <button className="btn btn-primary !py-1.5" onClick={() => setOpen(!open)}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="btn btn-primary !py-1.5"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls="near-me-signin-options"
+        onClick={() => setOpen((value) => !value)}
+      >
         Sign in
       </button>
       {open && (
         <>
-          <div className="fixed inset-0" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 mt-2 w-72 card p-4 shadow-xl z-20">
-            <div className="font-semibold mb-1">Welcome to Near Me</div>
+          <button
+            type="button"
+            aria-label="Close sign-in options"
+            tabIndex={-1}
+            className="fixed inset-0 z-40 cursor-default bg-black/25 sm:bg-black/0"
+            onClick={close}
+          />
+          <div
+            ref={panelRef}
+            id="near-me-signin-options"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="near-me-signin-title"
+            tabIndex={-1}
+            className="fixed inset-x-3 top-[4.25rem] z-50 max-h-[calc(100dvh-5rem)] overflow-y-auto whitespace-normal rounded-2xl card p-4 shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80 sm:max-h-[min(70vh,32rem)]"
+          >
+            <div id="near-me-signin-title" className="font-semibold mb-1">Welcome to Near Me</div>
             <p className="text-xs text-muted mb-3">No wallet? Sign in with Google or email; we create your NEAR account.</p>
-            <SignInOptions onDone={() => setOpen(false)} />
+            <SignInOptions onDone={close} />
           </div>
         </>
       )}

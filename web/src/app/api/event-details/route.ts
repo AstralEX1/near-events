@@ -1,6 +1,6 @@
 import { rateLimited } from "@/lib/ratelimit";
 import { getEventDetails, saveEventDetails } from "@/lib/eventDetails";
-import type { EventDetails } from "@/lib/eventImport";
+import { locationProblem, type EventDetails } from "@/lib/eventImport";
 import { events } from "@/lib/near";
 import { readStaffToken } from "@/lib/staff";
 
@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   const eventId = Number(new URL(req.url).searchParams.get("e"));
   if (!Number.isInteger(eventId) || eventId < 0) return Response.json({ error: "Bad event id" }, { status: 400 });
   try {
-    return Response.json({ details: await getEventDetails(eventId) });
+    return Response.json({ details: await getEventDetails(eventId) }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json({ error: "Event details are temporarily unavailable" }, { status: 503 });
   }
@@ -49,10 +49,16 @@ export async function POST(req: Request) {
     if (!event) return Response.json({ error: "Event not found" }, { status: 404 });
     if (event.host !== accountId) return Response.json({ error: "Only the event host can save details" }, { status: 403 });
     const details = body.details as EventDetails;
+    const existing = await getEventDetails(body.eventId!);
+    const locationIssue = locationProblem(details.location);
+    if (locationIssue && details.location.trim() !== (existing?.location ?? "").trim()) {
+      return Response.json({ error: locationIssue }, { status: 400 });
+    }
+    const cover = details.cover_url?.trim() ?? "";
     await saveEventDetails(body.eventId!, {
-      location: details.location,
-      description: details.description,
-      cover_url: details.cover_url,
+      location: details.location.trim(),
+      description: details.description.trim(),
+      cover_url: cover ? new URL(cover).href : null,
     });
     return Response.json({ ok: true });
   } catch {

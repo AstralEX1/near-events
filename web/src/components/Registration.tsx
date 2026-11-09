@@ -8,8 +8,9 @@ import { EVENTS_CONTRACT, HAS_FAUCET, LIVE_EVENT_SWAPS, TEST_EVM_FAUCET_LIMIT, U
 import { useWallet } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
 import { confirmRegistration, intentsUsdcBalance, registerFromIntents } from "@/lib/intents";
-import { NextSteps, RulesBox } from "@/components/EventParts";
+import { NextSteps } from "@/components/EventParts";
 import { CashOut } from "@/components/CashOut";
+import { DepositRulesTooltip } from "@/components/DepositRulesTooltip";
 
 /** Sign in, then put down the deposit. Used on the event page and in the embed popup. */
 export function RegistrationCard({
@@ -32,7 +33,6 @@ export function RegistrationCard({
   const [balanceState, setBalanceState] = useState<"loading" | "ready" | "error">("loading");
   const [balanceAccountId, setBalanceAccountId] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
-  const [rules, setRules] = useState(false);
   const [stage, setStage] = useState<string | null>(null);
   const paymentUrl = `/e/${event.id}/pay${embedReturnTo ? `?returnTo=${encodeURIComponent(embedReturnTo)}` : ""}`;
   const loadBalance = useCallback(async () => {
@@ -267,12 +267,11 @@ export function RegistrationCard({
           </p>
         )}
       {open && (
-        <p className="text-sm text-muted leading-relaxed">
-          {ticket ? "Refunded if the host cancels." : "Come and get it back plus a share of the no-shows. No cancelling."}{" "}
-          <button className="text-accent" onClick={() => setRules(!rules)}>{rules ? "Hide" : "How it works"}</button>
-        </p>
+        <div className="space-y-1.5 text-sm text-muted leading-relaxed">
+          <p>{ticket ? "Refunded if the host cancels." : "Come and get it back plus a share of the no-shows."}</p>
+          <DepositRulesTooltip ticket={ticket} amount={price} />
+        </div>
       )}
-      {open && rules && <RulesBox event={event} />}
     </div>
   );
 }

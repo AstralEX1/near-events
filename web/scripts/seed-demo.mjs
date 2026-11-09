@@ -18,17 +18,13 @@ const id = await account(HOST).callFunction({
   methodName: "create_event",
   args: {
     metadata: {
+      // Description and location are saved off-chain from the Manage page (api/event-details).
       title: "NEAR Builders Night Belgrade",
-      description:
-        "Demos, pizza and honest feedback from builders shipping on NEAR.\n\nEveryone puts down 5 USDC. Show up and you get it back plus a share of the no-shows. A co-host checks you in at the door.",
-      location: "Startit Centar, Savska 5, Belgrade",
-      cover_url: null,
       starts_at: start.getTime(),
       ends_at: start.getTime() + 3 * 3600_000,
     },
     deposit: "5000000",
     capacity: 40,
-    cohosts: [GUEST],
   },
   gas,
 });

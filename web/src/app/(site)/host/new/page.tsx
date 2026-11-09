@@ -10,12 +10,13 @@ import { SignInOptions } from "@/components/SignIn";
 /**
  * The one page a host opens: the Telegram bot drafted the event, the host
  * signs in once and confirms. The event is created from the host's own
- * account with the bot as co-host (it may check guests in, never move money).
+ * account; then the host signs a short message so our server links the event
+ * to the Telegram chat (the bot may check guests in, never move money).
  */
 export default function ConfirmEvent() {
   const q = useSearchParams();
-  const { accountId, send } = useWallet();
-  const [bot, setBot] = useState<string | null>(null);
+  const { accountId, send, staffToken } = useWallet();
+  const [bot, setBot] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<number | null>(null);
@@ -45,21 +46,22 @@ export default function ConfirmEvent() {
           args: {
             metadata: {
               title,
-              description: "",
-              location: "",
-              cover_url: null,
               starts_at: starts!.getTime(),
               ends_at: starts!.getTime() + 3 * 3600_000,
             },
             deposit: toUnits(deposit),
             capacity,
-            cohosts: [bot],
           },
         },
       ]);
       const mine = (await events.list()).find((e) => e.host === accountId && e.metadata.title === title);
       if (!mine) throw new Error("Created, but I couldn’t find the event yet. Send /status to the bot in a minute.");
-      const r = await fetch("/api/telegram/link", { method: "POST", body: JSON.stringify({ token, eventId: mine.id }) });
+      const auth = await staffToken();
+      const r = await fetch("/api/telegram/link", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${auth}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ token, eventId: mine.id }),
+      });
       if (!r.ok) throw new Error((await r.json()).error ?? "Couldn’t connect the event to Telegram");
       setDone(mine.id);
     } catch (e) {
@@ -101,8 +103,9 @@ export default function ConfirmEvent() {
       )}
       {error && <p className="text-sm text-warn break-words">{error}</p>}
       <p className="text-xs text-muted">
-        Creating an event is free (up to 5 open events at a time). The Near Me bot is added as
-        co-host so it can check guests in. Payouts and refunds always need your confirmation.
+        Creating an event is free (up to 5 open events at a time). After the wallet step you sign
+        one short message so the Near Me bot can check guests in for this event. Payouts and
+        refunds always need your confirmation.
       </p>
     </div>
   );

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { events, formatUsdc, isTicket, type EventView, type GuestStatus } from "@/lib/near";
 import { Avatar, Cover, StatusPill, shortAccount } from "@/components/ui";
 import { Timeline } from "@/components/Timeline";
+import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 
 interface Row {
   event: EventView;
@@ -24,9 +25,13 @@ export default function Profile() {
   useEffect(() => {
     (async () => {
       const all = await events.list();
-      const statuses = await events.guestStatuses(account, all.map((e) => e.id));
+      const ids = all.map((e) => e.id);
+      const [statuses, teams] = await Promise.all([
+        events.guestStatuses(account, ids),
+        cohostsApi.many(ids).catch((): Record<number, string[]> => ({})),
+      ]);
       setRows(all.flatMap((event, i) => statuses[i] ? [{ event, status: statuses[i] }] : []));
-      setHosting(all.filter((e) => e.host === account || e.cohosts.includes(account)));
+      setHosting(all.filter((e) => e.host === account || teams[e.id]?.includes(account)));
     })();
   }, [account]);
 

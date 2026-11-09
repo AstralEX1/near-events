@@ -15,6 +15,8 @@ import { SignInOptions } from "@/components/SignIn";
 import { LOCAL_TZ, city, dayLabel, fromEpoch, gmtLabel, toEpoch } from "@/lib/time";
 import { detectEventSource, IMPORT_ENDPOINT, locationProblem, type EventDetails, type ImportedEvent } from "@/lib/eventImport";
 import { createStep, integrationUrl, parseMode, startUrl, validAmount } from "@/lib/flow";
+import { cohosts as cohostsApi } from "@/lib/cohostsClient";
+import { cohostsProblem, splitCohosts } from "@/lib/cohostsShared";
 import { StartStep } from "@/components/StartStep";
 
 
@@ -69,6 +71,7 @@ function CreateEvent() {
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<EventView | null>(null);
   const [createdDetails, setCreatedDetails] = useState<EventDetails | null>(null);
+  const [createdCohosts, setCreatedCohosts] = useState<string[]>([]);
   const [eventVisual, setEventVisual] = useState<EventVisualConfig>({ themeId: "near", seed: 0 });
   const [createdVisual, setCreatedVisual] = useState<EventVisualConfig | null>(null);
   const [detailsSaveError, setDetailsSaveError] = useState<string | null>(null);
@@ -93,13 +96,11 @@ function CreateEvent() {
       setForm((f) => ({
         ...f,
         title: e.metadata.title,
-        location: e.metadata.location,
-        description: e.metadata.description,
         deposit: String(Number(e.deposit) / 1e6),
         mode: e.mode ?? "Deposit",
         capacity: String(e.capacity),
-        cohosts: e.cohosts.join(", "),
       }));
+      cohostsApi.get(from).then((list) => setForm((f) => ({ ...f, cohosts: list.join(", ") }))).catch(() => {});
       fetch(`/api/event-details?e=${encodeURIComponent(String(from))}`, { cache: "no-store" })
         .then((response) => response.ok ? response.json() : null)
         .then((json) => {
@@ -169,7 +170,8 @@ function CreateEvent() {
   const amountOk = validAmount(form.deposit);
   const seats = Number(form.capacity);
   const seatsOk = Number.isInteger(seats) && seats >= 1 && seats <= 300;
-  const missing = !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? "Set the capacity: 1 to 300" : undefined;
+  const doorTeamProblem = cohostsProblem(form.cohosts);
+  const missing = !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? "Set the capacity: 1 to 300" : doorTeamProblem ?? undefined;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -203,15 +205,11 @@ function CreateEvent() {
           args: {
             metadata: {
               title,
-              description: "",
-              location: "",
-              cover_url: null,
               starts_at: when.start,
               ends_at: when.end,
             },
             deposit: toUnits(form.deposit),
             capacity,
-            cohosts: form.cohosts.split(/[\s,]+/).filter(Boolean),
             mode: form.mode,
           },
         },
@@ -234,7 +232,10 @@ function CreateEvent() {
       setCreated(latest);
       setCreatedVisual(eventVisual);
       const details: EventDetails = { location, description, cover_url: coverUrl };
-      const hasDetails = Boolean(location || description || coverUrl);
+      // The door team lives on our server too (api/cohosts), saved with the details.
+      const doorTeam = splitCohosts(form.cohosts).filter((a) => a !== accountId);
+      setCreatedCohosts(doorTeam);
+      const hasDetails = Boolean(location || description || coverUrl || doorTeam.length);
       if (hasDetails) setCreatedDetails(details);
       let token: string | null = null;
       try {
@@ -264,7 +265,7 @@ function CreateEvent() {
         setCreatedDetails(details);
         setSavingDetails(true);
         try {
-          await saveDetails(latest.id, details, token);
+          await saveDetails(latest.id, details, doorTeam, token);
           setDetailsSaveError(null);
         } catch (saveError) {
           setDetailsSaveError(saveError instanceof Error ? saveError.message : "Could not save event details");
@@ -287,7 +288,7 @@ function CreateEvent() {
     setSavingDetails(true);
     try {
       const token = await staffToken();
-      await saveDetails(created.id, createdDetails, token);
+      await saveDetails(created.id, createdDetails, createdCohosts, token);
       setDetailsSaveError(null);
     } catch (saveError) {
       setDetailsSaveError(saveError instanceof Error ? saveError.message : "Could not save event details");
@@ -497,9 +498,10 @@ function CreateEvent() {
               <OptionRow
                 icon="M9 11l2 2 4-4M4 4h16v16H4z"
                 label="Door team"
-                value={form.cohosts.trim() ? `${form.cohosts.split(/[\s,]+/).filter(Boolean).length} people` : "Just you"}
+                value={splitCohosts(form.cohosts).length ? `${splitCohosts(form.cohosts).length} people` : "Just you"}
                 title="Door team"
-                help="NEAR accounts that can check guests in, separated by commas."
+                attention={!!doorTeamProblem}
+                help="NEAR accounts that can check guests in, separated by commas. You can change this later in Manage."
               >
                 <input className="input" value={form.cohosts} onChange={(e) => set("cohosts")(e.target.value)} placeholder="alice.near, bob.near" />
               </OptionRow>
@@ -804,7 +806,7 @@ function Created({ event, visual, coverUrl, detailsSaveError, savingDetails, onR
 
       {detailsSaveError && (
         <div className="card p-4 space-y-2 border-warn/50">
-          <p className="text-sm text-warn">The event was created, but its public details could not be saved: {detailsSaveError}</p>
+          <p className="text-sm text-warn">The event was created, but its public details or door team could not be saved: {detailsSaveError}</p>
           <button type="button" className="btn btn-ghost !py-1.5 text-sm" disabled={savingDetails} onClick={onRetry}>
             {savingDetails ? "Saving…" : "Retry saving details"}
           </button>
@@ -851,7 +853,9 @@ function safeImageUrl(value: string): string | null {
   }
 }
 
-async function saveDetails(eventId: number, details: EventDetails, token: string) {
+async function saveDetails(eventId: number, details: EventDetails, doorTeam: string[], token: string) {
+  if (doorTeam.length) await cohostsApi.save(token, eventId, doorTeam);
+  if (!details.location && !details.description && !details.cover_url) return;
   const response = await fetch("/api/event-details", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
