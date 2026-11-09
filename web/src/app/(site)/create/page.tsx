@@ -490,6 +490,7 @@ function CreateEvent() {
 
           {error && <p className="text-sm text-warn break-words">{error}</p>}
           <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy || !!missing} title={missing}>
+            {busy && <span className="gc-spinner" aria-hidden="true" />}
             {busy ? "Confirm in your wallet…" : integrate ? "Integrate" : "Create Event"}
           </button>
         </div>
@@ -719,11 +720,14 @@ function Created({ event, visual, coverUrl, detailsSaveError, savingDetails, onR
   const page = `${origin}/e/${event.id}`;
   const checkout = `${origin}/p/${event.id}`;
   return (
-    <div className="max-w-xl mx-auto space-y-6">
+    <div className="gc-created max-w-xl mx-auto space-y-6">
       <div className="flex gap-4 items-center">
-        <Cover event={event} visual={visual ?? undefined} coverUrl={coverUrl} className="w-20 h-20 rounded-xl shrink-0 [&>span]:hidden" />
+        <div className="gc-created-cover relative shrink-0">
+          <Cover event={event} visual={visual ?? undefined} coverUrl={coverUrl} className="w-20 h-20 rounded-xl [&>span]:hidden" />
+          <svg viewBox="0 0 24 24" className="gc-created-check" aria-hidden="true"><circle cx="12" cy="12" r="11" /><path d="M7 12.5l3.2 3.2L17 9" /></svg>
+        </div>
         <div>
-          <div className="text-sm text-good font-medium">✓ Event created</div>
+          <div className="text-sm text-good font-medium">Event created</div>
           <h1 className="text-2xl font-semibold tracking-tight">{event.metadata.title}</h1>
         </div>
       </div>

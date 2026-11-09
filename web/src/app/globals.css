@@ -175,3 +175,25 @@ button:not(:disabled), summary { cursor: pointer; }
 /* A new cover or theme fades in instead of swapping abruptly. */
 .gc-poster { animation:gc-poster-in 260ms var(--ease-out); }
 @keyframes gc-poster-in { from { opacity:.6; transform:scale(.985); } }
+
+/* Creating an event: a spinner while the wallet confirms, then a short success moment. */
+.gc-spinner { width:16px; height:16px; border-radius:999px; border:2px solid currentColor; border-right-color:transparent; animation:gc-spin 700ms linear infinite; }
+@keyframes gc-spin { to { transform:rotate(360deg); } }
+.gc-created > * { animation:gc-rise 420ms var(--ease-out) both; }
+.gc-created > :nth-child(2) { animation-delay:60ms; }
+.gc-created > :nth-child(3) { animation-delay:120ms; }
+.gc-created > :nth-child(4) { animation-delay:180ms; }
+.gc-created > :nth-child(n+5) { animation-delay:240ms; }
+@keyframes gc-rise { from { opacity:0; transform:translateY(10px); } }
+.gc-created-cover { animation:gc-pop 520ms var(--ease-out) both; }
+@keyframes gc-pop { from { opacity:0; transform:scale(.9) rotate(-4deg); } }
+.gc-created-check { position:absolute; right:-8px; bottom:-8px; width:28px; height:28px; fill:var(--good); stroke:var(--surface); stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; animation:gc-pop 360ms var(--ease-out) 260ms both; }
+.gc-created-check circle { stroke:var(--surface); stroke-width:2; }
+.gc-created-check path { fill:none; stroke-dasharray:16; stroke-dashoffset:16; animation:gc-draw 300ms var(--ease-out) 480ms forwards; }
+@keyframes gc-draw { to { stroke-dashoffset:0; } }
+@media (prefers-reduced-motion: reduce) {
+  .gc-created > *, .gc-created-cover, .gc-created-check { animation:gc-fade 200ms ease both !important; }
+  .gc-created-check path { stroke-dashoffset:0; animation:none !important; }
+  .gc-spinner { animation-duration:1.5s !important; animation-iteration-count:infinite !important; }
+}
+@keyframes gc-fade { from { opacity:0; } }
