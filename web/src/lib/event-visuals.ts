@@ -14,17 +14,20 @@ export const EVENT_THEMES = [
   { id: "afterhours", name: "Afterhours", group: "near-me", note: "Deep aubergine", mark: "near me" },
   { id: "paper", name: "Paper", group: "near-me", note: "Quiet and simple", mark: "near me" },
   { id: "photo", name: "Photo", group: "near-me", note: "A place to meet", mark: "near me" },
-  { id: "ethereum", name: "Ethereum", group: "blockchain", note: "Iridescent facets", mark: "Ξ", icon: "/landing/icons/eth.svg" },
-  { id: "bitcoin", name: "Bitcoin", group: "blockchain", note: "Warm copper grain", mark: "₿", icon: "/landing/icons/btc.svg" },
+  { id: "ethereum", name: "Ethereum", group: "blockchain", note: "Diamond and rainbow", mark: "Ξ", icon: "/event-themes/marks/ethereum.svg" },
+  { id: "bitcoin", name: "Bitcoin", group: "blockchain", note: "Warm copper grain", mark: "₿", icon: "/event-themes/marks/bitcoin.svg" },
   { id: "base", name: "Base", group: "blockchain", note: "Electric blue layers", mark: "BASE" },
-  { id: "near", name: "NEAR", group: "blockchain", note: "Coral and deep ink", mark: "NEAR", icon: "/landing/icons/near.svg" },
-  { id: "solana", name: "Solana", group: "blockchain", note: "Neon signal bands", mark: "SOL", icon: "/landing/icons/sol.svg" },
+  { id: "near", name: "NEAR", group: "blockchain", note: "Ink and signal green", mark: "NEAR", icon: "/event-themes/marks/near.svg" },
+  { id: "solana", name: "Solana", group: "blockchain", note: "Purple to green gradient", mark: "SOL", icon: "/event-themes/marks/solana.svg" },
   { id: "paradise", name: "Paradise", group: "paradise", note: "Bali, islands & coworking", mark: "BALI" },
-  { id: "claude", name: "Claude", group: "ai", note: "Warm paper and ember", mark: "claude" },
-  { id: "codex", name: "Codex", group: "ai", note: "Blue-violet code paths", mark: "CODEX" },
-  { id: "cursor", name: "Cursor", group: "ai", note: "Quiet editor dark", mark: "cursor" },
+  { id: "claude", name: "Claude", group: "ai", note: "Warm clay and ivory", mark: "claude", icon: "/event-themes/marks/claude.svg" },
+  { id: "codex", name: "Codex", group: "ai", note: "Blue-violet code paths", mark: "CODEX", icon: "/event-themes/marks/openai.svg" },
+  { id: "cursor", name: "Cursor", group: "ai", note: "Editor dark and orange", mark: "cursor", icon: "/event-themes/marks/cursor.svg" },
   { id: "grok", name: "Grok", group: "ai", note: "Black, silver & orbit", mark: "GROK" },
   { id: "hermes", name: "Hermes", group: "ai", note: "Classic gold & deep navy", mark: "HERMES" },
+  { id: "chatgpt", name: "ChatGPT", group: "ai", note: "OpenAI black and green", mark: "ChatGPT", icon: "/event-themes/marks/openai.svg" },
+  { id: "gemini", name: "Gemini", group: "ai", note: "Four-point star glow", mark: "Gemini", icon: "/event-themes/marks/gemini.svg" },
+  { id: "github", name: "GitHub", group: "ai", note: "Invertocat and Copilot purple", mark: "GitHub", icon: "/event-themes/marks/github.svg" },
 ] as const;
 
 export type EventThemeId = (typeof EVENT_THEMES)[number]["id"];
@@ -60,9 +63,7 @@ const PARADISE_BACKGROUNDS = [
 ] as const;
 const AI_TEXTURE_SHEET = "/event-themes/ai/ai-brand-panels.png";
 const AI_PANEL_POSITION: Partial<Record<EventThemeId, string>> = {
-  claude: "0% center",
   codex: "25% center",
-  cursor: "50% center",
   grok: "75% center",
   hermes: "100% center",
 };
@@ -74,16 +75,19 @@ const PALETTES: Record<EventThemeId, [string, string, string][]> = {
   afterhours: [["#f7f5f0", "#24212e", "#c3b6f2"], ["#f7f5f0", "#30243a", "#d3b4dd"], ["#f7f5f0", "#202c32", "#b6cfcd"]],
   paper: [["#24212e", "#f0e9de", "#c3b6f2"], ["#24212e", "#ebe7e0", "#cedfcb"], ["#24212e", "#f4e8dd", "#f3b99f"]],
   photo: [["#24212e", "#cedfcb", "#f7f5f0"], ["#24212e", "#c3b6f2", "#f7f5f0"], ["#24212e", "#f3b99f", "#f7f5f0"]],
-  ethereum: [["#171735", "#6959d9", "#8ce4de"], ["#172b42", "#536ad0", "#d8b8ff"], ["#32204a", "#ab79d6", "#89daca"]],
+  ethereum: [["#15123d", "#627eea", "#53d3e0"], ["#1b2a4e", "#5a9ded", "#8c8dfc"], ["#2a1b52", "#8c8dfc", "#53d3e0"]],
   bitcoin: [["#2b190c", "#f7931a", "#ffd783"], ["#381b10", "#d36a16", "#ffe5ad"], ["#271d18", "#b66d3a", "#f4b158"]],
   base: [["#061e47", "#165dff", "#8cc8ff"], ["#102b70", "#3875ff", "#b5dbff"], ["#071936", "#2861dd", "#74e4ff"]],
-  near: [["#231526", "#ee5b42", "#ffba92"], ["#311c2a", "#c7474b", "#f7a891"], ["#172333", "#ee7458", "#ffc68a"]],
+  near: [["#0a0a0a", "#00ec97", "#b8ffe0"], ["#0b1115", "#17d9d4", "#9be8ff"], ["#150d0c", "#ff7966", "#f0ec74"]],
   solana: [["#10132b", "#9945ff", "#14f195"], ["#17172e", "#6d55d8", "#5ee5c4"], ["#102c36", "#28b6a2", "#b7f35e"]],
   paradise: [["#063d48", "#2da894", "#e9d2a4"], ["#104554", "#56b7c5", "#ffbb7a"], ["#2b3e33", "#6c9d67", "#edd49d"]],
-  claude: [["#38221b", "#da7147", "#f7ce9f"], ["#38251f", "#bf624b", "#f4d9ad"], ["#3b2923", "#e58b58", "#ffd598"]],
+  claude: [["#191919", "#d97757", "#faf9f5"], ["#2a1d17", "#cc785c", "#ebdbbc"], ["#1f1b17", "#d4a27f", "#f0eee6"]],
   codex: [["#151735", "#6257db", "#a9c7ff"], ["#172449", "#4a73e8", "#d6aaff"], ["#20183d", "#8162e8", "#83d7ff"]],
-  cursor: [["#111316", "#6d7787", "#d3e1f4"], ["#171922", "#6574a3", "#d1d8e8"], ["#151719", "#4e7772", "#d2e9db"]],
+  cursor: [["#14120b", "#2c2a24", "#f54e00"], ["#14120b", "#3a372e", "#edecec"], ["#0b0b09", "#26241d", "#f7f7f4"]],
   grok: [["#090b0e", "#8a98a8", "#eff4f9"], ["#17191e", "#778499", "#fff3d7"], ["#111316", "#596979", "#d4e5f4"]],
+  chatgpt: [["#0b0b0c", "#10a37f", "#d6f5ec"], ["#0b0b0c", "#202123", "#10a37f"], ["#101312", "#0e8a6b", "#b5ecd9"]],
+  gemini: [["#0d1230", "#4285f4", "#d96570"], ["#14102e", "#9b72cb", "#4285f4"], ["#0d1a30", "#4285f4", "#9b72cb"]],
+  github: [["#0d1117", "#1f6feb", "#a371f7"], ["#0d1117", "#238636", "#56d364"], ["#161b22", "#8534f3", "#d2a8ff"]],
   hermes: [["#17130b", "#b47b18", "#ffd94f"], ["#20180c", "#cb8d25", "#ffe3a0"], ["#171b11", "#a28d36", "#d5ee69"]],
 };
 
@@ -137,6 +141,9 @@ const TEXTURES: Record<EventThemeId, string[]> = {
     "linear-gradient(45deg, transparent 49%, #e7edf323 49.5% 50.5%, transparent 51%), linear-gradient(135deg, transparent 49%, #e7edf319 49.5% 50.5%, transparent 51%)",
     "radial-gradient(ellipse at 50% 0%, #e0e8f022, transparent 60%), repeating-linear-gradient(90deg, #d6e2f012 0 1px, transparent 1px 33px)",
   ],
+  chatgpt: ["none", "radial-gradient(ellipse at 80% 15%, #10a37f30, transparent 55%)", "radial-gradient(circle at 25% 80%, #10a37f26, transparent 50%)"],
+  gemini: ["radial-gradient(ellipse at 75% 20%, #9b72cb55, transparent 55%)", "radial-gradient(ellipse at 20% 80%, #4285f455, transparent 55%)", "radial-gradient(ellipse at 80% 80%, #d9657044, transparent 55%)"],
+  github: ["linear-gradient(#ffffff10 1px, transparent 1px), linear-gradient(90deg, #ffffff10 1px, transparent 1px)", "radial-gradient(ellipse at 70% 15%, #238636380, transparent 55%)", "radial-gradient(ellipse at 25% 20%, #8534f340, transparent 55%)"],
   hermes: [
     "radial-gradient(circle at 75% 23%, #ffdf6330 0 1px, transparent 2px), repeating-linear-gradient(45deg, #f1bd4b16 0 1px, transparent 1px 23px)",
     "linear-gradient(120deg, transparent 47%, #ffcf4c25 48% 49%, transparent 50%), linear-gradient(60deg, transparent 47%, #a8df6c19 48% 49%, transparent 50%)",
@@ -214,12 +221,14 @@ export function createRandomEventVisual(): EventVisualConfig {
   return createRandomVisual("studio");
 }
 
+const LEGACY_FALLBACK_THEMES = ["ethereum", "bitcoin", "base", "near", "solana", "paradise", "claude", "codex", "cursor", "grok", "hermes"] as const;
+
 export function fallbackEventVisual(eventId: number, title: string): EventVisualConfig {
   let h = (eventId ^ 0x9e3779b9) >>> 0;
   for (let i = 0; i < title.length; i++) h = Math.imul(h ^ title.charCodeAt(i), 0x85ebca6b) >>> 0;
-  const legacyThemes = EVENT_THEMES.filter((item) => item.group !== "near-me");
-  const theme = legacyThemes[h % legacyThemes.length];
-  return { themeId: theme.id, seed: h };
+  // Frozen: themes added later must not change which look an unsaved event falls back to.
+  const themeId = LEGACY_FALLBACK_THEMES[h % LEGACY_FALLBACK_THEMES.length];
+  return { themeId, seed: h };
 }
 
 export function resolveEventVisual(config: EventVisualConfig): ResolvedEventVisual {

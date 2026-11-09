@@ -83,7 +83,6 @@ export function EventPoster({ title, visual, coverUrl = null, className = "" }: 
   const theme = resolved.theme;
   const icon = "icon" in theme ? theme.icon : undefined;
   const mark = theme.mark;
-  const iconClass = theme.id === "near" ? "brightness-0 invert" : "";
   const imageAsset = safeCover || resolved.coverAsset;
   const imagePosition = safeCover ? "center" : resolved.coverPosition;
   const imageSize = safeCover ? "cover" : resolved.coverSize;
@@ -128,8 +127,9 @@ export function EventPoster({ title, visual, coverUrl = null, className = "" }: 
   };
   return (
     <div className={`relative isolate overflow-hidden text-white ${className}`} style={{ containerType: "inline-size", backgroundColor: dark, backgroundImage, backgroundSize, backgroundPosition, backgroundRepeat }}>
+      {icon && !safeCover && <img src={icon} alt="" aria-hidden="true" className="pointer-events-none absolute -bottom-[8%] -right-[8%] h-[62%] w-[62%] object-contain opacity-[0.16]" />}
       <div className="relative flex items-center gap-2 px-[7%] pt-[7%] text-[clamp(0.48rem,1.5vw,0.72rem)] font-semibold uppercase tracking-[0.18em] text-white/80">
-        {icon ? <img src={icon} alt="" aria-hidden="true" className={`h-5 w-5 object-contain opacity-90 ${iconClass}`} /> : <span className="leading-none">{mark}</span>}
+        {icon ? <img src={icon} alt="" aria-hidden="true" className="h-5 w-5 object-contain" /> : <span className="leading-none">{mark}</span>}
         <span className="leading-none">{theme.name}</span>
       </div>
       <span className="block text-white" style={{ ...titleStyle, overflowWrap: "anywhere", lineHeight: 1.08, fontWeight: 700, letterSpacing: "-0.035em" }}>
