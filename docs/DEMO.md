@@ -1,6 +1,6 @@
 # Demo video script (about 2 minutes)
 
-The hosted Vercel testnet demo at https://near-event-me.vercel.app/e/4 uses
+The hosted Vercel testnet demo at https://www.nearvent.site/e/4 uses
 Upstash Redis. Event 4 last passed a faucet-USDC registration, event-detail
 save, and off-chain check-in on 2026-11-07. On 2026-11-08, the new production
 domain returned HTTP 200 for `/` and `/e/4`. The app still targets TP4; the

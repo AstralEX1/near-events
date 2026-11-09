@@ -6,7 +6,7 @@ registration, host-only event-detail save to Upstash, and off-chain check-in.
 It uses the Upstash Redis database `NearMeTestnet`. After the latest
 `git-main` production deployment failed, a clean production deployment from
 remote `main` commit `5176910` reached READY. The project domain
-`near-event-me.vercel.app` was attached and the production home page and `/e/4`
+`www.nearvent.site` was attached and the production home page and `/e/4`
 both returned HTTP 200. Production still serves snapshot `5176910`; later main
 commit `c0c6b2a` and local uncommitted StageShow/demo edits are not deployed.
 PR #21 merged to `main` on 2026-11-08 as `e8329a6`; its TP5 contract was
