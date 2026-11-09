@@ -47,6 +47,8 @@ function CreateRoute() {
 /** Create an event with its public details and escrow options. */
 function CreateEvent() {
   const { accountId, send, staffToken } = useWallet();
+  // Host's own cover photo as a JPEG data URL; uploaded after the event is created.
+  const [photo, setPhoto] = useState<string | null>(null);
   const router = useRouter();
   const params = useSearchParams();
   const integrate = params.get("flow") === "widget";
@@ -230,10 +232,11 @@ function CreateEvent() {
       setCreated(latest);
       setCreatedVisual(eventVisual);
       const details: EventDetails = { location, description, cover_url: coverUrl };
+      if (photo) details.cover_url = photo;
       // The door team lives on our server too (api/cohosts), saved with the details.
       const doorTeam = splitCohosts(form.cohosts).filter((a) => a !== accountId);
       setCreatedCohosts(doorTeam);
-      const hasDetails = Boolean(location || description || coverUrl || doorTeam.length);
+      const hasDetails = Boolean(location || description || details.cover_url || doorTeam.length);
       if (hasDetails) setCreatedDetails(details);
       let token: string | null = null;
       try {
@@ -329,7 +332,7 @@ function CreateEvent() {
       <EventPageBackground visual={eventVisual} />
       <form onSubmit={submit} className="max-w-[920px] mx-auto pb-40 grid grid-cols-1 gap-6 md:gap-8 md:grid-cols-[300px_minmax(0,1fr)] items-start">
         <div className="relative min-w-0 z-20 md:sticky md:top-20">
-          <EventThemePicker value={eventVisual} title={form.title} coverUrl={safeImageUrl(form.cover_url)} onChange={setEventVisual} />
+          <EventThemePicker value={eventVisual} title={form.title} coverUrl={safeImageUrl(form.cover_url)} photo={photo} onPhoto={setPhoto} onChange={setEventVisual} />
         </div>
         <div className="gc-create-form min-w-0 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -774,9 +777,18 @@ function safeImageUrl(value: string): string | null {
   }
 }
 
+async function uploadCover(dataUrl: string, token: string): Promise<string> {
+  const bytes = await (await fetch(dataUrl)).blob();
+  const response = await fetch("/api/covers", { method: "POST", headers: { "Content-Type": "image/jpeg", Authorization: `Bearer ${token}` }, body: bytes });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok || typeof json.url !== "string") throw new Error(json.error ?? "Could not upload the cover photo");
+  return json.url;
+}
+
 async function saveDetails(eventId: number, details: EventDetails, doorTeam: string[], token: string) {
   if (doorTeam.length) await cohostsApi.save(token, eventId, doorTeam);
   if (!details.location && !details.description && !details.cover_url) return;
+  if (details.cover_url?.startsWith("data:")) details = { ...details, cover_url: await uploadCover(details.cover_url, token) };
   const response = await fetch("/api/event-details", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },

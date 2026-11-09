@@ -11,7 +11,7 @@ const key = (eventId: number) => `event-details:${EVENTS_CONTRACT}:${eventId}`;
 const redisUrl = () => process.env.UPSTASH_REDIS_REST_URL?.replace(/\/$/, "");
 const redisToken = () => process.env.UPSTASH_REDIS_REST_TOKEN;
 
-function usesRedis(): boolean {
+export function usesRedis(): boolean {
   const url = redisUrl();
   const token = redisToken();
   if (url && token) return true;
@@ -19,7 +19,7 @@ function usesRedis(): boolean {
   return false;
 }
 
-async function redis<T>(command: (string | number)[]): Promise<T> {
+export async function redis<T>(command: (string | number)[]): Promise<T> {
   const response = await fetch(redisUrl()!, {
     method: "POST",
     headers: { Authorization: `Bearer ${redisToken()}`, "Content-Type": "application/json" },

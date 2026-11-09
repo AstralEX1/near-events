@@ -62,7 +62,8 @@ test("saved legacy themes resolve exactly as before the Near Me collection", () 
   };
 
   for (const [themeId, digest] of Object.entries(expected)) {
-    const visuals = seeds.map((seed) => resolveEventVisual({ themeId, seed }));
+    // `font` is the index behind fontFamily, added later for the picker; it changes nothing visible.
+    const visuals = seeds.map((seed) => { const { font: _font, ...visual } = resolveEventVisual({ themeId, seed }); return visual; });
     assert.equal(createHash("sha256").update(JSON.stringify(visuals)).digest("hex"), digest, themeId);
   }
 });
@@ -96,4 +97,40 @@ test("event visual validation and fallback selection stay deterministic", () => 
   const fallback = fallbackEventVisual(42, "Community dinner");
   assert.ok(validEventVisual(fallback));
   assert.deepEqual(fallback, fallbackEventVisual(42, "Community dinner"));
+});
+
+test("withVisualOptions changes one choice and keeps the others", async () => {
+  const { EVENT_FONTS, EVENT_LAYOUTS, resolveEventVisual, validEventVisual, withVisualOptions } = await import("../src/lib/event-visuals.ts");
+  for (const seed of [0, 1, 0xffff_ffff, 0xa5a5a5a5, 123456789]) {
+    const before = resolveEventVisual({ themeId: "paradise", seed });
+    const keep = (after, ...fields) => assert.deepEqual(fields.map((f) => after[f]), fields.map((f) => before[f]));
+    for (let variant = 0; variant < 3; variant++) {
+      const config = withVisualOptions(before.config, { variant });
+      assert.ok(validEventVisual(config));
+      const after = resolveEventVisual(config);
+      assert.equal(after.variant, variant);
+      keep(after, "font", "layout", "backgroundAsset");
+    }
+    EVENT_FONTS.forEach((_, font) => {
+      const after = resolveEventVisual(withVisualOptions(before.config, { font }));
+      assert.equal(after.font, font);
+      keep(after, "variant", "layout", "backgroundAsset");
+    });
+    EVENT_LAYOUTS.forEach((layout, index) => {
+      const after = resolveEventVisual(withVisualOptions(before.config, { layout: index }));
+      assert.equal(after.layout, layout);
+      keep(after, "variant", "font", "backgroundAsset");
+    });
+  }
+});
+
+test("shuffleEventVisual gives a visibly different look of the same theme", async () => {
+  const { resolveEventVisual, shuffleEventVisual } = await import("../src/lib/event-visuals.ts");
+  for (const seed of [0, 1, 0xffff_ffff, 123456789]) {
+    const near = shuffleEventVisual({ themeId: "near", seed });
+    assert.equal(near.themeId, "near");
+    assert.notEqual(resolveEventVisual(near).variant, resolveEventVisual({ themeId: "near", seed }).variant);
+    const paradise = shuffleEventVisual({ themeId: "paradise", seed });
+    assert.notEqual(resolveEventVisual(paradise).backgroundAsset, resolveEventVisual({ themeId: "paradise", seed }).backgroundAsset);
+  }
 });

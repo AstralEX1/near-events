@@ -45,8 +45,9 @@ export interface ResolvedEventVisual {
   texture: string;
   colors: [string, string, string];
   fontFamily: string;
-  layout: "center" | "lower" | "offset";
+  layout: (typeof EVENT_LAYOUTS)[number];
   variant: number;
+  font: number;
 }
 
 const PARADISE_BACKGROUNDS = [
@@ -150,6 +151,13 @@ const FONTS = [
   'ui-monospace, SFMono-Regular, Menlo, monospace',
 ] as const;
 
+export const EVENT_FONTS = FONTS;
+export const EVENT_LAYOUTS = ["center", "lower", "offset"] as const;
+
+export function eventPalettes(themeId: EventThemeId): [string, string, string][] {
+  return PALETTES[themeId];
+}
+
 export function isEventThemeId(value: unknown): value is EventThemeId {
   return typeof value === "string" && EVENT_THEMES.some((theme) => theme.id === value);
 }
@@ -168,6 +176,40 @@ export function createRandomVisual(themeId: EventThemeId): EventVisualConfig {
   return { themeId, seed: seed[0] };
 }
 
+/** A random look of the same theme that visibly differs: another palette, or another photo for Paradise. */
+export function shuffleEventVisual(current: EventVisualConfig): EventVisualConfig {
+  const before = resolveEventVisual(current);
+  const paradise = current.themeId === "paradise";
+  for (;;) {
+    const next = createRandomVisual(current.themeId);
+    const after = resolveEventVisual(next);
+    if (paradise ? after.backgroundAsset !== before.backgroundAsset : after.variant !== before.variant) return next;
+  }
+}
+
+/** Rewrites 4 seed bits so that (seed >>> shift) % modulus equals target. */
+function withSeedField(seed: number, shift: number, modulus: number, target: number): number {
+  for (let bits = 0; bits < 16; bits++) {
+    const candidate = ((seed & ~(0xf << shift)) | (bits << shift)) >>> 0;
+    if ((candidate >>> shift) % modulus === target) return candidate;
+  }
+  return seed;
+}
+
+/** Color, font and title position come from the saved seed, so choosing them only rewrites the seed (highest field first). */
+export function withVisualOptions(config: EventVisualConfig, options: { variant?: number; layout?: number; font?: number }): EventVisualConfig {
+  const seed = config.seed >>> 0;
+  const font = options.font ?? (seed >>> 12) % FONTS.length;
+  const photo = (seed >>> 8) % PARADISE_BACKGROUNDS.length;
+  const layout = options.layout ?? (seed >>> 4) % EVENT_LAYOUTS.length;
+  const variant = options.variant ?? seed % 3;
+  let next = withSeedField(seed, 12, FONTS.length, font);
+  next = withSeedField(next, 8, PARADISE_BACKGROUNDS.length, photo);
+  next = withSeedField(next, 4, EVENT_LAYOUTS.length, layout);
+  next = withSeedField(next, 0, 3, variant);
+  return { themeId: config.themeId, seed: next };
+}
+
 export function createRandomEventVisual(): EventVisualConfig {
   return createRandomVisual("studio");
 }
@@ -184,7 +226,8 @@ export function resolveEventVisual(config: EventVisualConfig): ResolvedEventVisu
   const safeSeed = config.seed >>> 0;
   const theme = EVENT_THEMES.find((item) => item.id === config.themeId) ?? EVENT_THEMES[0];
   const variant = safeSeed % 3;
-  const layout = (["center", "lower", "offset"] as const)[(safeSeed >>> 4) % 3];
+  const layout = EVENT_LAYOUTS[(safeSeed >>> 4) % 3];
+  const font = (safeSeed >>> 12) % FONTS.length;
   const aiPanel = AI_PANEL_POSITION[theme.id] ?? null;
   const paradiseImage = theme.id === "paradise" ? PARADISE_BACKGROUNDS[(safeSeed >>> 8) % PARADISE_BACKGROUNDS.length] : null;
   return {
@@ -198,7 +241,8 @@ export function resolveEventVisual(config: EventVisualConfig): ResolvedEventVisu
     coverSize: aiPanel ? "500% 100%" : "cover",
     texture: TEXTURES[theme.id][variant],
     colors: PALETTES[theme.id][variant],
-    fontFamily: theme.group === "near-me" ? "var(--font-display)" : FONTS[(safeSeed >>> 12) % FONTS.length],
+    fontFamily: theme.group === "near-me" ? "var(--font-display)" : FONTS[font],
+    font,
     layout,
     variant,
   };

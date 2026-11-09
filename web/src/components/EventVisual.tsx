@@ -66,7 +66,9 @@ export function EventPoster({ title, visual, coverUrl = null, className = "" }: 
   const resolved = resolveEventVisual(visual);
   const [dark, mid, light] = resolved.colors;
   let safeCover = "";
-  try {
+  // A host's not-yet-uploaded photo is previewed as a JPEG data URL on /create.
+  if (coverUrl?.startsWith("data:image/jpeg;base64,")) safeCover = coverUrl;
+  else try {
     const url = new URL(coverUrl ?? "");
     if (["http:", "https:"].includes(url.protocol) && !url.username && !url.password) safeCover = url.href;
   } catch {}

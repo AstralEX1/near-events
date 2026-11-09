@@ -1,15 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { useState, type FormEvent } from "react";
 import type { EventMode } from "@/lib/near";
 import { detectEventSource } from "@/lib/eventImport";
 import { formUrl, parseMode, startUrl, validAmount } from "@/lib/flow";
 
-const CARDS: { mode: EventMode; line: string; image: string }[] = [
-  { mode: "Deposit", line: "Show up, get it back", image: "/create/deposit-mode.png" },
-  { mode: "Ticket", line: "Guests pay, you earn", image: "/create/ticket-mode.png" },
+// Icon paths from Lucide (ISC license): wallet and ticket.
+const CARDS: { mode: EventMode; title: string; line: string; icon: string[] }[] = [
+  { mode: "Deposit", title: "Stake to RSVP", line: "Show up, get it back", icon: ["M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1", "M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"] },
+  { mode: "Ticket", title: "Ticket", line: "Guests pay, you earn", icon: ["M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z", "M13 5v2", "M13 17v2", "M13 11v2"] },
 ];
 
 /** The first screen of both flows: how guests pay and how much, plus the event link when integrating. */
@@ -62,10 +62,12 @@ export function StartStep({ widget, initial }: { widget: boolean; initial: { mod
             data-selected={mode === card.mode}
           >
             <input type="radio" name="guests-pay" className="sr-only" checked={mode === card.mode} onChange={() => setMode(card.mode)} />
-            <div aria-hidden className="relative flex min-h-20 aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-xl bg-accent-soft">
-              <Image src={card.image} alt="" fill sizes="(max-width: 640px) 50vw, 320px" className="object-contain" />
-            </div>
-            <span className="block px-1 pt-3 pb-1 font-medium">{card.mode === "Deposit" ? "Attendance deposit" : "Paid ticket"}</span>
+            <span aria-hidden className="gc-mode-icon">
+              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                {card.icon.map((d) => <path key={d} d={d} />)}
+              </svg>
+            </span>
+            <span className="block px-1 pt-4 pb-1 font-medium">{card.title}</span>
             <span className="block px-1 pb-1 text-sm text-muted">{card.line}</span>
           </label>
         ))}
