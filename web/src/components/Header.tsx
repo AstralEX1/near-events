@@ -38,7 +38,7 @@ function HeaderContent({
           <span className="inline-flex w-7 h-7 rounded-lg bg-accent text-white text-[13px] font-bold items-center justify-center">
             N
           </span>
-          Near Me
+          Nearvent
         </Link>
         {NETWORK === "testnet" && (
           <span className="hidden sm:inline text-[11px] font-medium px-2 py-0.5 rounded-full bg-accent-soft text-accent">testnet</span>

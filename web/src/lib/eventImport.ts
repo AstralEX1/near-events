@@ -7,7 +7,7 @@ export interface ImportedEvent {
   cover_url: string | null;
 }
 
-/** Public fields saved by Near Me outside the escrow contract. */
+/** Public fields saved by Nearvent outside the escrow contract. */
 export interface EventDetails {
   location: string;
   description: string;

@@ -104,7 +104,7 @@ export default function ConfirmEvent() {
       {error && <p className="text-sm text-warn break-words">{error}</p>}
       <p className="text-xs text-muted">
         Creating an event is free (up to 5 open events at a time). After the wallet step you sign
-        one short message so the Near Me bot can check guests in for this event. Payouts and
+        one short message so the Nearvent bot can check guests in for this event. Payouts and
         refunds always need your confirmation.
       </p>
     </div>

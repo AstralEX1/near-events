@@ -7,7 +7,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin", "cyr
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Near Me: show up, split the pool",
+  title: "Nearvent: show up, split the pool",
   description: "Commit a small USDC deposit to an event. Everyone who shows up splits the pool.",
 };
 

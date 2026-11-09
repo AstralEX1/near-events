@@ -1,6 +1,6 @@
-# Rehearsal: Near Me full journey
+# Rehearsal: Nearvent full journey
 
-Design reference: the actual Near Me app shell and screens. The scene reuses the `HeaderPreview` shell and public event components `VisualBackdrop`, `EventPoster`, `DateBadge`, `Avatar`, `StatusPill`, and `AccountQr`. Registration, Manage, and cash-out controls are non-interactive sample UI patterned after the app components so the demo cannot trigger wallet or camera actions.
+Design reference: the actual Nearvent app shell and screens. The scene reuses the `HeaderPreview` shell and public event components `VisualBackdrop`, `EventPoster`, `DateBadge`, `Avatar`, `StatusPill`, and `AccountQr`. Registration, Manage, and cash-out controls are non-interactive sample UI patterned after the app components so the demo cannot trigger wallet or camera actions.
 
 Scene: `http://127.0.0.1:3001/try`. The scene is illustrative sample UI. It makes no wallet, chain, storage or scanner calls and uses no real attendee or transaction data.
 
@@ -10,7 +10,7 @@ Beats: show a 10 USDC refundable deposit → reveal `kai.mori.near`'s QR pass �
 
 Pacing update (2026-11-08, after Alex's feedback): the scene now runs about 19–20 seconds, with longer holds on the QR, host screens, closeout, and payout. Screen transitions are 700ms and cursor rests are slower so each state has time to read.
 
-Composition: wide uses the 880×600 Stageshow browser showing the Near Me event and Manage screens. Compact uses the 358×682 responsive web screen with the same app header and cards. The guest page stacks its cover, host, and attendees as the real page does, then the staged story scrolls to registration. There is no device frame or app-only navigation.
+Composition: wide uses the 880×600 Stageshow browser showing the Nearvent event and Manage screens. Compact uses the 358×682 responsive web screen with the same app header and cards. The guest page stacks its cover, host, and attendees as the real page does, then the staged story scrolls to registration. There is no device frame or app-only navigation.
 
 ## Visual review
 

@@ -115,7 +115,7 @@ export function NearMeJourneyDemo() {
   useEffect(() => setMounted(true), []);
 
   return (
-    <section id="near-me-journey" className="nm-journey" aria-label="Near Me event journey">
+    <section id="near-me-journey" className="nm-journey" aria-label="Nearvent event journey">
       <div className="nm-journey__toolbar">
         <button
           type="button"
@@ -500,7 +500,7 @@ function GuestPayout({ compact }: { compact: boolean }) {
 function SiteFooter({ compact }: { compact: boolean }) {
   return (
     <footer className="nm-site-footer">
-      <span>Near Me · no fee</span>
+      <span>Nearvent · no fee</span>
       {!compact && <><span>How it works</span><span>Events</span><span>Create event</span><span>Integrate</span></>}
     </footer>
   );

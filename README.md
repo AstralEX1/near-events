@@ -1,4 +1,4 @@
-# Near Me: show up, split the pool
+# Nearvent: show up, split the pool
 
 Kickback-style events on NEAR. In Deposit mode, every guest puts down the same
 small USDC deposit; guests who show up get it back plus an equal share of the
@@ -15,7 +15,7 @@ fee, and creating an event is free.
 - Free for hosts: the escrow pays the storage for a new event, so a host needs
   no NEAR to create one.
 - The host is a person (any NEAR account) with an optional door team (co-hosts)
-  kept on the Near Me server; only the host can close or cancel.
+  kept on the Nearvent server; only the host can close or cancel.
 - In Deposit mode the host records who showed up but cannot take the pool. In
   Ticket mode ticket funds go to the host after the event starts. The host can
   cancel and refund everyone at any time; anyone can do it 30 days after the
@@ -99,11 +99,11 @@ the current release smoke against `escrow-tp4` before relying on that result.
 Add a registration button to an existing event page with two lines:
 
 ```html
-<script src="https://YOUR-NEAR-ME-HOST/embed.js" async></script>
+<script src="https://YOUR-NEARVENT-HOST/embed.js" async></script>
 <near-event event="YOUR_EVENT_ID" mode="button"></near-event>
 ```
 
-The button opens Near Me checkout in a separate window when the browser allows
+The button opens Nearvent checkout in a separate window when the browser allows
 it; on phones it may open a new tab, and blocked pop-ups fall back to the
 current tab. After registering, the button stays available to reopen the guest's
 QR pass or, after the event closes, their payout or refund page; guests may need
@@ -127,7 +127,7 @@ Contract: `contracts/events/src/lib.rs` (unit tests in `tests.rs`).
 
 **EVM wallet flow (mainnet; release smoke pending):** the guest signs an ERC-191 intent
 `ft_withdraw {token: USDC, receiver_id: escrow, msg: register}`; `/api/intents/execute`
-checks it is only a Near Me registration and submits it to `intents.near`
+checks it is only a Nearvent registration and submits it to `intents.near`
 (`execute_intents`), which calls `ft_transfer_call` on the escrow.
 
 | Method | Who | What |
@@ -142,7 +142,7 @@ checks it is only a Near Me registration and submits it to `intents.near`
 Views: `get_event`, `get_recent_events(limit ≤ 100)`, `get_guests`,
 `get_guest_status`, `get_guest_statuses(account_id, event_ids ≤ 100)`, `balance_of`.
 There is no pause, owner, event editing or single-guest refund. The door team,
-location, description and cover live on the Near Me server, not in the escrow.
+location, description and cover live on the Nearvent server, not in the escrow.
 
 Init is private and runs atomically with deploy. Set `relayer` at initialization
 for an escrow accepting EVM guests. Privileged mutators require exactly 1 yoctoNEAR.

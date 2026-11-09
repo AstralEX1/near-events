@@ -10,13 +10,13 @@ image hosts. Unsplash photos are used under the [Unsplash License](https://unspl
 | `paradise/ubud-rice-fields.jpg` | Chema Photo | [Rice terraces](https://unsplash.com/photos/green-rice-terraces-DmEXjTOGkAY) |
 | `paradise/canggu-nomad.jpg` | Content Pixie | [Canggu digital nomad](https://unsplash.com/photos/woman-in-white-crew-neck-t-shirt-sitting-by-the-table-with-macbook-PSie8BkuB0w) |
 | `paradise/canggu-surf.jpg` | Matthew Stephenson | [Bali surf coast](https://unsplash.com/photos/a-surfer-walks-along-the-shore-Rd7EnqLYDTs) |
-| `paradise/canggu-coworking.png` | Generated for Near Me with OpenAI image generation | Original generated artwork; no external photo source. |
-| `ai/ai-brand-panels.png` | Generated for Near Me with OpenAI image generation | Five original abstract panels inspired by each AI theme's palette; no copied logos or screenshots. |
+| `paradise/canggu-coworking.png` | Generated for Nearvent with OpenAI image generation | Original generated artwork; no external photo source. |
+| `ai/ai-brand-panels.png` | Generated for Nearvent with OpenAI image generation | Five original abstract panels inspired by each AI theme's palette; no copied logos or screenshots. |
 
 The Ethereum, Bitcoin, NEAR and Solana marks used in theme previews are the
 existing local assets under `public/landing/icons/`. AI themes use their
 product names as text labels over generated brand-inspired panels; the other
-presets use original Near Me textures.
+presets use original Nearvent textures.
 
 AI visual references: [Claude / Anthropic](https://www.anthropic.com/legal),
 [Codex / OpenAI](https://openai.com/academy/codex/),

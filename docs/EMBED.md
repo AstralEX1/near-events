@@ -1,21 +1,21 @@
-# Put Near Me on your website
+# Put Nearvent on your website
 
 Add a deposit-backed registration button to an event page you already have. A
-click opens the Near Me checkout window while leaving the host page available
+click opens the Nearvent checkout window while leaving the host page available
 behind it when the browser allows a separate window. On phones it may open a
 new tab; if a pop-up is blocked, checkout opens in the current tab. Deposits
-stay in the Near Me contract, and there is no platform fee.
+stay in the Nearvent contract, and there is no platform fee.
 
 ## Add a registration button
 
 Open **Integrate** (`/widget`) and paste your Luma or BaliSquad event link, or create the event at `/create`. In that event’s **Manage → Integration** tab, copy this code:
 
 ```html
-<script src="https://YOUR-NEAR-ME-HOST/embed.js" async></script>
+<script src="https://YOUR-NEARVENT-HOST/embed.js" async></script>
 <near-event event="6" mode="button"></near-event>
 ```
 
-The button shows the current deposit and opens the first-party Near Me
+The button shows the current deposit and opens the first-party Nearvent
 registration page. Once registration succeeds, it stays clickable as **View
 pass / claim**. Guests can reopen it for their QR pass, and after the event
 closes they can view their payout or refund there. Deposit guests who were
@@ -46,7 +46,7 @@ Existing card embeds continue to work. For new integrations, use the button
 above.
 
 ```html
-<script src="https://YOUR-NEAR-ME-HOST/embed.js" async></script>
+<script src="https://YOUR-NEARVENT-HOST/embed.js" async></script>
 <near-event event="6"></near-event>
 ```
 
@@ -59,7 +59,7 @@ The element supports these optional settings for existing integrations:
 | Attribute | Values | Default |
 |---|---|---|
 | `theme` | `light`, `dark`, `auto` | `light` |
-| `accent` | any hex color, e.g. `#ff401f` | Near Me purple |
+| `accent` | any hex color, e.g. `#ff401f` | Nearvent purple |
 | `font` | `geist`, `poppins`, `system` | `geist` |
 | `display` | `serif` for an event title | same font |
 | `radius` | corner radius in px, 0 to 32 | 16 |
@@ -85,7 +85,7 @@ the event's guest list, so nothing private is shared.
 Sites that cannot load scripts can keep using the card iframe:
 
 ```html
-<iframe src="https://YOUR-NEAR-ME-HOST/embed/e/6"
+<iframe src="https://YOUR-NEARVENT-HOST/embed/e/6"
   title="Event registration" loading="lazy"
   style="width:100%;max-width:560px;height:260px;border:0"></iframe>
 ```
@@ -95,22 +95,22 @@ integrations should use the button snippet instead.
 
 ## Direct links
 
-- Checkout: `https://YOUR-NEAR-ME-HOST/p/6`
-- Event page: `https://YOUR-NEAR-ME-HOST/e/6`
+- Checkout: `https://YOUR-NEARVENT-HOST/p/6`
+- Event page: `https://YOUR-NEARVENT-HOST/e/6`
 
 The event page works in a social bio, email, message, or QR code at the venue.
 
 ## How it works
 
 ```
-your event page ── button ──► Near Me checkout window
+your event page ── button ──► Nearvent checkout window
       ▲                               │
       └──── near-events:registered ───┘
                                       ├─ after registration: QR pass
                                       └─ after event close: payout/refund view
 ```
 
-- Checkout runs on the Near Me domain as a top-level page, so wallet approvals,
+- Checkout runs on the Nearvent domain as a top-level page, so wallet approvals,
   Google/email sign-in, and payment redirects can work. On desktop it may open
   in a separate window; on phones it may open a tab. A blocked pop-up falls back
   to the current tab.
@@ -132,7 +132,7 @@ your event page ── button ──► Near Me checkout window
 1. Start at **Integrate** (`/widget`) with your event link, or at `/create`. Add the door person to the door team.
 2. Copy the button code, AI prompt or checkout link from that event’s Manage → Integration tab. Integrate takes you there after signing.
 3. Add it to your event page.
-4. Manage registrations and check-in in Near Me. Close the event there; eligible
+4. Manage registrations and check-in in Nearvent. Close the event there; eligible
    guests can then claim their payout from the same checkout page.
 
 The snippet needs a public HTTPS host for the web app (see

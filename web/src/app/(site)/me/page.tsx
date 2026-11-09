@@ -75,7 +75,7 @@ export default function Me() {
       {cashOutStatus && <p role="status">{cashOutStatus}</p>}
       <div className="card p-5 space-y-4">
         <div>
-          <div className="label">Near Me balance</div>
+          <div className="label">Nearvent balance</div>
           <div className="text-4xl font-semibold mt-1">{formatUsdc(balance)} <span className="text-lg text-muted">USDC</span></div>
           <p className="text-sm text-muted mt-1">Payouts and refunds land here. Withdraw them through NEAR Intents to any chain or wallet.</p>
         </div>

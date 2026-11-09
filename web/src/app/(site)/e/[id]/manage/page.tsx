@@ -270,7 +270,7 @@ function ManageEvent() {
               run(
                 "cancel",
                 { event_id: id },
-                `Cancel this event?\n\nEveryone gets their money back: ${event.guest_count} ${ticket ? "ticket" : "deposit"}${event.guest_count === 1 ? "" : "s"} (${formatUsdc(event.total_pool)} USDC) return to the guests' Near Me balances.\n\nThis cannot be undone.`,
+                `Cancel this event?\n\nEveryone gets their money back: ${event.guest_count} ${ticket ? "ticket" : "deposit"}${event.guest_count === 1 ? "" : "s"} (${formatUsdc(event.total_pool)} USDC) return to the guests' Nearvent balances.\n\nThis cannot be undone.`,
               )
             }
             doorTeam={doorTeam}

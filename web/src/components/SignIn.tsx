@@ -122,7 +122,7 @@ export function SignInMenu() {
             tabIndex={-1}
             className="fixed inset-x-3 top-[4.25rem] z-50 max-h-[calc(100dvh-5rem)] overflow-y-auto whitespace-normal rounded-2xl card p-4 shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80 sm:max-h-[min(70vh,32rem)]"
           >
-            <div id="near-me-signin-title" className="font-semibold mb-1">Welcome to Near Me</div>
+            <div id="near-me-signin-title" className="font-semibold mb-1">Welcome to Nearvent</div>
             <p className="text-xs text-muted mb-3">No wallet? Sign in with Google or email; we create your NEAR account.</p>
             <SignInOptions onDone={close} />
           </div>

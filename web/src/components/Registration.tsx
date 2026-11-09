@@ -170,7 +170,7 @@ export function RegistrationCard({
       </div>
     ) : event.attended_count === 0 && myStatus ? (
       <div className="space-y-2">
-        <p className="text-sm">Nobody was checked in. Your deposit was credited to Near Me.</p>
+        <p className="text-sm">Nobody was checked in. Your deposit was credited to Nearvent.</p>
         {balanceLoading ? (
           <p className="text-sm text-muted">Checking your deposit balance…</p>
         ) : balanceError ? (
@@ -199,13 +199,13 @@ export function RegistrationCard({
       ) : myStatus === "Registered" ? (
         <p className="text-sm">You weren’t checked in, so your deposit went to the people who came.</p>
       ) : balanceLoading ? (
-        <p className="text-sm text-muted">Checking your Near Me balance…</p>
+        <p className="text-sm text-muted">Checking your Nearvent balance…</p>
       ) : balanceError ? (
-        <p className="text-sm text-warn">Could not load your Near Me balance. Refresh and try again.</p>
+        <p className="text-sm text-warn">Could not load your Nearvent balance. Refresh and try again.</p>
       ) : balance > 0n ? (
         <div className="space-y-2">
           <p className="text-sm">
-            You have <b>{formatUsdc(balance)} USDC</b> in your Near Me balance. This is an account-level balance and may include funds from other events.
+            You have <b>{formatUsdc(balance)} USDC</b> in your Nearvent balance. This is an account-level balance and may include funds from other events.
           </p>
           <CashOut accountId={accountId} kind={kind} balance={balance} onDone={loadBalance} startOpen />
         </div>

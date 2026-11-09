@@ -14,7 +14,7 @@ mainnet clip only after those checks.
 
 | Time | Show | Say |
 |---|---|---|
-| 0:00–0:15 | Home page | "Near Me helps free-event hosts get a more reliable headcount. Guests who show up get their deposit back and share the no-show deposits." |
+| 0:00–0:15 | Home page | "Nearvent helps free-event hosts get a more reliable headcount. Guests who show up get their deposit back and share the no-show deposits." |
 | 0:15–0:35 | Create and open an event | "The host creates the event for free. Deposits stay in the NEAR escrow, outside the host's control." |
 | 0:35–0:55 | Connect a NEAR testnet wallet and register with faucet USDC | "This is the testnet flow with faucet USDC, not a live mainnet payment." |
 | 0:55–1:15 | Optional cross-chain clip, only after its smoke passes | "1Click first funds the guest's Intents account. The guest then confirms registration, so unused funds remain recoverable." |
