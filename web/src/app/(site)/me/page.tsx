@@ -8,7 +8,9 @@ import { CashOut } from "@/components/CashOut";
 import { useWallet } from "@/lib/wallet";
 import { oneClickStatus } from "@/lib/oneclickClient";
 import { intentsUsdcBalance } from "@/lib/intents";
-import { Avatar, Cover, shortAccount } from "@/components/ui";
+import { Avatar, shortAccount } from "@/components/ui";
+import { EventCard, fromChain, fromFree, type Item } from "@/components/EventCard";
+import type { FreeEvent } from "@/lib/freeEventsShared";
 import { SignInOptions } from "@/components/SignIn";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 
@@ -25,14 +27,13 @@ export default function Me() {
 }
 
 function MyEvents({ accountId }: { accountId: string }) {
-  const { kind } = useWallet();
+  const { kind, staffToken } = useWallet();
   const [balance, setBalance] = useState<bigint | null>(null);
   const [wallet, setWallet] = useState<bigint | null>(null);
   const [inIntents, setInIntents] = useState<bigint | null>(null);
   const [cashOutStatus, setCashOutStatus] = useState("");
   const [checking, setChecking] = useState(false);
-  const [mine, setMine] = useState<EventView[] | null>(null);
-  const [doorTeams, setDoorTeams] = useState<Record<number, string[]>>({});
+  const [mine, setMine] = useState<Mine[] | null>(null);
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
 
   const load = useCallback(async () => {
@@ -42,7 +43,17 @@ function MyEvents({ accountId }: { accountId: string }) {
       usdc.balance(accountId).then((value) => setWallet(BigInt(value))),
       HAS_INTENTS ? intentsUsdcBalance(accountId).then(setInIntents) : Promise.resolve(),
       (async () => {
-        const all = await events.list();
+        const now = Date.now();
+        const [all, free] = await Promise.all([
+          events.list(),
+          staffToken()
+            .then((token) => fetch("/api/free-events?mine=1", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }))
+            .then(async (r) => r.ok ? (await r.json()).events as (FreeEvent & { going: boolean })[] : Promise.reject(new Error()))
+            .catch((): (FreeEvent & { going: boolean })[] => {
+              issues.push("Free events could not be loaded.");
+              return [];
+            }),
+        ]);
         const ids = all.map((e) => e.id);
         const [statuses, teams] = await Promise.all([
           events.guestStatuses(accountId, ids),
@@ -51,8 +62,12 @@ function MyEvents({ accountId }: { accountId: string }) {
             return {};
           }),
         ]);
-        setDoorTeams(teams);
-        setMine(all.filter((e, i) => statuses[i] || e.host === accountId || teams[e.id]?.includes(accountId)));
+        const hosts = (e: EventView) => e.host === accountId || !!teams[e.id]?.includes(accountId);
+        setMine([
+          ...all.flatMap((e, i) => statuses[i] || hosts(e)
+            ? [{ item: hosts(e) ? { ...fromChain(e), href: `/e/${e.id}/manage` } : fromChain(e), hosting: hosts(e) }] : []),
+          ...free.map((e) => ({ item: fromFree(e, now), hosting: e.host === accountId })),
+        ]);
       })(),
     ]);
     if (results[0].status === "rejected") { setBalance(null); issues.push("Your Nearvent balance is unavailable."); }
@@ -60,26 +75,19 @@ function MyEvents({ accountId }: { accountId: string }) {
     if (results[2].status === "rejected") { setInIntents(null); issues.push("Your payment balance is unavailable."); }
     if (results[3].status === "rejected") { setMine(null); issues.push("Your events could not be loaded."); }
     setLoadErrors(issues);
-  }, [accountId]);
+  }, [accountId, staffToken]);
 
   useEffect(() => { void load(); }, [load]);
 
-  const upcoming = mine?.filter((e) => e.status === "Open" && e.metadata.ends_at > Date.now()).sort((a, b) => a.metadata.starts_at - b.metadata.starts_at)[0];
-  const hostOf = (e: EventView) => e.host === accountId || doorTeams[e.id]?.includes(accountId);
-
   return (
-    <div className="max-w-4xl mx-auto space-y-10">
+    <div className="max-w-5xl mx-auto space-y-10 pt-4">
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-2"><p className="gc-eyebrow">Your corner of Nearvent</p><h1 className="gc-page-title">My events</h1></div>
         <Link className="btn btn-accent" href="/create">Create event</Link>
       </div>
       {loadErrors.length > 0 && <div role="status" className="card p-4 space-y-2 text-sm"><p>{loadErrors.join(" ")}</p><button className="text-accent underline" onClick={() => void load()}>Try again</button></div>}
-      {upcoming && <Link href={`/e/${upcoming.id}${hostOf(upcoming) ? "/manage" : ""}`} className="gc-next-event flex items-center gap-5 p-5 sm:p-7 rounded-3xl bg-accent-soft">
-        <Cover event={upcoming} className="w-20 h-20 sm:w-28 sm:h-28 rounded-2xl shrink-0" />
-        <div className="min-w-0 space-y-2"><p className="gc-eyebrow">Up next</p><h2 className="text-xl sm:text-2xl font-semibold break-words">{upcoming.metadata.title}</h2><p className="text-sm text-muted">{new Date(upcoming.metadata.starts_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p><p className="text-sm text-accent font-medium">{hostOf(upcoming) ? "Open host tools" : "View your pass"} ↗</p></div>
-      </Link>}
       {mine === null && loadErrors.length === 0 && <p className="text-muted" role="status">Finding your events…</p>}
-      {mine !== null && <MyEventTabs going={mine.filter((e) => !hostOf(e))} hosted={mine.filter(hostOf)} />}
+      {mine !== null && <MyEventList mine={mine} />}
       <section id="funds" className="card p-6 sm:p-8 space-y-5 scroll-mt-24">
         <div className="space-y-2"><p className="gc-eyebrow">Your funds</p><h2 className="text-xl font-semibold">Nearvent balance</h2><p className="gc-price">{balance === null ? "—" : formatUsdc(balance)} <span className="text-base text-muted">USDC</span></p><p className="text-sm text-muted max-w-lg">Available payouts and refunds from all your events. Withdraw to a supported wallet and network.</p></div>
         {balance !== null && balance > 0n && <CashOut accountId={accountId} kind={kind} balance={balance} onDone={load} />}
@@ -102,24 +110,25 @@ function MyEvents({ accountId }: { accountId: string }) {
   );
 }
 
-/** "My Events" are events you joined; "Hosted Events" appears once you host one, and opens it directly when it is the only one. */
-function MyEventTabs({ going, hosted }: { going: EventView[]; hosted: EventView[] }) {
-  const [tab, setTab] = useState<"going" | "hosted">("going");
-  const list = tab === "hosted" ? hosted : going;
-  const tabClass = (on: boolean) => `h-11 -mb-px border-b-2 ${on ? "border-text font-semibold" : "border-transparent text-muted"}`;
+interface Mine { item: Item; hosting: boolean }
+
+/** Events you joined or host, chain and free, as /events cards with an Upcoming/Past switch. */
+function MyEventList({ mine }: { mine: Mine[] }) {
+  const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
+  const shown = mine.filter((m) => m.item.past === (tab === "past"))
+    .sort((a, b) => (tab === "upcoming" ? a.item.startsAt - b.item.startsAt : b.item.startsAt - a.item.startsAt));
   return (
-    <section className="space-y-4">
-      <div className="flex gap-6 border-b border-border" role="group" aria-label="Your events">
-        <button className={tabClass(tab === "going")} aria-pressed={tab === "going"} onClick={() => setTab("going")}>My Events</button>
-        {hosted.length === 1 ? <Link className={tabClass(false)} href={`/e/${hosted[0].id}/manage`}>Hosted Events</Link>
-          : hosted.length > 1 && <button className={tabClass(tab === "hosted")} aria-pressed={tab === "hosted"} onClick={() => setTab("hosted")}>Hosted Events</button>}
+    <section className="space-y-5">
+      <div className="flex gap-1 rounded-full p-1 bg-border/40 w-fit" role="group" aria-label="When">
+        {(["upcoming", "past"] as const).map((t) => (
+          <button key={t} type="button" aria-pressed={tab === t} onClick={() => setTab(t)}
+            className={`px-4 py-1.5 rounded-full text-sm ${tab === t ? "bg-surface font-semibold shadow-sm" : "text-muted"}`}>
+            {t === "upcoming" ? "Upcoming" : "Past"}
+          </button>
+        ))}
       </div>
-      {list.length === 0 ? <div className="card p-6 space-y-3"><p className="text-muted">Your next plan is out there.</p><Link href="/events" className="text-accent font-medium text-sm">Explore events ↗</Link></div> : <div className="grid gap-3 sm:grid-cols-2">{[...list].sort((a, b) => b.metadata.starts_at - a.metadata.starts_at).map((e) => (
-        <Link key={e.id} href={`/e/${e.id}${tab === "hosted" ? "/manage" : ""}`} className="gc-list-card flex gap-4 items-center p-4">
-          <Cover event={e} className="w-16 h-16 rounded-xl shrink-0" />
-          <div className="min-w-0"><h3 className="font-semibold break-words">{e.metadata.title}</h3><p className="text-sm text-muted mt-1">{new Date(e.metadata.starts_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{e.status !== "Open" && ` · ${e.status === "Finalized" ? "Closed" : "Cancelled"}`}</p></div>
-        </Link>
-      ))}</div>}
+      {shown.length === 0 ? <div className="card p-6 space-y-3"><p className="text-muted">{tab === "upcoming" ? "Your next plan is out there." : "No past events yet."}</p><Link href="/events" className="text-accent font-medium text-sm">Explore events ↗</Link></div>
+        : <div className="grid gap-5 grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3">{shown.map((m) => <EventCard key={m.item.key} item={m.item} tag={m.hosting ? "Hosting" : undefined} />)}</div>}
     </section>
   );
 }

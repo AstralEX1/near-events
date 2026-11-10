@@ -18,7 +18,8 @@ function hash(s: string): number {
 }
 
 /** A generated avatar: the account name seeds soft colour blobs, so everyone sees the same picture. */
-export function Avatar({ account, size = 32 }: { account: string; size?: number }) {
+export function Avatar({ account, size = 32, src }: { account: string; size?: number; src?: string | null }) {
+  if (src) return <img src={src} alt={account} title={account} width={size} height={size} className="inline-block shrink-0 rounded-full ring-2 ring-surface object-cover" style={{ width: size, height: size }} />;
   const h = hash(account);
   const hue = h % 360;
   const colors = [0, 45, 160, 210].map((shift, i) => `hsl(${(hue + shift) % 360} ${70 + i * 5}% ${58 + (i % 2) * 10}%)`);

@@ -1,15 +1,31 @@
 import { rateLimited } from "@/lib/ratelimit";
 import { readStaffToken } from "@/lib/staff";
-import { createFreeEvent, getFreeEvent, listPublicFreeEvents, setFreeGuest } from "@/lib/freeEvents";
+import { createFreeEvent, freeEventsOf, getFreeEvent, listPublicFreeEvents, setFreeGuest } from "@/lib/freeEvents";
 import { freeEventProblem, isFreeEventId, type FreeEventInput } from "@/lib/freeEventsShared";
 
 // GET            → public free events for the /events feed
 // GET ?id=<id>   → one free event with its guest list
+// GET ?attended=<account> → { count } of ended free events the account joined
+// GET ?mine=1    → free events the signed-in account hosts or joined (bearer token)
 // POST {action:"create", event} | {action:"join"|"leave", id}  (signed in)
 export async function GET(req: Request) {
   if (rateLimited(req, 60)) return Response.json({ error: "Too many requests" }, { status: 429 });
-  const id = new URL(req.url).searchParams.get("id");
+  const params = new URL(req.url).searchParams;
+  const id = params.get("id");
   try {
+    const attended = params.get("attended");
+    if (attended !== null) {
+      const now = Date.now();
+      return Response.json({ count: (await freeEventsOf(attended)).filter((e) => e.going && e.ends_at < now).length }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (params.get("mine") !== null) {
+      let accountId: string | null = null;
+      try {
+        accountId = readStaffToken(req.headers.get("authorization")?.replace(/^Bearer\s+/i, ""));
+      } catch {}
+      if (!accountId) return Response.json({ error: "Sign in again" }, { status: 401 });
+      return Response.json({ events: await freeEventsOf(accountId) }, { headers: { "Cache-Control": "no-store" } });
+    }
     if (id === null) return Response.json({ events: await listPublicFreeEvents() }, { headers: { "Cache-Control": "no-store" } });
     if (!isFreeEventId(id)) return Response.json({ error: "Bad event id" }, { status: 400 });
     const event = await getFreeEvent(id);

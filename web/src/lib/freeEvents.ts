@@ -99,6 +99,23 @@ export async function listPublicFreeEvents(): Promise<FreeEvent[]> {
   return all.filter((e) => e.public);
 }
 
+/** Free events (public and private) this account hosts or joined; `going` marks the joined ones. */
+// shortcut: scans every free event like listPublicFreeEvents; add a per-account index past a few hundred events.
+export async function freeEventsOf(account: string): Promise<(FreeEvent & { going: boolean })[]> {
+  let all: (FreeEvent & { going: boolean })[];
+  if (usesRedis()) {
+    const ids = await redis<string[]>(["SMEMBERS", INDEX]);
+    const rows = await pipeline<string | number | null>(ids.flatMap((id) => [["GET", key(id)], ["SCARD", guestsKey(id)], ["SISMEMBER", guestsKey(id), account]]));
+    all = ids.flatMap((_, i) => {
+      const raw = rows[i * 3];
+      return typeof raw === "string" ? [{ ...(JSON.parse(raw) as Stored), guest_count: Number(rows[i * 3 + 1]) || 0, going: Number(rows[i * 3 + 2]) === 1 }] : [];
+    });
+  } else {
+    all = Object.values(await loadFile()).map(({ guests, ...e }) => ({ ...e, guest_count: guests.length, going: guests.includes(account) }));
+  }
+  return all.filter((e) => e.going || e.host === account);
+}
+
 /** Adds or removes a guest. Past events stay open so guests can add themselves after the fact. Returns an error message, or null on success. */
 export async function setFreeGuest(id: string, account: string, going: boolean): Promise<string | null> {
   if (usesRedis()) {
