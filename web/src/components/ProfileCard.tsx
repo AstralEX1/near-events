@@ -10,7 +10,7 @@ export function ProfileCard({ account, profile, attended }: { account: string; p
   const name = displayName(profile);
   return (
     <div className="flex items-center gap-5">
-      <Avatar account={account} src={profile?.avatar_url} size={88} />
+      <Avatar account={account} src={profile?.avatar_url} seed={profile?.avatar_seed} size={88} />
       <div className="min-w-0 space-y-1">
         <h1 className="text-2xl font-semibold break-words">{name ?? shortAccount(account)}</h1>
         <p className="text-sm text-muted break-all">{profile?.nickname && name !== `@${profile.nickname}` ? `@${profile.nickname} · ` : ""}{shortAccount(account)}</p>

@@ -9,11 +9,13 @@ export interface Profile {
   last_name: string;
   /** Path of an uploaded photo, `/api/covers/<sha256>`, or null. */
   avatar_url: string | null;
+  /** Seed of a randomly generated avatar, used when there is no photo; null = generated from the account name. */
+  avatar_seed?: number | null;
   /** Handles without "@" for x/telegram/instagram, a full http(s) URL for website. */
   links: Partial<Record<LinkKind, string>>;
 }
 
-export const EMPTY_PROFILE: Profile = { nickname: "", first_name: "", last_name: "", avatar_url: null, links: {} };
+export const EMPTY_PROFILE: Profile = { nickname: "", first_name: "", last_name: "", avatar_url: null, avatar_seed: null, links: {} };
 
 const HOSTS: Record<Exclude<LinkKind, "website">, { hosts: string[]; handle: RegExp; url: string }> = {
   x: { hosts: ["x.com", "twitter.com"], handle: /^[A-Za-z0-9_]{1,15}$/, url: "https://x.com/" },
@@ -73,6 +75,8 @@ export function cleanProfile(value: unknown): { profile: Profile } | { error: st
     if (!AVATAR.test(path)) return { error: "Bad photo" };
     avatar_url = path;
   }
+  const avatar_seed = p.avatar_seed == null ? null : p.avatar_seed;
+  if (avatar_seed !== null && !(Number.isInteger(avatar_seed) && (avatar_seed as number) >= 0 && (avatar_seed as number) <= 0xffffffff)) return { error: "Bad avatar" };
   const links: Profile["links"] = {};
   const raw = (p.links && typeof p.links === "object" ? p.links : {}) as Record<string, unknown>;
   for (const kind of LINK_KINDS) {
@@ -82,7 +86,7 @@ export function cleanProfile(value: unknown): { profile: Profile } | { error: st
     if (!clean) return { error: `Check the ${kind === "x" ? "X" : kind[0].toUpperCase() + kind.slice(1)} link` };
     links[kind] = clean;
   }
-  return { profile: { nickname, first_name, last_name, avatar_url, links } };
+  return { profile: { nickname, first_name, last_name, avatar_url, avatar_seed: avatar_seed as number | null, links } };
 }
 
 /** "First Last", else "@nickname", else null. */

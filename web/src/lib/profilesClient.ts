@@ -25,7 +25,12 @@ export async function saveProfile(profile: Profile, token: string): Promise<Prof
 /** Paid events the account was checked in at (escrow, after close) plus ended free events it joined. */
 export async function attendedCount(account: string): Promise<number> {
   const [paid, free] = await Promise.all([
-    events.attendedCount(account),
+    // The deployed escrow has no get_attended_count, so count closed events where the guest is Attended.
+    // shortcut: only the 100 most recent events are checked; switch to get_attended_count once the escrow has it.
+    events.list().then(async (all) => {
+      const statuses = await events.guestStatuses(account, all.map((e) => e.id));
+      return all.filter((e, i) => e.status === "Finalized" && statuses[i] === "Attended").length;
+    }),
     fetch(`/api/free-events?attended=${encodeURIComponent(account)}`, { cache: "no-store" }).then(async (r) => {
       if (!r.ok) throw new Error("Free events unavailable");
       return (await r.json()).count as number;

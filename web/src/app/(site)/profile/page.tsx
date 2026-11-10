@@ -83,14 +83,14 @@ function Editor({ accountId }: { accountId: string }) {
         <h1 className="gc-page-title">My profile</h1>
         <Link href={`/u/${encodeURIComponent(accountId)}`} className="text-sm text-accent font-medium shrink-0">Public page ↗</Link>
       </div>
-      <ProfileCard account={accountId} profile={{ ...(saved ?? EMPTY_PROFILE), avatar_url: form.avatar_url }} attended={attended} />
+      <ProfileCard account={accountId} profile={{ ...(saved ?? EMPTY_PROFILE), avatar_url: form.avatar_url, avatar_seed: form.avatar_seed }} attended={attended} />
 
       <form onSubmit={onSave} className="card p-6 space-y-5">
         <div className="flex flex-wrap gap-3">
           <button type="button" className="btn btn-ghost text-sm" disabled={busy !== null} onClick={() => file.current?.click()}>
             {busy === "photo" ? "Uploading…" : form.avatar_url ? "Change photo" : "Upload photo"}
           </button>
-          {form.avatar_url && <button type="button" className="btn btn-ghost text-sm" disabled={busy !== null} onClick={() => edit({ avatar_url: null })}>Remove photo</button>}
+          <button type="button" className="btn btn-ghost text-sm" disabled={busy !== null} onClick={() => edit({ avatar_url: null, avatar_seed: crypto.getRandomValues(new Uint32Array(1))[0] })}>Shuffle</button>
           <input ref={file} type="file" accept="image/*" hidden onChange={(e) => void onPhoto(e.target.files?.[0])} />
         </div>
         <label className="block space-y-1.5">

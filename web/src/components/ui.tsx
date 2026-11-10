@@ -2,7 +2,7 @@
 
 import type { EventStatus, EventView } from "@/lib/near";
 import { useEventVisual } from "@/lib/event-visual-client";
-import { meshGradient, type EventVisualConfig } from "@/lib/event-visuals";
+import { meshGradient, seededRandom, type EventVisualConfig } from "@/lib/event-visuals";
 import { EventPoster } from "@/components/EventVisual";
 
 /** Implicit accounts (Google/email users) and EVM addresses (Intents accounts) are shortened for display. Named accounts drop the `.testnet` suffix in the UI. */
@@ -17,12 +17,21 @@ function hash(s: string): number {
   return h;
 }
 
-/** A generated avatar: the account name seeds soft colour blobs, so everyone sees the same picture. */
-export function Avatar({ account, size = 32, src }: { account: string; size?: number; src?: string | null }) {
+/** Fully random colours from a profile's avatar seed: any hues, saturation and lightness, no theme. */
+function randomAvatarColors(seed: number): string[] {
+  const random = seededRandom(seed);
+  return Array.from({ length: 4 }, () => `hsl(${Math.round(random() * 360)} ${Math.round(45 + random() * 55)}% ${Math.round(35 + random() * 45)}%)`);
+}
+
+/**
+ * An uploaded photo, else generated soft colour blobs: from the profile's random seed when the person
+ * picked one, otherwise from the account name, so everyone sees the same picture.
+ */
+export function Avatar({ account, size = 32, src, seed }: { account: string; size?: number; src?: string | null; seed?: number | null }) {
   if (src) return <img src={src} alt={account} title={account} width={size} height={size} className="inline-block shrink-0 rounded-full ring-2 ring-surface object-cover" style={{ width: size, height: size }} />;
-  const h = hash(account);
+  const h = seed ?? hash(account);
   const hue = h % 360;
-  const colors = [0, 45, 160, 210].map((shift, i) => `hsl(${(hue + shift) % 360} ${70 + i * 5}% ${58 + (i % 2) * 10}%)`);
+  const colors = seed != null ? randomAvatarColors(seed) : [0, 45, 160, 210].map((shift, i) => `hsl(${(hue + shift) % 360} ${70 + i * 5}% ${58 + (i % 2) * 10}%)`);
   return (
     <span
       role="img"
