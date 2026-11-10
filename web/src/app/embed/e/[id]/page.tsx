@@ -110,7 +110,7 @@ function CardAction({
 }) {
   if (joined) return <div className="btn btn-ghost w-full text-good">✓ You’re going</div>;
   if (event.status === "Finalized") return <div className="btn btn-ghost w-full text-muted">{isTicket(event) ? "Event ended" : "Event ended · pool paid out"}</div>;
-  if (event.status === "Cancelled") return <div className="btn btn-ghost w-full text-muted">{isTicket(event) ? "Cancelled · tickets refunded" : "Cancelled · deposits returned"}</div>;
+  if (event.status === "Cancelled") return <div className="btn btn-ghost w-full text-muted">{isTicket(event) ? "Cancelled" : "Cancelled · deposits returned"}</div>;
   if (event.guest_count >= event.capacity) return <div className="btn btn-ghost w-full text-muted">Event is full</div>;
   return (
     <a href={joinUrl} target="_blank" rel="opener" onClick={onOpen} className="btn btn-accent w-full">

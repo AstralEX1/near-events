@@ -1,7 +1,7 @@
 // Paid-ticket cycle on testnet (Tidepool USDC): create a Ticket event →
-// guest buys a ticket → closing before the start is refused → after the start
-// the host closes and gets the ticket money → host moves it into their NEAR
-// Intents account. Then a second event is cancelled and the ticket refunded.
+// guest buys a ticket and the host is paid at once → the host closes the event
+// (allowed before the start) → host moves the money into their NEAR Intents
+// account. Then a second event is cancelled; the ticket is not refunded.
 // Keys are read from ~/.near-credentials (never printed).
 // Env: EVENTS_CONTRACT (the current escrow), HOST_ACCOUNT, GUEST_ACCOUNT.
 import { readFileSync } from "node:fs";
@@ -50,42 +50,31 @@ if (BigInt(await view("ft_balance_of", { account_id: GUEST }, USDC)) < 2n * BigI
   console.log("0. faucet", r.status);
 }
 
-// 1. A Ticket event that starts in 60 seconds.
-const startsAt = Date.now() + 60_000;
+// 1. A Ticket event that starts in an hour.
+const startsAt = Date.now() + 3600_000;
 const eventId = await create("Ticket smoke test", startsAt);
 const e = await view("get_event", { event_id: eventId });
 console.log("1. event", eventId, "mode", e.mode, "deposit", e.deposit);
 
-// 2. Guest buys a ticket.
+// 2. Guest buys a ticket; the host is paid right away.
+const hostBefore = BigInt(await view("balance_of", { account_id: HOST }));
 await buy(eventId);
 const registration = await waitFor(
   () => view("get_guest_status", { event_id: eventId, account_id: GUEST }),
   (status) => status === "Registered",
   "guest registration",
 );
-console.log("2. bought, guest status", registration);
-
-// 3. Closing before the start must fail.
-try {
-  await call(host, EVENTS, "finalize", { event_id: eventId, attended: [] }, 1n, 100n * TGAS);
-  throw new Error("finalize before the start went through");
-} catch (err) {
-  if (!String(err).includes("released once the event has started")) throw err;
-  console.log("3. finalize before the start refused");
-}
-
-// 4. After the start the host closes and is paid, though nobody was checked in.
-await sleep(Math.max(0, startsAt - Date.now()) + 5_000);
-const hostBefore = BigInt(await view("balance_of", { account_id: HOST }));
-await call(host, EVENTS, "finalize", { event_id: eventId, attended: [] }, 1n, 100n * TGAS);
-const expectedHostBalance = hostBefore + BigInt(PRICE);
 const hostAfter = BigInt(await waitFor(
   () => view("balance_of", { account_id: HOST }),
-  (balance) => BigInt(balance) === expectedHostBalance,
-  "Ticket payout to host",
+  (balance) => BigInt(balance) === hostBefore + BigInt(PRICE),
+  "Ticket payment to host",
 ));
-console.log("4. finalized, host +", (hostAfter - hostBefore).toString(), "guest balance", await view("balance_of", { account_id: GUEST }));
-if (hostAfter - hostBefore !== BigInt(PRICE)) throw new Error("host was not paid the ticket");
+console.log("2. bought, guest status", registration, "host +", (hostAfter - hostBefore).toString());
+
+// 3-4. The host can close before the start; that pays nothing more.
+await call(host, EVENTS, "finalize", { event_id: eventId, attended: [] }, 1n, 100n * TGAS);
+if (BigInt(await view("balance_of", { account_id: HOST })) !== hostAfter) throw new Error("finalize changed the host balance");
+console.log("3-4. finalized before the start, guest balance", await view("balance_of", { account_id: GUEST }));
 
 // 5. Host moves the ticket money into their NEAR Intents account.
 const intentsBefore = BigInt(await view("mt_balance_of", { account_id: HOST, token_id: `nep141:${USDC}` }, VERIFIER));
@@ -103,16 +92,18 @@ await waitFor(
 );
 console.log("5. into Intents account", HOST, "+", (intentsAfter - intentsBefore).toString());
 
-// 6. A second Ticket event is cancelled: the guest gets the ticket back.
+// 6. A second Ticket event is cancelled: nothing is refunded, the host keeps the ticket.
 const second = await create("Ticket cancel test", Date.now() + 3600_000);
 const guestBefore = BigInt(await view("balance_of", { account_id: GUEST }));
 await buy(second);
+await waitFor(
+  () => view("balance_of", { account_id: HOST }),
+  (balance) => BigInt(balance) === BigInt(PRICE),
+  "Ticket payment to host",
+);
 await call(host, EVENTS, "cancel", { event_id: second }, 1n, 100n * TGAS);
-const guestAfter = BigInt(await waitFor(
-  () => view("balance_of", { account_id: GUEST }),
-  (balance) => BigInt(balance) === guestBefore + BigInt(PRICE),
-  "Ticket refund after cancel",
-));
-console.log("6. cancelled event", second, "guest refunded +", (guestAfter - guestBefore).toString());
-if (guestAfter - guestBefore !== BigInt(PRICE)) throw new Error("ticket was not refunded");
+const guestAfter = BigInt(await view("balance_of", { account_id: GUEST }));
+console.log("6. cancelled event", second, "guest balance change", (guestAfter - guestBefore).toString());
+if (guestAfter !== guestBefore) throw new Error("ticket was refunded");
+if (BigInt(await view("balance_of", { account_id: HOST })) !== BigInt(PRICE)) throw new Error("host lost the ticket money");
 console.log("OK");

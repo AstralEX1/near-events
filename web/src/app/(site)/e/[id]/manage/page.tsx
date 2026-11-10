@@ -181,10 +181,7 @@ function ManageEvent() {
   const pool = BigInt(event.total_pool);
   const share = event.attended_count > 0 ? pool / BigInt(event.attended_count) : 0n;
   const ticket = isTicket(event);
-  // Ticket money is released only once the event has started (the contract enforces it too).
-  const ticketTooEarly = ticket && Date.now() < event.metadata.starts_at;
   const finalizeEvent = async () => {
-    if (ticketTooEarly) return setError("Ticket money is released once the event has started. You can close the event after that.");
     setBusy(true);
     setError(null);
     try {
@@ -195,7 +192,7 @@ function ManageEvent() {
       const attended = currentGuests.filter((g) => marks[g.account_id]).map((g) => g.account_id);
       const currentPool = BigInt(fresh.total_pool);
       const confirmation = ticket
-        ? `Close the event and take the ticket money?\n\n${fresh.guest_count} tickets · ${formatUsdc(currentPool)} USDC to you.\n\nThis cannot be undone.`
+        ? `Close the event?\n\n${fresh.guest_count} tickets · ${formatUsdc(currentPool)} USDC is already in your balance.\n\nThis cannot be undone.`
         : attended.length === 0
           ? "Nobody was checked in, so every deposit goes back to its guest. Close the event?"
           : `Close the event and pay out?\n\n${attended.length} of ${fresh.guest_count} came.\nPool: ${formatUsdc(currentPool)} USDC.\nEach attendee gets ${formatUsdc(currentPool / BigInt(attended.length))} USDC.\n\nThis cannot be undone.`;
@@ -545,7 +542,7 @@ function RegistrationTab({
           <div className="font-medium">{isTicket(event) ? "Paid ticket" : "Standard deposit"}</div>
           <p className="text-sm text-muted">
             {isTicket(event)
-              ? "Same price for everyone. The money waits in the escrow and goes to you once the event has started and you close it. No platform fee."
+              ? "Same price for everyone. Each ticket goes to your Nearvent balance as soon as the guest registers. No platform fee."
               : "Same amount for everyone. Who shows up gets it back plus a share of no-shows. No platform fee."}
           </p>
           <div className="text-sm font-mono mt-2">{formatUsdc(event.deposit)} USDC · {event.capacity} spots</div>

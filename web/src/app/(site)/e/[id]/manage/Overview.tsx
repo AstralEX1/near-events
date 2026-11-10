@@ -250,7 +250,7 @@ function PriceRow({ event }: { event: EventView }) {
         <div className="font-medium">{priceLabel(event)}</div>
         <p className="text-sm text-muted">
           {isTicket(event)
-            ? "Everyone pays the same. It goes to you once the event has started and you close it."
+            ? "Everyone pays the same. Each ticket goes to your balance as soon as the guest registers."
             : "Everyone puts in the same. Whoever shows up splits the pool."}
         </p>
       </div>
@@ -304,7 +304,7 @@ function GuestsSection({ event, guests, onGuests, onShare }: { event: EventView;
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <Stat label={open ? (ticket ? "Ticket sales" : "Deposit pool") : "Total pool"} value={`${formatUsdc(pool)} USDC`} />
           {ticket ? (
-            <Stat label="You get at close" value={event.status === "Cancelled" ? "—" : `${formatUsdc(pool)} USDC`} />
+            <Stat label="Paid to you" value={`${formatUsdc(pool)} USDC`} />
           ) : (
             <Stat
               label={open ? "Each if closed now" : "Each attendee got"}
@@ -409,7 +409,7 @@ function CloseEvent({
         <h2 className="font-semibold text-good">Paid out</h2>
         <p className="text-sm text-muted">
           {ticket
-            ? `${formatUsdc(pool)} USDC went to the host.`
+            ? `${formatUsdc(pool)} USDC from tickets went to the host.`
             : attended > 0
               ? `${attended} of ${going} came. Each got ${formatUsdc(event.payout_per_attendee)} USDC, ready to withdraw.`
               : "Nobody was checked in, so every deposit went back to its guest."}
@@ -421,16 +421,13 @@ function CloseEvent({
     return (
       <section className="card p-4 space-y-1">
         <h2 className="font-semibold text-warn">Cancelled</h2>
-        <p className="text-sm text-muted">Every {ticket ? "ticket" : "deposit"} was refunded. Guests can withdraw it from their balance.</p>
+        <p className="text-sm text-muted">{ticket ? "Ticket money stays with the host." : "Every deposit was refunded. Guests can withdraw it from their balance."}</p>
       </section>
     );
   }
 
-  const tooEarly = ticket && Date.now() < event.metadata.starts_at;
   const summary = ticket
-    ? tooEarly
-      ? `${going > 0 ? `${formatUsdc(pool)} USDC waits in escrow. ` : ""}You can close the event and take the ticket money once it has started.`
-      : `Close the event to take ${formatUsdc(pool)} USDC from ${going} ${going === 1 ? "ticket" : "tickets"}.`
+    ? `${formatUsdc(pool)} USDC from ${going} ${going === 1 ? "ticket" : "tickets"} is already in your balance. Close the event when it is over.`
     : attended > 0
       ? `${attended} of ${going} checked in. Closing splits ${formatUsdc(pool)} USDC: ${formatUsdc(pool / BigInt(attended))} USDC each.`
       : going > 0
@@ -445,7 +442,7 @@ function CloseEvent({
       </div>
       {isHost ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <button type="button" className={`btn ${over ? "btn-accent" : "btn-primary"} !py-2 text-sm`} disabled={busy || tooEarly} onClick={onFinalize}>
+          <button type="button" className={`btn ${over ? "btn-accent" : "btn-primary"} !py-2 text-sm`} disabled={busy} onClick={onFinalize}>
             {ticket ? "Close event & get paid" : "Close event & pay out"}
           </button>
         </div>

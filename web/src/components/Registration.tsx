@@ -142,7 +142,9 @@ export function RegistrationCard({
   const action = ticket ? "Get ticket" : "Register";
   // One primary button per state; alternatives stay folded away.
   let body;
-  if (event.status === "Cancelled") {
+  if (event.status === "Cancelled" && ticket) {
+    body = <p className="text-sm">This event was cancelled. Tickets are not refunded.</p>;
+  } else if (event.status === "Cancelled") {
     body = (
       <div className="space-y-2">
         <p className="text-sm">This event was cancelled. Refunds were credited to guests’ Nearvent balances.</p>
@@ -268,7 +270,7 @@ export function RegistrationCard({
         )}
       {open && (
         <div className="space-y-1.5 text-sm text-muted leading-relaxed">
-          <p>{ticket ? "A paid ticket. Refunded to your Nearvent balance if the host cancels." : "Get checked in and receive your deposit plus a share of no-shows after the host closes the event. Miss it, and your deposit goes to the guests who came."}</p>
+          <p>{ticket ? "A paid ticket. The money goes to the host when you register; tickets are not refunded." : "Get checked in and receive your deposit plus a share of no-shows after the host closes the event. Miss it, and your deposit goes to the guests who came."}</p>
           <DepositRulesTooltip ticket={ticket} amount={price} />
         </div>
       )}

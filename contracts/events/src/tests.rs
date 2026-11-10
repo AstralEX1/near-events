@@ -119,15 +119,22 @@ fn nobody_attended_refunds_everyone() {
 }
 
 #[test]
-fn overpayment_is_returned_and_friend_can_pay() {
+fn paying_for_another_guest_is_refunded() {
     let (mut c, id) = setup(10);
     let msg = format!(r#"{{"action":"register","event_id":{},"guest":"{}"}}"#, id, accounts(3));
     let refund = pay(&mut c, &accounts(2), 12 * USDC, &msg);
-    // Only the price is consumed. Change goes back to the payer.
-    assert_eq!(refund, 2 * USDC);
-    assert_eq!(c.balance_of(accounts(3)).0, 0);
-    assert_eq!(c.get_guest_status(id, accounts(3)), Some(GuestStatus::Registered));
+    assert_eq!(refund, 12 * USDC);
+    assert_eq!(c.get_guest_status(id, accounts(3)), None);
     assert_eq!(c.get_guest_status(id, accounts(2)), None);
+    assert_eq!(c.get_event(id).unwrap().guest_count, 0);
+}
+
+#[test]
+fn naming_yourself_as_guest_registers_and_returns_change() {
+    let (mut c, id) = setup(10);
+    let msg = format!(r#"{{"action":"register","event_id":{},"guest":"{}"}}"#, id, accounts(2));
+    assert_eq!(pay(&mut c, &accounts(2), 12 * USDC, &msg), 2 * USDC);
+    assert_eq!(c.get_guest_status(id, accounts(2)), Some(GuestStatus::Registered));
     assert_eq!(c.get_guests(id, None, None)[0].paid_by, accounts(2));
 }
 
@@ -278,13 +285,121 @@ fn dust_for_unknown_guests_cannot_create_balance_keys() {
 }
 
 #[test]
-#[should_panic(expected = "at most 5 open events")]
-fn host_cannot_open_a_sixth_event() {
+#[should_panic(expected = "beyond the free tier")]
+fn third_open_event_without_storage_deposit_is_rejected() {
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = Contract::new(usdc(), None, None);
-    for _ in 0..=MAX_OPEN_EVENTS_PER_HOST {
+    for _ in 0..=FREE_MAX_OPEN_EVENTS {
         c.create_event(meta(), U128(10 * USDC), 10, None);
     }
+}
+
+fn transfers() -> Vec<(AccountId, u128)> {
+    get_created_receipts()
+        .into_iter()
+        .flat_map(|receipt| {
+            let to = receipt.receiver_id.clone();
+            receipt.actions.into_iter().filter_map(move |action| match action {
+                MockAction::Transfer { deposit, .. } => Some((to.clone(), deposit.as_yoctonear())),
+                _ => None,
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn create_event_cost_is_zero_on_the_free_tier_only() {
+    ctx(&accounts(0), NearToken::from_yoctonear(0));
+    let mut c = Contract::new(usdc(), None, None);
+    let host = accounts(0);
+    assert_eq!(c.create_event_cost(host.clone(), FREE_MAX_CAPACITY).0, 0);
+    let big = c.create_event_cost(host.clone(), FREE_MAX_CAPACITY + 1).0;
+    assert_eq!(big, bytes_cost(EVENT_RECORD_BYTES + SEAT_BYTES * 51 + BALANCE_BYTES));
+    for _ in 0..FREE_MAX_OPEN_EVENTS {
+        c.create_event(meta(), U128(10 * USDC), 10, None);
+    }
+    assert_eq!(c.create_event_cost(host.clone(), 10).0, bytes_cost(EVENT_RECORD_BYTES + SEAT_BYTES * 10 + BALANCE_BYTES));
+    // Another host still has the free tier.
+    assert_eq!(c.create_event_cost(accounts(1), 10).0, 0);
+}
+
+#[test]
+#[should_panic(expected = "beyond the free tier")]
+fn big_event_without_storage_deposit_is_rejected() {
+    ctx(&accounts(0), NearToken::from_yoctonear(0));
+    let mut c = Contract::new(usdc(), None, None);
+    c.create_event(meta(), U128(10 * USDC), FREE_MAX_CAPACITY + 1, None);
+}
+
+#[test]
+#[should_panic(expected = "beyond the free tier")]
+fn big_event_with_too_little_deposit_is_rejected() {
+    ctx(&accounts(0), NearToken::from_yoctonear(0));
+    let mut c = Contract::new(usdc(), None, None);
+    let cost = c.create_event_cost(accounts(0), 60).0;
+    ctx(&accounts(0), NearToken::from_yoctonear(cost - 1));
+    c.create_event(meta(), U128(10 * USDC), 60, None);
+}
+
+#[test]
+fn paid_event_keeps_the_cost_and_returns_the_excess() {
+    ctx(&accounts(0), NearToken::from_yoctonear(0));
+    let mut c = Contract::new(usdc(), None, None);
+    let cost = c.create_event_cost(accounts(0), MAX_CAPACITY).0;
+    let extra = NearToken::from_near(1).as_yoctonear();
+    ctx(&accounts(0), NearToken::from_yoctonear(cost + extra));
+    let id = c.create_event(meta(), U128(10 * USDC), MAX_CAPACITY, None);
+    assert_eq!(c.get_event(id).unwrap().capacity, MAX_CAPACITY);
+    assert_eq!(transfers(), vec![(accounts(0), extra)]);
+    // Same reservation as a free event of that size.
+    assert_eq!(c.reserved_bytes, SEAT_BYTES * u64::from(MAX_CAPACITY) + BALANCE_BYTES);
+    assert_eq!(open_of(&c, &accounts(0)), 1);
+}
+
+#[test]
+fn exact_cost_sends_nothing_back() {
+    ctx(&accounts(0), NearToken::from_yoctonear(0));
+    let mut c = Contract::new(usdc(), None, None);
+    let cost = c.create_event_cost(accounts(0), 51).0;
+    ctx(&accounts(0), NearToken::from_yoctonear(cost));
+    c.create_event(meta(), U128(10 * USDC), 51, None);
+    assert!(transfers().is_empty());
+}
+
+#[test]
+fn paid_third_event_is_accepted() {
+    ctx(&accounts(0), NearToken::from_yoctonear(0));
+    let mut c = Contract::new(usdc(), None, None);
+    for _ in 0..FREE_MAX_OPEN_EVENTS {
+        c.create_event(meta(), U128(10 * USDC), 10, None);
+    }
+    let cost = c.create_event_cost(accounts(0), 10).0;
+    ctx(&accounts(0), NearToken::from_yoctonear(cost));
+    c.create_event(meta(), U128(10 * USDC), 10, None);
+    assert_eq!(open_of(&c, &accounts(0)), 3);
+}
+
+#[test]
+fn free_event_returns_attached_near() {
+    ctx(&accounts(0), NearToken::from_near(2));
+    let mut c = Contract::new(usdc(), None, None);
+    let before = c.unreserved_storage();
+    c.create_event(meta(), U128(10 * USDC), FREE_MAX_CAPACITY, None);
+    assert_eq!(transfers(), vec![(accounts(0), NearToken::from_near(2).as_yoctonear())]);
+    assert!(before < env::account_balance().as_yoctonear(), "attached NEAR is not the pool");
+}
+
+#[test]
+#[should_panic(expected = "storage pool is empty")]
+fn attached_near_does_not_pay_for_a_free_event() {
+    testing_env!(VMContextBuilder::new()
+        .current_account_id(contract_account())
+        .predecessor_account_id(accounts(0))
+        .account_balance(NearToken::from_near(1))
+        .attached_deposit(NearToken::from_near(1))
+        .build());
+    let mut c = Contract::new(usdc(), None, None);
+    c.create_event(meta(), U128(10 * USDC), 10, None);
 }
 
 #[test]
@@ -292,13 +407,13 @@ fn closing_an_event_frees_a_slot_for_the_host() {
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = Contract::new(usdc(), None, None);
     let ids: Vec<u64> =
-        (0..MAX_OPEN_EVENTS_PER_HOST).map(|_| c.create_event(meta(), U128(10 * USDC), 10, None)).collect();
-    assert_eq!(open_of(&c, &accounts(0)), MAX_OPEN_EVENTS_PER_HOST);
+        (0..FREE_MAX_OPEN_EVENTS).map(|_| c.create_event(meta(), U128(10 * USDC), 10, None)).collect();
+    assert_eq!(open_of(&c, &accounts(0)), FREE_MAX_OPEN_EVENTS);
     ctx(&accounts(0), one_yocto());
     c.cancel(ids[0]);
     ctx(&accounts(0), one_yocto());
     c.finalize(ids[1], vec![]);
-    assert_eq!(open_of(&c, &accounts(0)), MAX_OPEN_EVENTS_PER_HOST - 2);
+    assert_eq!(open_of(&c, &accounts(0)), FREE_MAX_OPEN_EVENTS - 2);
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     c.create_event(meta(), U128(10 * USDC), 10, None);
     // Another host is not affected by this host's limit.
@@ -625,7 +740,7 @@ fn largest_event_fits_the_reserved_record_size() {
     m.title = "t".repeat(MAX_TITLE_LEN);
     let host: AccountId = format!("{:064x}", 99).parse().unwrap();
     ctx(&host, NearToken::from_yoctonear(0));
-    c.create_event(m, U128(MIN_DEPOSIT), MAX_CAPACITY, None);
+    c.create_event(m, U128(MIN_DEPOSIT), FREE_MAX_CAPACITY, None);
     c.events.flush();
     c.open_events.flush();
     assert!(env::storage_usage() - before <= EVENT_RECORD_BYTES);
@@ -973,43 +1088,49 @@ fn ticket_event_shows_mode_and_price() {
 }
 
 #[test]
-fn ticket_host_gets_every_ticket_after_start() {
+fn ticket_host_is_paid_at_registration() {
     let (mut c, id) = setup_tickets(10);
-    for g in [accounts(2), accounts(3), accounts(4)] {
-        buy(&mut c, id, &g);
-    }
+    buy(&mut c, id, &accounts(2));
+    assert_eq!(c.balance_of(accounts(0)).0, TICKET);
+    buy(&mut c, id, &accounts(3));
+    buy(&mut c, id, &accounts(4));
+    assert_eq!(c.balance_of(accounts(0)).0, 3 * TICKET);
     assert_eq!(c.get_event(id).unwrap().total_pool.0, 3 * TICKET);
 
     ctx_at(&accounts(0), one_yocto(), AFTER_START_NS);
     c.finalize(id, vec![accounts(2)]);
-    // Attended or not, nobody gets a share: the host is paid for 3 tickets.
+    // Finalize only closes: attended or not, nobody gets a share and the host gets nothing more.
     let e = c.get_event(id).unwrap();
     assert_eq!(e.status, EventStatus::Finalized);
     assert_eq!(e.payout_per_attendee.0, 0);
+    assert_eq!(e.attended_count, 1);
     assert_eq!(c.balance_of(accounts(0)).0, 3 * TICKET);
     assert_eq!(c.balance_of(accounts(2)).0, 0);
-    assert_eq!(c.balance_of(accounts(3)).0, 0);
     assert_eq!(open_of(&c, &accounts(0)), 0);
 }
 
 #[test]
-fn ticket_host_is_paid_even_if_nobody_is_checked_in() {
-    let (mut c, id) = setup_tickets(10);
-    buy(&mut c, id, &accounts(2));
-    buy(&mut c, id, &accounts(3));
-    ctx_at(&accounts(0), one_yocto(), AFTER_START_NS);
-    c.finalize(id, vec![]);
-    assert_eq!(c.balance_of(accounts(0)).0, 2 * TICKET);
-    assert_eq!(c.balance_of(accounts(2)).0, 0);
-}
-
-#[test]
-#[should_panic(expected = "Ticket money is released once the event has started")]
-fn ticket_finalize_before_start_is_rejected() {
+fn ticket_host_can_withdraw_before_the_event() {
     let (mut c, id) = setup_tickets(10);
     buy(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
+    c.withdraw(None, None, None);
+    assert_eq!(c.balance_of(accounts(0)).0, 0);
+    buy(&mut c, id, &accounts(3));
+    assert_eq!(c.balance_of(accounts(0)).0, TICKET);
+}
+
+#[test]
+fn ticket_finalize_before_start_is_allowed() {
+    let (mut c, id) = setup_tickets(10);
+    buy(&mut c, id, &accounts(2));
+    let reserved = c.reserved_bytes;
+    ctx(&accounts(0), one_yocto());
     c.finalize(id, vec![]);
+    assert_eq!(c.get_event(id).unwrap().status, EventStatus::Finalized);
+    assert_eq!(c.balance_of(accounts(0)).0, TICKET);
+    assert!(c.reserved_bytes < reserved);
+    assert_eq!(c.reserved_bytes, 0);
 }
 
 #[test]
@@ -1022,26 +1143,29 @@ fn deposit_finalize_before_start_still_works() {
 }
 
 #[test]
-fn ticket_cancel_refunds_every_ticket() {
+fn ticket_cancel_refunds_nothing() {
     let (mut c, id) = setup_tickets(10);
     buy(&mut c, id, &accounts(2));
     buy(&mut c, id, &accounts(3));
     ctx(&accounts(0), one_yocto());
     c.cancel(id);
-    assert_eq!(c.balance_of(accounts(2)).0, TICKET);
-    assert_eq!(c.balance_of(accounts(3)).0, TICKET);
-    assert_eq!(c.balance_of(accounts(0)).0, 0);
+    assert_eq!(c.get_event(id).unwrap().status, EventStatus::Cancelled);
+    assert_eq!(c.balance_of(accounts(2)).0, 0);
+    assert_eq!(c.balance_of(accounts(3)).0, 0);
+    assert_eq!(c.balance_of(accounts(0)).0, 2 * TICKET);
+    assert_eq!(c.reserved_bytes, 0);
 }
 
 #[test]
-fn ticket_abandoned_event_refunds_every_ticket() {
+fn ticket_abandoned_event_just_closes() {
     let (mut c, id) = setup_tickets(10);
     buy(&mut c, id, &accounts(2));
     let late_ms = meta().ends_at + ABANDON_GRACE_MS + 1;
     ctx_at(&accounts(5), one_yocto(), late_ms * 1_000_000);
     c.cancel(id);
-    assert_eq!(c.balance_of(accounts(2)).0, TICKET);
-    assert_eq!(c.balance_of(accounts(0)).0, 0);
+    assert_eq!(c.get_event(id).unwrap().status, EventStatus::Cancelled);
+    assert_eq!(c.balance_of(accounts(2)).0, 0);
+    assert_eq!(c.balance_of(accounts(0)).0, TICKET);
 }
 
 #[test]
@@ -1051,7 +1175,16 @@ fn ticket_short_payment_returns_to_verifier() {
     let refund = pay(&mut c, &"intents.near".parse().unwrap(), TICKET - 1, &msg);
     assert_eq!(refund, TICKET - 1);
     assert_eq!(c.get_guest_status(id, accounts(2)), None);
-    assert_eq!(c.balance_of(accounts(2)).0, 0);
+    assert_eq!(c.balance_of(accounts(0)).0, 0);
+}
+
+#[test]
+fn ticket_via_intents_pays_the_host() {
+    let (mut c, id) = setup_tickets(10);
+    let msg = format!(r#"{{"action":"register","event_id":{id},"guest":"{}"}}"#, accounts(2));
+    assert_eq!(pay(&mut c, &"intents.near".parse().unwrap(), TICKET, &msg), 0);
+    assert_eq!(c.get_guest_status(id, accounts(2)), Some(GuestStatus::Registered));
+    assert_eq!(c.balance_of(accounts(0)).0, TICKET);
 }
 
 #[test]
@@ -1116,43 +1249,103 @@ fn cancel_twice_is_rejected() {
 }
 
 #[test]
-fn global_event_limit_allows_exactly_max_events_total() {
-    ctx(&accounts(0), NearToken::from_near(5_000));
+fn many_events_from_many_hosts_and_recent_views_page() {
+    ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = Contract::new(usdc(), None, None);
-    for i in 0..MAX_EVENTS_TOTAL {
+    for i in 0..120 {
         let host: AccountId = format!("host{i}.testnet").parse().unwrap();
         ctx(&host, NearToken::from_yoctonear(0));
         c.create_event(meta(), U128(MIN_DEPOSIT), 1, None);
     }
-    assert_eq!(c.events.len(), MAX_EVENTS_TOTAL);
+    assert_eq!(c.events.len(), 120);
     assert_eq!(c.get_recent_events(None).len(), 50);
     assert_eq!(c.get_recent_events(Some(1_000)).len(), 100);
-    assert_eq!(c.get_recent_events(Some(1))[0].id, u64::from(MAX_EVENTS_TOTAL) - 1);
+    assert_eq!(c.get_recent_events(Some(1))[0].id, 119);
 }
 
 #[test]
-#[should_panic(expected = "reached its limit of 1000 events")]
-fn event_after_the_global_limit_is_rejected() {
-    ctx(&accounts(0), NearToken::from_near(5_000));
+fn max_capacity_event_is_accepted() {
+    ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = Contract::new(usdc(), None, None);
-    for i in 0..MAX_EVENTS_TOTAL {
-        let host: AccountId = format!("host{i}.testnet").parse().unwrap();
-        ctx(&host, NearToken::from_yoctonear(0));
-        c.create_event(meta(), U128(MIN_DEPOSIT), 1, None);
+    let cost = c.create_event_cost(accounts(0), MAX_CAPACITY).0;
+    ctx(&accounts(0), NearToken::from_yoctonear(cost));
+    let id = c.create_event(meta(), U128(MIN_DEPOSIT), 300, None);
+    assert_eq!(c.get_event(id).unwrap().capacity, 300);
+}
+
+// ------------------------------------------------------- attendance count
+
+#[test]
+fn attendance_counts_only_checked_in_guests_once_per_event() {
+    let (mut c, a) = setup(10);
+    for g in [accounts(2), accounts(3), accounts(4)] {
+        register(&mut c, a, &g);
     }
+    ctx(&accounts(0), one_yocto());
+    c.finalize(a, vec![accounts(2), accounts(2), accounts(3)]);
+    assert_eq!(c.get_attended_count(accounts(2)), 1);
+    assert_eq!(c.get_attended_count(accounts(3)), 1);
+    assert_eq!(c.get_attended_count(accounts(4)), 0);
+
+    // Ticket events count too; cancelled events do not.
     ctx(&accounts(0), NearToken::from_yoctonear(0));
-    c.create_event(meta(), U128(MIN_DEPOSIT), 1, None);
+    let t = c.create_event(meta(), U128(10 * USDC), 10, Some(EventMode::Ticket));
+    let x = c.create_event_cost(accounts(0), 10).0;
+    ctx(&accounts(0), NearToken::from_yoctonear(x));
+    let cancelled = c.create_event(meta(), U128(10 * USDC), 10, None);
+    register(&mut c, t, &accounts(2));
+    register(&mut c, cancelled, &accounts(3));
+    ctx(&accounts(0), one_yocto());
+    c.finalize(t, vec![accounts(2)]);
+    ctx(&accounts(0), one_yocto());
+    c.cancel(cancelled);
+    assert_eq!(c.get_attended_count(accounts(2)), 2);
+    assert_eq!(c.get_attended_count(accounts(3)), 1);
+    assert_eq!(c.get_attended_count(accounts(5)), 0);
 }
 
+/// Worst case: 64-char accounts and a 120-char title. Prints the measured
+/// sizes (`cargo test -- --nocapture`) the constants in `lib.rs` are based on.
 #[test]
-fn closed_events_still_count_toward_the_global_limit() {
+fn storage_reserves_cover_the_measured_worst_case() {
+    let long = |n: u32| -> AccountId { format!("{:064x}", n).parse().unwrap() };
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = Contract::new(usdc(), None, None);
-    let id = c.create_event(meta(), U128(MIN_DEPOSIT), 1, None);
-    ctx(&accounts(0), one_yocto());
-    c.cancel(id);
-    assert_eq!(open_of(&c, &accounts(0)), 0);
-    assert_eq!(c.events.len(), 1, "a closed event keeps its slot: nothing is deleted");
+    c.events.flush();
+    let host = long(9_999);
+    ctx(&host, NearToken::from_yoctonear(0));
+    let before = env::storage_usage();
+    let mut m = meta();
+    m.title = "t".repeat(MAX_TITLE_LEN);
+    let id = c.create_event(m, U128(MIN_DEPOSIT), 8, None);
+    c.events.flush();
+    c.open_events.flush();
+    let event_bytes = env::storage_usage() - before;
+
+    let guests: Vec<AccountId> = (0..8).map(long).collect();
+    let before = env::storage_usage();
+    for g in &guests {
+        pay(&mut c, g, MIN_DEPOSIT, &format!(r#"{{"action":"register","event_id":{id}}}"#));
+    }
+    c.events.flush();
+    c.guests.flush();
+    c.guest_index.flush();
+    let seat_bytes = (env::storage_usage() - before) / 8;
+
+    ctx(&host, one_yocto());
+    let before = env::storage_usage();
+    // 8 x 0.1 split by 7 leaves a remainder, so the host's balance is written too.
+    c.finalize(id, guests[..7].to_vec());
+    c.balances.flush();
+    c.attended_events.flush();
+    c.guests.flush();
+    c.open_events.flush();
+    let settle = env::storage_usage() - before;
+    // The host's open-event counter (113 B) is removed in the same call.
+    eprintln!("measured: event {event_bytes} B, registration {seat_bytes} B/seat, settlement {settle} B for 7 attendees + host");
+    assert!(event_bytes <= EVENT_RECORD_BYTES, "event used {event_bytes}, reserve {EVENT_RECORD_BYTES}");
+    assert!(seat_bytes <= STORAGE_BYTES_PER_GUEST, "seat used {seat_bytes}, reserve {STORAGE_BYTES_PER_GUEST}");
+    assert!(settle <= 7 * SETTLE_BYTES + BALANCE_BYTES, "settlement used {settle}");
 }
 
 /// `web/scripts/deploy-escrow.mjs` checks the init arguments by reading the raw

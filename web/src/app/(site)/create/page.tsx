@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { events, toUnits, type EventMode, type EventView } from "@/lib/near";
+import { events, formatNear, FREE_MAX_CAPACITY, FREE_MAX_OPEN_EVENTS, MAX_CAPACITY, toUnits, type EventMode, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { Cover } from "@/components/ui";
@@ -176,13 +176,31 @@ function CreateEvent() {
   }, [integrate, saved, created, router]);
 
   const free = form.mode === "Free";
-  const maxSeats = free ? MAX_FREE_CAPACITY : 300;
+  const maxSeats = free ? MAX_FREE_CAPACITY : MAX_CAPACITY;
   const amountOk = free || validAmount(form.deposit);
   const seats = Number(form.capacity);
   const seatsOk = Number.isInteger(seats) && seats >= 1 && seats <= maxSeats;
   const doorTeamProblem = free ? null : cohostsProblem(form.cohosts);
   // Past events can only be added as Free: a deposit or ticket for something already over makes no sense.
   const missing = !free && when && when.end < Date.now() ? "Pick Free to add a past event" : !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? `Set the capacity: 1 to ${maxSeats}` : doorTeamProblem ?? undefined;
+  // yoctoNEAR the host pays for storage beyond the free tier; "0" when free.
+  const [storageCost, setStorageCost] = useState("0");
+  useEffect(() => {
+    if (free || !accountId || !seatsOk) return setStorageCost("0");
+    let live = true;
+    const timer = setTimeout(() => {
+      events.createCost(accountId, seats).then((c) => live && setStorageCost(c)).catch(() => {});
+    }, 300);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [free, accountId, seats, seatsOk]);
+  const costNote = storageCost !== "0" && (
+    <p className="text-sm text-muted">
+      Created at your expense: ~{formatNear(storageCost)} NEAR (storage). Free events are up to {FREE_MAX_CAPACITY} seats and {FREE_MAX_OPEN_EVENTS} open events.
+    </p>
+  );
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -221,6 +239,8 @@ function CreateEvent() {
         router.push(`/f/${json.id}`);
         return;
       }
+      // Checked again right before signing: the host may have opened another event meanwhile.
+      const deposit = BigInt(await events.createCost(accountId, capacity));
       const submittedAt = Date.now();
       // Theme, image, font and random-seed choices are presentation data; save them off-chain below.
       await send([
@@ -237,6 +257,7 @@ function CreateEvent() {
             capacity,
             mode: form.mode as EventMode,
           },
+          deposit,
         },
       ]);
       transactionSent = true;
@@ -365,6 +386,7 @@ function CreateEvent() {
           imported={imported}
           busy={busy}
           error={error}
+          note={costNote}
           onSubmit={submit}
           onEdit={() => setEditing(true)}
           visibility={<PublicChip isPublic={isPublic} onToggle={() => setIsPublic(!isPublic)} />}
@@ -490,7 +512,7 @@ function CreateEvent() {
                 title={form.mode === "Ticket" ? "Ticket price" : "Deposit"}
                 help={
                   form.mode === "Ticket"
-                    ? "Each guest pays this for a ticket. You get it after the event starts and you close it. If you cancel, every guest gets it back."
+                    ? "Each guest pays this for a ticket. It goes to your balance as soon as they register. Tickets are not refunded if you cancel."
                     : "Each guest puts this down. People who come get it back plus a share of the no-shows."
                 }
               >
@@ -505,8 +527,8 @@ function CreateEvent() {
                   </>
                 ) : form.mode === "Ticket" ? (
                   <>
-                    <span className="flex-1">You get paid after the event</span>
-                    <span className="text-muted text-sm">Refunds if cancelled</span>
+                    <span className="flex-1">You get paid at registration</span>
+                    <span className="text-muted text-sm">No refunds</span>
                   </>
                 ) : (
                   <>
@@ -521,7 +543,7 @@ function CreateEvent() {
                 value={form.capacity}
                 attention={!seatsOk}
                 title="Max capacity"
-                help={`Up to ${maxSeats} guests. Registration closes when it's full.`}
+                help={free ? `Up to ${maxSeats} guests. Registration closes when it's full.` : `Up to ${MAX_CAPACITY} guests. Free up to ${FREE_MAX_CAPACITY} seats and ${FREE_MAX_OPEN_EVENTS} open events; bigger events pay a little NEAR for storage. Registration closes when it's full.`}
               >
                 <input className="input" type="number" min="1" max={maxSeats} required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
               </OptionRow>
@@ -539,6 +561,7 @@ function CreateEvent() {
             </div>
           </div>
 
+          {costNote}
           {when && when.end < Date.now() && (
             <p className="text-sm text-muted">
               {free ? "This date is in the past. The event goes to Past, and guests can add themselves as attended." : "Paid events need a future date. Pick Free to add a past event."}
@@ -567,13 +590,14 @@ function PublicChip({ isPublic, onToggle }: { isPublic: boolean; onToggle: () =>
   );
 }
 
-function ImportSummary({ form, when, visual, imported, busy, error, onSubmit, onEdit, backHref, visibility }: {
+function ImportSummary({ form, when, visual, imported, busy, error, note, onSubmit, onEdit, backHref, visibility }: {
   form: { title: string; location: string; cover_url: string; deposit: string; capacity: string; mode: JoinMode };
   when: When;
   visual: EventVisualConfig;
   imported: string;
   busy: boolean;
   error: string | null;
+  note?: ReactNode;
   onSubmit: (e: React.FormEvent) => void;
   onEdit: () => void;
   backHref: string;
@@ -598,6 +622,7 @@ function ImportSummary({ form, when, visual, imported, busy, error, onSubmit, on
           {form.deposit} USDC · {form.capacity} seats
         </SummaryRow>
       </dl>
+      {note}
       {error && <p className="text-sm text-warn break-words">{error}</p>}
       <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy}>
         {busy ? "Confirm in your wallet…" : "Integrate"}
@@ -636,7 +661,7 @@ function SignInDialog({ onClose }: { onClose: () => void }) {
           <p className="text-sm text-muted">Your event stays filled in. A NEAR wallet or Google/email both work.</p>
         </div>
         <SignInOptions />
-        <p className="text-[11px] text-muted/80">A little NEAR is held for on-chain storage and comes back when the event closes.</p>
+        <p className="text-[11px] text-muted/80">Free up to {FREE_MAX_CAPACITY} seats and {FREE_MAX_OPEN_EVENTS} open events.</p>
       </div>
     </div>
   );

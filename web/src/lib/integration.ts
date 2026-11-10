@@ -33,11 +33,11 @@ export function aiPrompt(target: IntegrationTarget, mode: EventMode): string {
   const { origin, eventId } = target;
   const whatItIs =
     mode === "Ticket"
-      ? "Nearvent lets guests register for an event by buying a USDC ticket; the host is paid after the event, and every guest gets their money back if it is cancelled."
+      ? "Nearvent lets guests register for an event by buying a USDC ticket; the host is paid when each guest registers, and tickets are not refunded."
       : "Nearvent lets guests register for an event by putting down a small refundable USDC deposit; people who show up get it back plus a share of the no-shows.";
   return `Add a Nearvent registration button to this website.
 
-${whatItIs} This site already shows the event; the button opens the hosted checkout and can reopen the guest's pass or ${mode === "Ticket" ? "refund" : "claim"} page. It is a dependency-free script that defines a <near-event> custom element. Its usage notes are in the header comment of ${origin}/embed.js.
+${whatItIs} This site already shows the event; the button opens the hosted checkout and can reopen the guest's pass${mode === "Ticket" ? "" : " or claim"} page. It is a dependency-free script that defines a <near-event> custom element. Its usage notes are in the header comment of ${origin}/embed.js.
 
 What to add:
 1. Load the script once per page, before </body> or in <head>:

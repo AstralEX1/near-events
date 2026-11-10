@@ -13,7 +13,7 @@ const HOST = [
   ["Create the event", "Title, time, place, deposit and capacity. Add the people who will check guests in as your door team; you can change it later."],
   ["Share it", "Send the link, or put a card or button on your own website from the “For your website” page."],
   ["Check people in", "On the event day open Manage, press “Scan QR codes” and scan guests, then press Check in. Search works too. Marks are saved on Nearvent, no transaction per guest."],
-  ["Close the event", "Review the final door list, then close the event. Deposits are credited to checked-in guests’ Nearvent balances; if nobody was checked in, deposits are refunded there. For paid tickets, revenue is credited to the host."],
+  ["Close the event", "Review the final door list, then close the event. Deposits are credited to checked-in guests’ Nearvent balances; if nobody was checked in, deposits are refunded there. Paid ticket money goes to the host’s balance as each guest registers."],
 ];
 
 const FAQ = [

@@ -1,13 +1,30 @@
 import { createHash, createPublicKey, verify, type JsonWebKey } from "node:crypto";
 import { decodeTransaction } from "near-api-js";
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, NETWORK, USDC_CONTRACT } from "@/lib/config";
+import { events } from "@/lib/near";
 import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { FASTAUTH_CONTRACT, relayer } from "@/lib/relayer";
 
 // The relayer only pays for transactions that call our own contracts.
 const ALLOWED_RECEIVERS = new Set([EVENTS_CONTRACT, USDC_CONTRACT]);
 
-function allowedSigner(signPayload: unknown): string | null {
+type Tx = ReturnType<typeof decodeTransaction>;
+
+// The relayer pays MPC gas for free-tier events only; a bigger event or a
+// third open one must carry its own storage deposit, or it would just fail.
+async function unpaidBeyondFreeTier(tx: Tx): Promise<boolean> {
+  if (tx.receiverId !== EVENTS_CONTRACT) return false;
+  for (const action of tx.actions) {
+    const call = action.functionCall;
+    if (call?.methodName !== "create_event") continue;
+    const capacity = Number(JSON.parse(new TextDecoder().decode(call.args)).capacity);
+    const cost = BigInt(await events.createCost(tx.signerId, capacity));
+    if (cost > 0n && BigInt(call.deposit) < cost) return true;
+  }
+  return false;
+}
+
+function allowedSigner(signPayload: unknown): Tx | null {
   try {
     if (!Array.isArray(signPayload) || signPayload.length > 8192 || !signPayload.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) return null;
     const tx = decodeTransaction(Uint8Array.from(signPayload as number[]));
@@ -18,7 +35,7 @@ function allowedSigner(signPayload: unknown): string | null {
       }
       return ALLOWED_RECEIVERS.has(tx.receiverId);
     });
-    return allowed ? tx.signerId : null;
+    return allowed ? tx : null;
   } catch {
     return null;
   }
@@ -71,9 +88,17 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid signature request" }, { status: 400 });
   }
   const { guard_id, verify_payload, sign_payload } = request;
-  const account = allowedSigner(sign_payload);
-  if (typeof account !== "string") {
+  const tx = allowedSigner(sign_payload);
+  if (!tx) {
     return Response.json({ error: "Only Nearvent transactions are relayed" }, { status: 400 });
+  }
+  const account = tx.signerId;
+  try {
+    if (await unpaidBeyondFreeTier(tx)) {
+      return Response.json({ error: "Free events are up to 50 seats and 2 open events per host. Attach the storage deposit shown on the create page." }, { status: 400 });
+    }
+  } catch {
+    return Response.json({ error: "Could not check the event's storage cost" }, { status: 502 });
   }
   try {
     if (!await matchesFastAuthToken(verify_payload, guard_id, sign_payload)) throw new Error();
