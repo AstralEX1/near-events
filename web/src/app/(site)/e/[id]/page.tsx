@@ -37,30 +37,30 @@ export default function EventPage() {
 
   const load = useCallback(async () => {
     setLoadError(false);
+    setDetails(null);
+    setDetailsUnavailable(false);
+    // The off-chain parts only need the id, so ask for them alongside the chain reads, not after.
+    const team = cohostsApi.get(id).catch(() => [] as string[]);
+    const guestNames = guestNamesApi.list(id).catch(() => ({} as GuestNames));
+    const publicDetails = fetch(`/api/event-details?e=${encodeURIComponent(String(id))}`, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Event details are unavailable");
+        return ((await response.json())?.details as EventDetails | null | undefined) ?? null;
+      })
+      .catch(() => undefined);
     const [e, g] = await Promise.all([
       events.get(id).catch(() => { setLoadError(true); return undefined; }),
       events.guests(id).catch(() => []),
     ]);
     setEvent(e);
     setGuests(g);
-    setDetails(null);
-    setDetailsUnavailable(false);
     if (e) {
-      cohostsApi.get(id).then(setDoorTeam).catch(() => setDoorTeam([]));
-      guestNamesApi.list(id).then(setNames).catch(() => setNames({}));
-      void fetch(`/api/event-details?e=${encodeURIComponent(String(id))}`, { cache: "no-store" })
-        .then(async (response) => {
-          if (!response.ok) throw new Error("Event details are unavailable");
-          return response.json();
-        })
-        .then((json) => {
-          setDetails((json?.details as EventDetails | null | undefined) ?? null);
-          setDetailsUnavailable(false);
-        })
-        .catch(() => {
-          setDetails(null);
-          setDetailsUnavailable(true);
-        });
+      void team.then(setDoorTeam);
+      void guestNames.then(setNames);
+      void publicDetails.then((d) => {
+        setDetails(d ?? null);
+        setDetailsUnavailable(d === undefined);
+      });
     }
   }, [id]);
 

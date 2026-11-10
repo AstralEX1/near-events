@@ -11,10 +11,12 @@ const ok = {
 test("freeEventProblem accepts a valid free event and rejects bad input", () => {
   assert.equal(freeEventProblem(ok), null);
   assert.equal(freeEventProblem({ ...ok, cover_url: "https://example.com/a.jpg", location: "https://maps.app.goo.gl/abc" }), null);
+  assert.equal(freeEventProblem({ ...ok, approval: true }), null);
   for (const bad of [
     null, {}, { ...ok, title: " " }, { ...ok, title: "x".repeat(121) }, { ...ok, ends_at: ok.starts_at },
     { ...ok, capacity: 0 }, { ...ok, capacity: 1001 }, { ...ok, capacity: 1.5 }, { ...ok, location: "Bali" },
     { ...ok, cover_url: "javascript:alert(1)" }, { ...ok, visual: { themeId: "nope", seed: 1 } }, { ...ok, public: "yes" },
+    { ...ok, approval: "yes" },
   ]) assert.notEqual(freeEventProblem(bad), null, JSON.stringify(bad));
 });
 

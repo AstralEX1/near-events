@@ -62,8 +62,8 @@ interface WalletState {
 
 const tokenKey = (accountId: string) => `near-events:staff:${accountId}`;
 
-/** The server token from an earlier proof, kept for 11h so later actions never ask the wallet again. */
-function savedStaffToken(accountId: string): string | null {
+/** The server token from an earlier proof (30 days) so later actions never ask the wallet again. */
+export function savedStaffToken(accountId: string): string | null {
   try {
     const saved = JSON.parse(localStorage.getItem(tokenKey(accountId)) ?? "null") as { token: string; until: number } | null;
     if (saved && saved.until > Date.now()) return saved.token;
@@ -77,7 +77,8 @@ async function exchangeProof(proof: object, accountId: string): Promise<string> 
   if (!res.ok) throw new Error(json.error ?? "Could not sign in");
   if (json.accountId !== accountId) throw new Error(`The wallet signed as ${json.accountId}, not ${accountId}.`);
   try {
-    localStorage.setItem(tokenKey(accountId), JSON.stringify({ token: json.token, until: Date.now() + 11 * 60 * 60 * 1000 }));
+    // The token carries its own expiry (account.exp.sig); refresh an hour early.
+    localStorage.setItem(tokenKey(accountId), JSON.stringify({ token: json.token, until: Number(String(json.token).split(".")[1]) * 1000 - 60 * 60 * 1000 }));
   } catch {}
   return json.token as string;
 }

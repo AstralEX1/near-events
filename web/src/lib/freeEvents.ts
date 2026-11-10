@@ -8,11 +8,12 @@ import { EVENTS_CONTRACT } from "./config";
 import { redis, usesRedis } from "./eventDetails";
 import type { FreeEvent, FreeEventInput } from "./freeEventsShared";
 
-type Stored = Omit<FreeEvent, "guest_count" | "guests">;
+type Stored = Omit<FreeEvent, "guest_count" | "guests" | "requests" | "requested">;
 
 const INDEX = `free-events:${EVENTS_CONTRACT}`;
 const key = (id: string) => `free-event:${EVENTS_CONTRACT}:${id}`;
 const guestsKey = (id: string) => `free-event-guests:${EVENTS_CONTRACT}:${id}`;
+const requestsKey = (id: string) => `free-event-requests:${EVENTS_CONTRACT}:${id}`;
 
 async function pipeline<T>(commands: (string | number)[][]): Promise<T[]> {
   if (!commands.length) return [];
@@ -31,7 +32,7 @@ async function pipeline<T>(commands: (string | number)[][]): Promise<T[]> {
 // ---------------------------------------------------------------- local file
 
 const FILE = path.join(process.cwd(), ".data", "free-events.json");
-type FileStore = Record<string, Stored & { guests: string[] }>;
+type FileStore = Record<string, Stored & { guests: string[]; requests?: string[] }>;
 let lock: Promise<unknown> = Promise.resolve();
 
 async function loadFile(): Promise<FileStore> {
@@ -73,13 +74,13 @@ export async function createFreeEvent(host: string, input: FreeEventInput): Prom
 
 export async function getFreeEvent(id: string): Promise<FreeEvent | null> {
   if (usesRedis()) {
-    const [raw, guests] = await pipeline<unknown>([["GET", key(id)], ["SMEMBERS", guestsKey(id)]]);
+    const [raw, guests, requests] = await pipeline<unknown>([["GET", key(id)], ["SMEMBERS", guestsKey(id)], ["SMEMBERS", requestsKey(id)]]);
     if (typeof raw !== "string") return null;
     const list = (guests as string[] | null) ?? [];
-    return { ...(JSON.parse(raw) as Stored), guests: list, guest_count: list.length };
+    return { ...(JSON.parse(raw) as Stored), guests: list, guest_count: list.length, requests: (requests as string[] | null) ?? [] };
   }
   const e = (await loadFile())[id];
-  return e ? { ...e, guest_count: e.guests.length } : null;
+  return e ? { ...e, guest_count: e.guests.length, requests: e.requests ?? [] } : null;
 }
 
 /** Every public free event, without guest lists. */
@@ -94,7 +95,7 @@ export async function listPublicFreeEvents(): Promise<FreeEvent[]> {
       return typeof raw === "string" ? [{ ...(JSON.parse(raw) as Stored), guest_count: Number(rows[i * 2 + 1]) || 0 }] : [];
     });
   } else {
-    all = Object.values(await loadFile()).map(({ guests, ...e }) => ({ ...e, guest_count: guests.length }));
+    all = Object.values(await loadFile()).map(({ guests, requests: _, ...e }) => ({ ...e, guest_count: guests.length }));
   }
   return all.filter((e) => e.public);
 }
@@ -111,25 +112,29 @@ export async function freeEventsOf(account: string): Promise<(FreeEvent & { goin
       return typeof raw === "string" ? [{ ...(JSON.parse(raw) as Stored), guest_count: Number(rows[i * 3 + 1]) || 0, going: Number(rows[i * 3 + 2]) === 1 }] : [];
     });
   } else {
-    all = Object.values(await loadFile()).map(({ guests, ...e }) => ({ ...e, guest_count: guests.length, going: guests.includes(account) }));
+    all = Object.values(await loadFile()).map(({ guests, requests: _, ...e }) => ({ ...e, guest_count: guests.length, going: guests.includes(account) }));
   }
   return all.filter((e) => e.going || e.host === account);
 }
 
-/** Adds or removes a guest. Past events stay open so guests can add themselves after the fact. Returns an error message, or null on success. */
+/**
+ * Adds or removes a guest. With approval on, joining files a request for the host instead
+ * (the host joins directly). Leaving also withdraws a pending request. Past events stay open
+ * so guests can add themselves after the fact. Returns an error message, or null on success.
+ */
 export async function setFreeGuest(id: string, account: string, going: boolean): Promise<string | null> {
   if (usesRedis()) {
     const [raw, count, member] = await pipeline<unknown>([["GET", key(id)], ["SCARD", guestsKey(id)], ["SISMEMBER", guestsKey(id), account]]);
     if (typeof raw !== "string") return "Event not found";
     const event = JSON.parse(raw) as Stored;
     if (!going) {
-      await redis(["SREM", guestsKey(id), account]);
+      await pipeline([["SREM", guestsKey(id), account], ["SREM", requestsKey(id), account]]);
       return null;
     }
     if (Number(member)) return null;
     // shortcut: count-then-add can overshoot capacity by a few under simultaneous joins; use a Lua script if that matters.
     if (Number(count) >= event.capacity) return "This event is full";
-    await redis(["SADD", guestsKey(id), account]);
+    await redis(["SADD", event.approval && account !== event.host ? requestsKey(id) : guestsKey(id), account]);
     return null;
   }
   return updateFile((store) => {
@@ -137,11 +142,40 @@ export async function setFreeGuest(id: string, account: string, going: boolean):
     if (!event) return "Event not found";
     if (!going) {
       event.guests = event.guests.filter((a) => a !== account);
+      event.requests = (event.requests ?? []).filter((a) => a !== account);
       return null;
     }
     if (event.guests.includes(account)) return null;
     if (event.guests.length >= event.capacity) return "This event is full";
+    if (event.approval && account !== event.host) {
+      event.requests = [...new Set([...(event.requests ?? []), account])];
+      return null;
+    }
     event.guests.push(account);
+    return null;
+  });
+}
+
+/** Host-only: accept a pending request (if a spot is left) or decline it. Returns an error message, or null. */
+export async function decideFreeRequest(id: string, host: string, guest: string, approve: boolean): Promise<string | null> {
+  if (usesRedis()) {
+    const [raw, count, pending] = await pipeline<unknown>([["GET", key(id)], ["SCARD", guestsKey(id)], ["SISMEMBER", requestsKey(id), guest]]);
+    if (typeof raw !== "string") return "Event not found";
+    const event = JSON.parse(raw) as Stored;
+    if (event.host !== host) return "Only the host can change this";
+    if (!Number(pending)) return "This request is no longer pending";
+    if (approve && Number(count) >= event.capacity) return "This event is full";
+    await pipeline(approve ? [["SADD", guestsKey(id), guest], ["SREM", requestsKey(id), guest]] : [["SREM", requestsKey(id), guest]]);
+    return null;
+  }
+  return updateFile((store) => {
+    const event = store[id];
+    if (!event) return "Event not found";
+    if (event.host !== host) return "Only the host can change this";
+    if (!event.requests?.includes(guest)) return "This request is no longer pending";
+    if (approve && event.guests.length >= event.capacity) return "This event is full";
+    event.requests = event.requests.filter((a) => a !== guest);
+    if (approve) event.guests.push(guest);
     return null;
   });
 }

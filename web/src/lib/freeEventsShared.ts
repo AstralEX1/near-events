@@ -14,6 +14,8 @@ export interface FreeEventInput {
   visual: EventVisualConfig;
   /** Public events show in the /events feed; private ones only by link. */
   public: boolean;
+  /** Guests ask to join and the host approves each one. Missing on older events means off. */
+  approval?: boolean;
 }
 
 export interface FreeEvent extends FreeEventInput {
@@ -23,6 +25,10 @@ export interface FreeEvent extends FreeEventInput {
   guest_count: number;
   /** Only in the single-event response; the feed leaves it out. */
   guests?: string[];
+  /** Pending join requests: only sent to the host. */
+  requests?: string[];
+  /** Whether the signed-in viewer has a pending request. */
+  requested?: boolean;
 }
 
 export const MAX_FREE_CAPACITY = 1000;
@@ -53,6 +59,7 @@ export function freeEventProblem(value: unknown): string | null {
   if (e.cover_url !== null && (typeof e.cover_url !== "string" || !safeHttpUrl(e.cover_url))) return "Use a public HTTP or HTTPS image link for the cover image.";
   if (!validEventVisual(e.visual)) return "Bad event theme.";
   if (typeof e.public !== "boolean") return "Bad visibility.";
+  if (e.approval !== undefined && typeof e.approval !== "boolean") return "Bad approval setting.";
   return null;
 }
 

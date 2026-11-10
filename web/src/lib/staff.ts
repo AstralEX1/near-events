@@ -16,7 +16,8 @@ import { events } from "./near";
 import { getCohosts } from "./cohosts";
 import { STAFF_MESSAGE, STAFF_PROOF_METHOD } from "./staffShared";
 
-const TOKEN_TTL_S = 12 * 60 * 60;
+// Stay signed in like Luma/Unlock sessions instead of re-signing every 12 h. Signing out drops it locally.
+const TOKEN_TTL_S = 30 * 24 * 60 * 60;
 const PROOF_MAX_AGE_MS = 10 * 60 * 1000;
 
 function secret(): string {
