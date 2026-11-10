@@ -1,7 +1,7 @@
 "use client";
 
 import { type CSSProperties, type ReactNode } from "react";
-import { resolveEventVisual, type EventVisualConfig } from "@/lib/event-visuals";
+import { generativeArt, resolveEventVisual, type EventVisualConfig } from "@/lib/event-visuals";
 
 function layerCount(images: string): number {
   let depth = 0;
@@ -14,11 +14,11 @@ function layerCount(images: string): number {
   return count;
 }
 
-export function VisualBackdrop({ visual, className = "", children }: { visual: EventVisualConfig; className?: string; children?: ReactNode }) {
+export function VisualBackdrop({ visual, className = "", style, children }: { visual: EventVisualConfig; className?: string; style?: CSSProperties; children?: ReactNode }) {
   const resolved = resolveEventVisual(visual);
-  const [dark, mid, light] = resolved.colors;
+  const [dark, mid] = resolved.colors;
   if (resolved.theme.group === "near-me") {
-    return <div className={`relative isolate overflow-hidden ${className}`} style={{ backgroundColor: mid }}>
+    return <div className={`relative isolate overflow-hidden ${className}`} style={{ ...style, backgroundColor: mid, backgroundImage: resolved.backgroundAsset ? undefined : generativeArt(visual) }}>
       {resolved.backgroundAsset && <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center opacity-20" style={{ backgroundImage: `url("${resolved.backgroundAsset}")` }} />}
       <div className="relative z-10 flex h-full w-full flex-col justify-end">{children}</div>
     </div>;
@@ -26,7 +26,7 @@ export function VisualBackdrop({ visual, className = "", children }: { visual: E
   const textureLayers = layerCount(resolved.texture);
   const overlay = resolved.backgroundAsset
     ? "linear-gradient(135deg, #08121a20, #08121a85)"
-    : `radial-gradient(ellipse at 78% 18%, ${light}70, transparent 48%), linear-gradient(135deg, ${dark}, ${mid} 58%, ${dark})`;
+    : generativeArt(visual);
   const backgroundImage = `${resolved.texture}, ${overlay}${resolved.backgroundAsset ? `, url("${resolved.backgroundAsset}")` : ""}`;
   const backgroundPosition = resolved.backgroundAsset
     ? `${Array(textureLayers).fill("center").join(", ")}, ${resolved.backgroundPosition}, ${resolved.backgroundPosition}`
@@ -40,7 +40,7 @@ export function VisualBackdrop({ visual, className = "", children }: { visual: E
   return (
     <div
       className={`relative isolate overflow-hidden ${className}`}
-      style={{ backgroundColor: dark }}
+      style={{ ...style, backgroundColor: dark }}
     >
       <div
         aria-hidden="true"
@@ -64,7 +64,7 @@ export function EventPageBackground({ visual }: { visual: EventVisualConfig }) {
 
 export function EventPoster({ title, visual, coverUrl = null, className = "" }: { title: string; visual: EventVisualConfig; coverUrl?: string | null; className?: string }) {
   const resolved = resolveEventVisual(visual);
-  const [dark, mid, light] = resolved.colors;
+  const [dark, mid] = resolved.colors;
   let safeCover = "";
   // A host's not-yet-uploaded photo is previewed as a JPEG data URL on /create.
   if (coverUrl?.startsWith("data:image/jpeg;base64,")) safeCover = coverUrl;
@@ -89,7 +89,7 @@ export function EventPoster({ title, visual, coverUrl = null, className = "" }: 
   if (theme.group === "near-me") {
     const ink = imageAsset ? "#ffffff" : dark;
     return (
-      <div className={`relative isolate overflow-hidden ${className}`} style={{ containerType: "inline-size", backgroundColor: mid, color: ink }}>
+      <div className={`relative isolate overflow-hidden ${className}`} style={{ containerType: "inline-size", backgroundColor: mid, backgroundImage: imageAsset ? undefined : generativeArt(visual), color: ink }}>
         {imageAsset && <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `linear-gradient(180deg, #0002, #0008), url("${imageAsset}")` }} />}
         <div className="absolute inset-0 flex flex-col justify-between p-[9%]" style={{ fontFamily: "var(--font-display)" }}>
           <span className="text-[clamp(.65rem,4cqw,1rem)] font-bold tracking-[-.05em]">near me</span>
@@ -102,7 +102,7 @@ export function EventPoster({ title, visual, coverUrl = null, className = "" }: 
   const textureLayers = layerCount(resolved.texture);
   const overlay = imageAsset
     ? `linear-gradient(160deg, ${dark}65, #0009)`
-    : `radial-gradient(ellipse at 75% 15%, ${light}a6, transparent 50%), linear-gradient(145deg, ${dark}, ${mid} 58%, ${dark})`;
+    : generativeArt(visual);
   const backgroundImage = `${resolved.texture}, ${overlay}${imageAsset ? `, url("${imageAsset}")` : ""}`;
   const backgroundPosition = imageAsset
     ? `${Array(textureLayers).fill("center").join(", ")}, ${imagePosition}, ${imagePosition}`
