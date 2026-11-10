@@ -5,6 +5,7 @@ import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "@/lib/config";
 import { relayer } from "@/lib/relayer";
 import { events } from "@/lib/near";
+import { cleanGuestName, setGuestName } from "@/lib/guestNames";
 
 // Submits a guest's signed intent to intents.near; the relayer pays the gas.
 // Only two shapes are relayed: a registration (one `ft_withdraw` of USDC to the
@@ -13,7 +14,7 @@ import { events } from "@/lib/near";
 export async function POST(req: Request) {
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
   if (!INTENTS_CONTRACT) return Response.json({ error: "NEAR Intents is not configured" }, { status: 403 });
-  let signed: { standard: string; payload: string; signature: string };
+  let signed: { standard: string; payload: string; signature: string; name?: unknown };
   let signer: string;
   let nonce: string;
   let registration: { eventId: number; amount: string } | undefined;
@@ -73,6 +74,9 @@ export async function POST(req: Request) {
     });
     const status = outcome.status as { Failure?: unknown };
     if (status.Failure) return Response.json({ error: "Intent rejected", detail: status.Failure }, { status: 502 });
+    // EVM guests have no staff token; the registration they just signed is their proof for the display name.
+    const name = registration && cleanGuestName(signed.name);
+    if (name) await setGuestName(registration!.eventId, signer, name).catch(() => {});
     return Response.json({ hash: outcome.transaction.hash });
   } catch {
     return Response.json({ error: "Intent status unavailable. Check your event or Intents balance before retrying." }, { status: 502 });

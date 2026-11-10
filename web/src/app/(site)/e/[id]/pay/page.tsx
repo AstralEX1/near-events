@@ -109,13 +109,14 @@ export default function PayFromAnyChain() {
     try {
       const name = requireDisplayName(displayName);
       if (kind === "evm") {
-        await registerFromIntents(accountId, event.id, event.deposit);
+        await registerFromIntents(accountId, event.id, event.deposit, name);
       } else {
         const msg = JSON.stringify({ action: "register", event_id: event.id, guest: accountId });
         await send([withdrawIntentsCall(EVENTS_CONTRACT, event.deposit, msg)]);
       }
       await confirmRegistration(event.id, accountId);
-      try {
+      // EVM guests: the server already saved the name with the signed registration.
+      if (kind !== "evm") try {
         const token = await staffToken();
         await guestNamesApi.save(event.id, name, token);
       } catch {

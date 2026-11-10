@@ -81,14 +81,15 @@ async function nonce(): Promise<string> {
  * balance: one signature, no gas. intents.near sends the USDC to the escrow
  * with `ft_transfer_call`, and the escrow registers the guest.
  */
-export async function registerFromIntents(address: string, eventId: number, deposit: string): Promise<void> {
+export async function registerFromIntents(address: string, eventId: number, deposit: string, name?: string): Promise<void> {
+  // The guest's display name rides along: the server saves it once the signed registration lands, so no extra prompt.
   await signAndRelay(address, {
     intent: "ft_withdraw",
     token: USDC_CONTRACT,
     receiver_id: EVENTS_CONTRACT,
     amount: deposit,
     msg: JSON.stringify({ action: "register", event_id: eventId, guest: address }),
-  });
+  }, name);
 }
 
 export function withdrawIntentsCall(receiverId: string, amount: string, msg?: string): Call {
@@ -118,7 +119,7 @@ export async function transferFromIntents(address: string, depositAddress: strin
 }
 
 /** Signs one intent with the EVM wallet (ERC-191); our relayer submits it to intents.near. */
-async function signAndRelay(address: string, intent: Record<string, unknown>): Promise<void> {
+async function signAndRelay(address: string, intent: Record<string, unknown>, name?: string): Promise<void> {
   const payload = JSON.stringify({
     signer_id: address,
     verifying_contract: INTENTS_CONTRACT,
@@ -138,7 +139,7 @@ async function signAndRelay(address: string, intent: Record<string, unknown>): P
   const res = await fetch("/api/intents/execute", {
     method: "POST",
     signal: AbortSignal.timeout(60_000),
-    body: JSON.stringify({ standard: "erc191", payload, signature: `secp256k1:${baseEncode(sig)}` }),
+    body: JSON.stringify({ standard: "erc191", payload, signature: `secp256k1:${baseEncode(sig)}`, name }),
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error ?? "Intent failed");

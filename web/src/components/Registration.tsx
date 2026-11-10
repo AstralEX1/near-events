@@ -151,11 +151,10 @@ export function RegistrationCard({
         }
       }
       setStage("Sign in your wallet…");
-      await registerFromIntents(accountId!, event.id, event.deposit);
+      await registerFromIntents(accountId!, event.id, event.deposit, name);
       await confirmRegistration(event.id, accountId!).catch(() => {
         throw new Error("Registration is not confirmed. Check your event and NEAR Intents balance before paying again.");
       });
-      await saveName(name).catch(() => {});
     });
 
   const price = `${formatUsdc(event.deposit)} USDC`;
