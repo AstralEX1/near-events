@@ -129,7 +129,7 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .ui-sub { color: var(--muted); font-size: 13px; }
 .pill { align-self: flex-start; font-size: 12px; font-weight: 650; padding: 3px 10px; border-radius: 999px; background: var(--accent-wash); color: var(--accent-ink); }
 .pill.good { background: var(--good-wash); color: var(--good-ink); }
-.big-btn { height: 50px; border-radius: 16px; background: var(--accent); color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; }
+.big-btn { text-decoration: none; height: 50px; border-radius: 16px; background: var(--accent); color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; }
 .big-btn.dark { background: var(--ink); color: var(--bg); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips span { font-size: 12.5px; font-weight: 600; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
@@ -324,7 +324,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
           <div class="shot">
             <div class="ui">
               <div class="ui-top"><div class="cover"></div><div><div class="ui-title">NEAR Builders Breakfast</div><div class="ui-sub">Fri, Nov 14 · 9:00 · Lisbon</div></div></div>
-              <div class="big-btn pulse">Register · 10 USDC</div>
+              <a class="big-btn pulse" href="/create">Register · 10 USDC</a>
               <div class="or">Pay from any chain or sign in with Google</div>
             </div>
           </div>
@@ -360,7 +360,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
                 <div class="payrow"><span>Checked in</span><span class="amt" style="color:var(--ink)">9 / 12</span></div>
                 <div class="payrow"><span>Each attendee</span><span class="amt">~18.89</span></div>
               </div>
-              <div class="big-btn dark">Close event &amp; pay out</div>
+              <a class="big-btn dark" href="/create">Close event &amp; pay out</a>
             </div>
           </div>
         </div>
@@ -379,7 +379,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
                 <div class="payrow"><span class="av" style="background:#9333ea">0</span>0x8f3c…a21e<span class="amt">+18.89</span></div>
                 <div class="payrow no"><span class="av" style="background:#cdb8d6">L</span>lucas.near<span class="amt">10.00</span></div>
               </div>
-              <div class="big-btn">Send payouts</div>
+              <a class="big-btn" href="/create">Send payouts</a>
             </div>
           </div>
         </div>
