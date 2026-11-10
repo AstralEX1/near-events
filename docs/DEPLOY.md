@@ -1,14 +1,10 @@
 # Web app hosting and escrow release
 
-Current status (2026-11-09): Vercel project `near-me-testnet` is linked from
-`web/` and serves `www.nearvent.site`. Alex approved switching the app to the
-verified TP5 disposable deploy `escrow-tp5.tp5-codex-qa-20261107-a.testnet`
-(code hash `9ggN7z1oTekunzEceJGv6ufRwaW6smrfiUGNSt2HeRRG`). Local default,
-`.env.example`, `.env.local`, and Vercel Production/Preview
-`NEXT_PUBLIC_EVENTS_CONTRACT` now point at TP5. Latest production deploy
-`dpl_6YoKPG64wgvuQz6GGsq4ik88Tcuo` (READY) includes guest display names,
-hidden testnet UI labels, and `.testnet` stripped from shortAccount. TP4
-events remain on chain outside the app flow. USDC remains
+Current status (2026-11-10): Vercel project `near-me-testnet` is linked from
+`web/` and serves `www.nearvent.site`. The app, `.env.example` and Vercel
+Production/Preview `NEXT_PUBLIC_EVENTS_CONTRACT` point at
+`escrow-tp6.tp6-nv1110.testnet` (PR #25 rules, see "TP6 testnet deploy" below).
+TP5/TP4 events remain on chain outside the app flow. USDC remains
 `usdc.tidepool-sandbox.testnet`, verifier `verifier.tidepool-sandbox.testnet`.
 Upstash `NearMeTestnet` stores off-chain details keyed by contract id. Hosted
 secret values are intentionally not documented here.
@@ -136,3 +132,39 @@ The Tidepool 1Click smoke also passed through test USDT → Intents USDC → reg
 Local verification: node --test tests/*.test.mjs passed 19/19, including door-team input validation. The smoke scripts now wait for eventual RPC state and compare balance deltas so previous disposable test balances do not invalidate a run. In the PR worktree, /e/21 rendered the finalized Ticket as “Paid out”; /e/22 showed the host and off-chain door-team member, then after removal showed no door member and rendered the checked-in guest as paid out. Signed disposable accounts passed /api/cohosts and /api/checkin authorization, add/remove, and stale-token rejection. /create and /create?flow=widget loaded; without a connected wallet, Continue remained disabled even for a valid amount. Wallet-driven creation, on-screen Door team validation hints, the Manage edit/cancel controls, and /me and /u aggregation were not exercised. Telegram bot flows are outside scope and were not tested.
 
 The wrong-token case (#7) was not run because it requires a second escrow initialized with a separate test token. The 1,000-event limit (#26) was not run, as directed. The account default in web/src/lib/config.ts remains escrow-tp4.nearevents-11022103.testnet; no mainnet or real-money flow was used. This QA report is kept here as the verification record for PR #21; no separate PR comment was posted.
+
+## TP6 testnet deploy (2026-11-10, Claude)
+
+Source: main `2c2f010deb9d23190b63dd1fa0ac326e283269bd` (PR #25). CI run
+42759603371 artifact `escrow-wasm-2c2f010…`: `near_events.wasm`, 240,871 bytes,
+SHA-256 `e0ea8c89dd2ccee1c90bad257757d3dc1e70d4e78789e8ddc452005bfc518ba9`,
+NEAR code hash `G8ym7g1tSQevzz9qXHynUvRyDHnxG3iBz8zxhdZ8ZUo2`.
+`deploy-escrow.mjs` created `escrow-tp6.tp6-nv1110.testnet` (9.5 NEAR) under the
+faucet account `tp6-nv1110.testnet`, deployed and initialised it in one
+transaction (usdc `usdc.tidepool-sandbox.testnet`, intents
+`verifier.tidepool-sandbox.testnet`, relayer `relayer-nearevents-11022103.testnet`;
+the Vercel project has no `RELAYER_ACCOUNT_ID`, so the local relayer was used),
+and registered its Tidepool USDC storage. `verify-escrow-code.mjs` matched the
+on-chain hash.
+
+Smoke on faucet accounts `tp6host-nv1110`, `tp6guest1-nv1110`, `tp6guest2-nv1110`
+(all passed):
+- Free event, 50 seats, 0.5 NEAR attached → created, NEAR returned:
+  `5dmDnqiFX2PguET8SkoTbHFPYSGPTpMtUPjSct6k59sj`.
+- 51 seats without NEAR → rejected ("beyond the free tier"); with
+  `create_event_cost` (0.33764 NEAR) + 1 NEAR → created, 1 NEAR returned:
+  `26afNHd8Cg5GVLQXcqhGrWNCojLfrkGTrnGEtkgSKn3D`; later cancelled
+  `FngGPcyAsitk6bDiJgyZje5JFL9H1BzV5xn9xuPRY4zU`.
+- Deposit flow (event 0): two 0.1 USDC registrations
+  `DB9MtjrsfZXB923dZTpTY6D68wW8oH1ZjWdovfmtszen`,
+  `3YksvG3unQFM6vmxr72d1cWZyUjC9x9rXv7Z8Gb47En9`; finalize with guest1
+  `7SwvaMPX9h7s5whMss8UKNdGaB4BtWbeaHK7rYR58YtH`; `get_attended_count` = 1,
+  balance 0.2 USDC; withdraw `6gEZvogYJ35xWAUCXwbDQUzDbxmxsj8JmTAEMWCTHxo7`.
+- Ticket (event 2): create `2K6curURmb8WaGsJxAkkH6c9RPPxkbamLL6Jv1JEf262`, buy
+  `2RHXieQbfLjJyRAQvdiyXHgUMLjymgoe6reh4BvCJQkZ` → host escrow balance 0.1 USDC
+  while the event was still open; finalize
+  `EW7x933YHtZC6bPMtd2eqq7DAhqjoKY7RtD63wYtNT3f` (guest2 attended count 1); host
+  withdraw `4Zv5RYZ4agLvudCqL9CNgGe2ARkZiRZYgkwmdRmPcmBW`.
+
+Not covered: 1Click/Intents registration, relayer `payout_to_intents`, the
+3rd-open-event charge, UI wallet signing.
