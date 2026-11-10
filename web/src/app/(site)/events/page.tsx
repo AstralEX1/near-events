@@ -12,7 +12,7 @@ export default function Events() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    events.list().then(setList).catch((e) => setError(String(e)));
+    events.listPublic().then(setList).catch((e) => setError(String(e)));
   }, []);
 
   const all = list ?? [];

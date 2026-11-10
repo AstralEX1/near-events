@@ -12,9 +12,10 @@ const CARDS: { mode: EventMode; title: string; line: string; icon: string[] }[] 
   { mode: "Ticket", title: "Ticket", line: "Guests pay, you earn", icon: ["M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z", "M13 5v2", "M13 17v2", "M13 11v2"] },
 ];
 
-/** The first screen of both flows: how guests pay and how much, plus the event link when integrating. */
-export function StartStep({ widget, initial }: { widget: boolean; initial: { mode?: string | null; amount?: string | null; link?: string | null } }) {
+/** The first screen of /create: how guests pay and how much. "Integrate instead?" adds the event link. */
+export function StartStep({ widget: initialWidget, initial }: { widget: boolean; initial: { mode?: string | null; amount?: string | null; link?: string | null } }) {
   const router = useRouter();
+  const [widget, setWidget] = useState(initialWidget);
   const [link, setLink] = useState(initial.link ?? "");
   const [mode, setMode] = useState<EventMode | null>(parseMode(initial.mode));
   const [amount, setAmount] = useState(initial.amount ?? "");
@@ -33,10 +34,25 @@ export function StartStep({ widget, initial }: { widget: boolean; initial: { mod
 
   return (
     <form onSubmit={submit} className="gc-start space-y-7 pb-12">
+      <label className="gc-switch-row">
+        <span>Integrate instead?</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={widget}
+          className="gc-switch"
+          onClick={() => {
+            setWidget(!widget);
+            // Refresh and Back keep the chosen flow.
+            window.history.replaceState(null, "", startUrl({ mode: mode ?? undefined, amount: amount || undefined, link: !widget ? link.trim() || undefined : undefined }, !widget));
+          }}
+        ><span aria-hidden /></button>
+      </label>
+
       <div className="space-y-2"><p className="gc-eyebrow">{widget ? "Integrate" : "Create an event"}</p><h1 className="gc-page-title">How will guests join?</h1><p className="text-muted">{widget ? "Bring your event over. Keep your own website." : "A little commitment, or a ticket. You choose."}</p></div>
 
       {widget && (
-        <label className="block space-y-1.5">
+        <label className="gc-reveal block space-y-1.5">
           <span className="flex items-baseline justify-between gap-3" aria-live="polite">
             <span className="label">Luma or BaliSquad event link</span>
             {source && <span className="text-sm text-good">✓ {source}</span>}

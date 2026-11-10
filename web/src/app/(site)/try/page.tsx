@@ -20,7 +20,7 @@ export default function TryPage() {
           <div className="font-semibold">Create event</div>
           <p className="text-sm text-muted mt-1">Host on Near Me</p>
         </Link>
-        <Link href="/widget" className="rounded-2xl border border-border bg-surface p-4 hover:border-accent/40 transition-colors">
+        <Link href="/create?flow=widget&step=start" className="rounded-2xl border border-border bg-surface p-4 hover:border-accent/40 transition-colors">
           <div className="font-semibold">Integrate</div>
           <p className="text-sm text-muted mt-1">Add to your site</p>
         </Link>
