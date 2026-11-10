@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { AvatarStack, shortAccount } from "./ui";
+import { shortAccount } from "./ui";
+import { SlAvatars } from "./SlUi";
 import { LocationValue } from "./PublicText";
 import { goingLine, mapPlaceName, mapQuery } from "@/lib/eventLines";
 
@@ -20,7 +21,7 @@ export function GoingList({ accounts, names = {}, total, verb = "Going" }: { acc
   const shown = accounts.slice(0, 2).map((a) => names[a] || shortAccount(a));
   return (
     <Section label={`${total} ${verb}`}>
-      <AvatarStack accounts={accounts} max={8} linked />
+      <SlAvatars accounts={accounts} names={names} role={verb === "Going" ? "Going · view profile" : "Went · view profile"} />
       <p className="mt-2 text-sm text-muted break-words">{goingLine(shown, total)}</p>
     </Section>
   );
