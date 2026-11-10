@@ -29,76 +29,43 @@ fee, and creating an event is free.
 
 Hackathon track focus: Real-World Money (USDC, NEAR Intents, gasless onboarding).
 
-## Live on testnet
+## Try it in two minutes
 
-The app uses the verified `escrow-tp4` deployment. A hosted test event verified
-registration with faucet USDC, event-detail saving, and off-chain check-in.
-The Vercel demo is [www.nearvent.site](https://www.nearvent.site/e/4);
-it uses Upstash Redis for hosted event details and check-ins. The local env file
-is `/Users/astralex/nearhackathon/web/.env.local` (git-ignored, mode 600); secret
-values are not documented here. Mainnet release checks remain pending.
+Open **[www.nearvent.site](https://www.nearvent.site)** → **Sign In** → **Try with a
+demo account**. You get a fresh NEAR account with a little NEAR for gas and
+2 test USDC. Every action signs on its own (no wallet, no popups), and each one
+is a real NEAR transaction you can open in the explorer.
 
-The slim TP5 contract is included in the current source and was verified
-separately on a disposable testnet account. The hosted app still uses TP4;
-TP5 has an incompatible state layout and needs a fresh account plus a separately
-approved app switch. See [deployment and QA status](docs/DEPLOY.md).
+1. **Create Event** → Deposit → 0.1 USDC, a start time later today. → The event page opens.
+2. Open the event link in a private window, take another demo account, press **Register**. → You show up under “Going”.
+3. Back as the host: **Manage → Guests → Check in**. → No transaction: check-ins are kept off-chain.
+4. **Manage → Close event**. → One transaction sends the list of who came; the pool is split on-chain.
+5. As the guest, press **Withdraw**. → The deposit plus the no-shows’ share lands in your account.
+
+User docs: [www.nearvent.site/docs](https://www.nearvent.site/docs) ·
+smart contract: [/docs/contract](https://www.nearvent.site/docs/contract).
 
 | What | Account |
 |---|---|
-| Event escrow (the web app's default) | [`escrow-tp4.nearevents-11022103.testnet`](https://testnet.nearblocks.io/address/escrow-tp4.nearevents-11022103.testnet) |
-| Test USDC (Tidepool faucet) | [`usdc.tidepool-sandbox.testnet`](https://testnet.nearblocks.io/address/usdc.tidepool-sandbox.testnet) |
+| Event escrow | [`escrow-tp6.tp6-nv1110.testnet`](https://testnet.nearblocks.io/address/escrow-tp6.tp6-nv1110.testnet) (code hash `G8ym7g1tSQevzz9qXHynUvRyDHnxG3iBz8zxhdZ8ZUo2`) |
+| Test USDC | [`usdc.tidepool-sandbox.testnet`](https://testnet.nearblocks.io/address/usdc.tidepool-sandbox.testnet) |
 
-NEAR Intents itself has no testnet. On testnet the Intents paths run on
+NEAR Intents has no testnet. On testnet the Intents paths run on
 [Tidepool](https://www.usetidepool.tech/docs), a 1Click sandbox with the official
-Intents verifier (`verifier.tidepool-sandbox.testnet`) and its own test USDC
-(`usdc.tidepool-sandbox.testnet`). The testnet UI uses a direct test-USDC transfer for NEAR wallets and the
-Tidepool verifier for EVM wallets. On mainnet, 1Click funds the guest’s Intents
-account first, and the guest confirms registration separately.
+Intents verifier (`verifier.tidepool-sandbox.testnet`). Mainnet release checks
+are still pending. Deployment and QA records: [docs/DEPLOY.md](docs/DEPLOY.md).
 
-## Try it
+### Run it locally
 
 ```bash
 cd web
-cp .env.example .env.local      # add local server settings from docs/DEPLOY.md as needed
+cp .env.example .env.local      # server settings: docs/DEPLOY.md
 npm install
 npm run dev                     # http://localhost:3000
 ```
 
-For this workspace, that file is `/Users/astralex/nearhackathon/web/.env.local`.
-It contains local Upstash connection settings and `APP_SECRET`; keep it private.
-
-1. Open http://localhost:3000 and go to `/events`. Open and past events are read
-   live from the testnet contract.
-2. Open an event and connect a NEAR wallet. Google/email sign-in needs the
-   FastAuth settings described in `docs/DEPLOY.md`.
-3. Click “Register · 5 USDC”. On testnet the test USDC comes from the faucet, then
-   the deposit goes into the escrow and you appear under “going”.
-4. Create your own event at `/create` (free) and add a friend to the door team.
-5. As host or door team open “Manage & check in guests” and tick who came. The
-   first tick asks your wallet to sign a message once; the
-   marks are kept on our server, no transaction per guest. The page shows what
-   each attendee will receive.
-6. After the event ends and check-ins are settled, click “Close event & pay out”.
-   This transaction sends the attendance list to the contract and credits each
-   attendee's share to their balance.
-7. Press Withdraw on the event page or `/me`: send the payout through NEAR
-   Intents to any chain (via 1Click) or to any NEAR Intents account.
-
-The app reads and writes events through one escrow: `escrow-tp4.nearevents-11022103.testnet`.
-Older escrow deployments are not queried or supported by the app. The old `escrow-tp3` events and balances remain testnet data and are not migrated.
-
-Without a browser, the whole cycle runs from a script (uses your own testnet
-accounts from `~/.near-credentials`; Tidepool's faucet tops the guest up with test USDC):
-
-```bash
-cd web
-export EVENTS_CONTRACT=escrow-tp4.nearevents-11022103.testnet HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet
-node scripts/smoke-intents-testnet.mjs   # deposit via 1Click → finalize(attended) → cash out to Base and into Intents
-node scripts/smoke-tickets-testnet.mjs   # paid ticket → host paid at registration → finalize → cancel refunds nothing
-```
-
-Those scripts last passed against an earlier testnet setup on 2026-11-05. Rerun
-the current release smoke against `escrow-tp4` before relying on that result.
+The demo account and Google sign-in need the relayer settings from
+`docs/DEPLOY.md`; a NEAR wallet works without them.
 
 ## Embed on your website
 

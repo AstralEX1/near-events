@@ -2,16 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@/lib/wallet";
-import { HAS_INTENTS } from "@/lib/config";
+import { HAS_INTENTS, NETWORK } from "@/lib/config";
 
 /** The ways in: Google/email (no crypto needed), a NEAR wallet, or an EVM wallet via NEAR Intents. */
 export function SignInOptions({ onDone }: { onDone?: () => void }) {
-  const { ready, signIn, signInWithEmail, signInWithEvm } = useWallet();
-  const [busy, setBusy] = useState(false);
+  const { ready, signIn, signInWithEmail, signInWithEvm, signInWithDemo } = useWallet();
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const run = (fn: () => Promise<void>) => async () => {
-    setBusy(true);
+  const run = (fn: () => Promise<void>, label: string) => async () => {
+    setBusy(label);
     setError(null);
     try {
       await fn();
@@ -19,26 +19,32 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   return (
     <div className="space-y-2">
-      <button className="btn btn-primary w-full" disabled={!ready || busy} onClick={run(signInWithEmail)}>
-        {busy ? "Opening sign-in…" : "Continue with Google or email"}
+      <button className="btn btn-primary w-full" disabled={!ready || busy !== null} onClick={run(signInWithEmail, "email")}>
+        {busy === "email" ? "Opening sign-in…" : "Continue with Google or email"}
       </button>
       <button
         className="btn btn-ghost w-full"
-        disabled={!ready || busy}
-        onClick={run(signIn)}
+        disabled={!ready || busy !== null}
+        onClick={run(signIn, "wallet")}
       >
         Connect a NEAR wallet
       </button>
       {/* EVM wallets sign in through NEAR Intents (Tidepool's verifier on testnet). */}
       {HAS_INTENTS && (
-        <button className="btn btn-ghost w-full" disabled={!ready || busy} onClick={run(signInWithEvm)}>
+        <button className="btn btn-ghost w-full" disabled={!ready || busy !== null} onClick={run(signInWithEvm, "evm")}>
           MetaMask, Rabby or another EVM wallet
+        </button>
+      )}
+      {/* Demo account: a key in this browser plus test money from our relayer; the site asks before each transaction. */}
+      {NETWORK === "testnet" && (
+        <button className="btn btn-ghost w-full" disabled={!ready || busy !== null} onClick={run(signInWithDemo, "demo")}>
+          {busy === "demo" ? "Setting up…" : "Try with a demo account"}
         </button>
       )}
       {error && <p className="text-xs text-warn break-words">{error}</p>}

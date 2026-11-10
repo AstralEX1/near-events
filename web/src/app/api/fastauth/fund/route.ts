@@ -2,9 +2,11 @@ import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { NETWORK } from "@/lib/config";
 import { accountExists, relayer } from "@/lib/relayer";
 
-// Testnet only: gives a new Google/email user's implicit account a little NEAR
+// Testnet only: gives a new Google/email or demo implicit account a little NEAR
 // for gas, so they never have to buy NEAR. Mainnet would use meta-transactions.
-const STARTER_NEAR = 50_000_000_000_000_000_000_000n; // 0.05 NEAR
+// Covers the prepaid gas of the biggest call (closing an event: 300 Tgas ≈ 0.3 NEAR,
+// mostly refunded). 0.05 NEAR could not even send a 100 Tgas call.
+const STARTER_NEAR = 500_000_000_000_000_000_000_000n; // 0.5 NEAR
 
 export async function POST(req: Request) {
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });

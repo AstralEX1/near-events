@@ -44,7 +44,7 @@ function HeaderContent({ accountId, signOut, path, preview = false }: {
           <nav aria-label="Mobile navigation" className="gc-account-panel">
             {links.map(([href, label, icon]) => <Link key={href} href={href} aria-current={path.startsWith(href) ? "page" : undefined}><NavLabel icon={icon} label={label} /></Link>)}
             {accountId && <Link href="/profile"><NavLabel icon={USER} label="My Profile" /></Link>}
-            <Link href="/guide"><NavLabel icon={HELP} label="How It Works" /></Link>
+            <Link href="/docs"><NavLabel icon={HELP} label="Docs" /></Link>
           </nav>
         </details>
         {accountId ? (
