@@ -171,9 +171,9 @@ function CreateEvent() {
 
   const amountOk = validAmount(form.deposit);
   const seats = Number(form.capacity);
-  const seatsOk = Number.isInteger(seats) && seats >= 1 && seats <= 300;
+  const seatsOk = Number.isInteger(seats) && seats >= 1 && seats <= 50;
   const doorTeamProblem = cohostsProblem(form.cohosts);
-  const missing = !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? "Set the capacity: 1 to 300" : doorTeamProblem ?? undefined;
+  const missing = !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? "Set the capacity: 1 to 50" : doorTeamProblem ?? undefined;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -468,7 +468,7 @@ function CreateEvent() {
                 title={form.mode === "Ticket" ? "Ticket price" : "Deposit"}
                 help={
                   form.mode === "Ticket"
-                    ? "Each guest pays this for a ticket. You get it after the event starts and you close it. If you cancel, every guest gets it back."
+                    ? "Each guest pays this for a ticket. It goes to your balance as soon as they register. Tickets are not refunded if you cancel."
                     : "Each guest puts this down. People who come get it back plus a share of the no-shows."
                 }
               >
@@ -478,8 +478,8 @@ function CreateEvent() {
                 <Icon d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" className="text-muted" />
                 {form.mode === "Ticket" ? (
                   <>
-                    <span className="flex-1">You get paid after the event</span>
-                    <span className="text-muted text-sm">Refunds if cancelled</span>
+                    <span className="flex-1">You get paid at registration</span>
+                    <span className="text-muted text-sm">No refunds</span>
                   </>
                 ) : (
                   <>
@@ -494,9 +494,9 @@ function CreateEvent() {
                 value={form.capacity}
                 attention={!seatsOk}
                 title="Max capacity"
-                help="Up to 300 guests. Registration closes when it's full."
+                help="Up to 50 guests. Registration closes when it's full."
               >
-                <input className="input" type="number" min="1" max="300" required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
+                <input className="input" type="number" min="1" max="50" required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
               </OptionRow>
               <OptionRow
                 icon="M9 11l2 2 4-4M4 4h16v16H4z"

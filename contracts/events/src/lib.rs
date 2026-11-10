@@ -16,10 +16,13 @@
 //! directly to the escrow.
 //!
 //! An event runs in one of two modes, never both. `Deposit` (the default) is
-//! the Kickback pool above. `Ticket` is a plain paid ticket: the price waits in
-//! the escrow and goes to the host on `finalize`, which is allowed only once the
-//! event has started; `cancel` gives it back. The
-//! amount a guest pays lives in `deposit` in both modes.
+//! the Kickback pool above. `Ticket` is a plain paid ticket: the price is
+//! credited to the host's balance right at registration; `finalize` and
+//! `cancel` only close the event and refund nothing. The amount a guest pays
+//! lives in `deposit` in both modes.
+//!
+//! A guest always pays for their own seat. Only the NEAR Intents verifier
+//! names a guest other than the sender.
 //!
 //! Creating an event is free for the host. The contract pays for storage from
 //! its own NEAR balance, which the operator keeps topped up. To keep that pool
@@ -47,7 +50,7 @@ const MAX_VIEW_PAGE: u32 = 100;
 /// host's open-event counter (kept at the earlier, roomier size).
 const EVENT_RECORD_BYTES: u64 = 16_384;
 /// Open (not finalized or cancelled) events one host may have at a time.
-pub const MAX_OPEN_EVENTS_PER_HOST: u32 = 5;
+pub const MAX_OPEN_EVENTS_PER_HOST: u32 = 2;
 /// Smallest deposit: 0.1 USDC (6 decimals). Stops events with a dust deposit
 /// where seats cost us storage but cost guests nothing.
 pub const MIN_DEPOSIT: u128 = 100_000;
@@ -55,7 +58,7 @@ pub const MIN_DEPOSIT: u128 = 100_000;
 /// storage the operator has to fund.
 pub const MAX_EVENTS_TOTAL: u32 = 1000;
 /// Maximum settlement size. Sandbox exercises this exact capacity.
-pub const MAX_CAPACITY: u32 = 300;
+pub const MAX_CAPACITY: u32 = 50;
 /// After `ends_at` + this grace period, anyone can `cancel` an unfinalized event.
 pub const ABANDON_GRACE_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 
@@ -92,7 +95,7 @@ pub enum EventMode {
     /// Equal deposits; people who show up split the pool.
     #[default]
     Deposit,
-    /// Paid ticket; the host gets the ticket money after the event.
+    /// Paid ticket; the host gets the ticket money at registration.
     Ticket,
 }
 
@@ -167,7 +170,8 @@ pub struct GuestRecord {
 #[near(serializers = [json])]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum TransferMsg {
-    /// Take a seat. `guest` defaults to the sender, who can also pay for another guest.
+    /// Take a seat for the sender. `guest` is only for payments relayed by
+    /// NEAR Intents; from anyone else it must be absent or equal the sender.
     Register { event_id: u64, guest: Option<AccountId> },
 }
 
@@ -276,7 +280,7 @@ impl Contract {
     /// duplicates count once.
     /// `Deposit`: the pool is split equally between them, the rounding
     /// remainder goes to the host; an empty list returns every deposit.
-    /// `Ticket`: pays all ticket money to the host, once the event has started.
+    /// `Ticket`: just closes the event; the host was paid at registration.
     #[payable]
     pub fn finalize(&mut self, event_id: u64, attended: Vec<AccountId>) {
         near_sdk::assert_one_yocto();
@@ -326,7 +330,8 @@ impl Contract {
         );
     }
 
-    /// Cancels the event and refunds every guest payment. The host can do it
+    /// Cancels the event and refunds every guest deposit (`Ticket` mode refunds
+    /// nothing: the host already has the money). The host can do it
     /// at any time while the event is open. As a safety valve for a host who
     /// never closes the event, anyone else can do it once `ABANDON_GRACE_MS`
     /// has passed after `ends_at`.
@@ -459,13 +464,17 @@ impl FungibleTokenReceiver for Contract {
             TransferMsg::Register { event_id, guest } => {
                 // A relayed payment from the verifier must name the guest,
                 // otherwise the relay itself would take the seat.
-                if Some(&sender_id) == self.intents.as_ref() {
+                // Any Intents balance owner can still name any guest this way.
+                let via_intents = Some(&sender_id) == self.intents.as_ref();
+                if via_intents {
                     require!(guest.is_some(), "Payments via NEAR Intents must name the guest");
                 }
+                // Everyone else registers only themselves; paying for another guest is refused.
+                let for_self = via_intents || guest.as_ref().map_or(true, |g| *g == sender_id);
                 let guest = guest.unwrap_or_else(|| sender_id.clone());
                 let deposit = self.get_event_deposit(event_id);
                 if let Some(deposit) = deposit {
-                    if amount.0 >= deposit && self.can_register(event_id, &guest) {
+                    if for_self && amount.0 >= deposit && self.can_register(event_id, &guest) {
                         self.register(event_id, guest, sender_id);
                         return PromiseOrValue::Value(U128(amount.0 - deposit));
                     }
@@ -478,21 +487,12 @@ impl FungibleTokenReceiver for Contract {
 }
 
 impl Contract {
-    /// `Ticket` mode close: the host gets every ticket, attended or not.
-    /// Not before the start, so a host cannot sell tickets and take the money
-    /// long before the event; until then `cancel` still refunds.
+    /// `Ticket` mode close: the host was credited at each registration, so
+    /// this only closes the event. `paid_to_host` is logged for indexers.
     fn finalize_tickets(&mut self, event_id: u64) {
         let event = self.event(event_id);
-        require!(
-            env::block_timestamp_ms() >= event.metadata.starts_at,
-            "Ticket money is released once the event has started"
-        );
-        let host = event.host.clone();
         let total = event.deposit * event.guest_count as u128;
         let attended = event.attended_count;
-        if total > 0 {
-            self.credit(&host, total);
-        }
         self.mark_closed(event_id, EventStatus::Finalized);
         emit(
             "finalized",
@@ -619,12 +619,20 @@ impl Contract {
             event.reserved_seats -= 1;
         }
 
+        let (mode, host, deposit) = (event.mode, event.host.clone(), event.deposit);
+        if mode == EventMode::Ticket {
+            // The host's balance entry is already reserved (+BALANCE_BYTES per event).
+            self.credit(&host, deposit);
+        }
+
         emit("register", json!({ "event_id": event_id, "guest": guest, "paid_by": paid_by }));
     }
 
     fn close_with_refunds(&mut self, event_id: u64, status: EventStatus) {
         let event = self.event(event_id);
         let (deposit, guest_count) = (event.deposit, event.guest_count);
+        // Ticket money went to the host at registration; nothing to refund.
+        let guest_count = if event.mode == EventMode::Ticket { 0 } else { guest_count };
         for i in 0..guest_count {
             let account = self.guest_index[&(event_id, i)].clone();
             self.credit(&account, deposit);
@@ -674,7 +682,7 @@ fn view_event(id: u64, e: &Event) -> EventView {
         guest_count: e.guest_count,
         attended_count: e.attended_count,
         // Deposit mode: the pool attendees split. Ticket mode: ticket money
-        // held for the host until `finalize`.
+        // already credited to the host.
         total_pool: U128(e.deposit * e.guest_count as u128),
         payout_per_attendee: U128(e.payout_per_attendee),
         created_at: e.created_at,

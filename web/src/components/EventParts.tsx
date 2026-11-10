@@ -23,7 +23,7 @@ export function RulesBox({ event }: { event: EventView }) {
           <div className="font-semibold text-accent">How it works</div>
           <ul className="list-disc pl-5 mt-1 space-y-0.5">
             <li>A ticket costs {d} USDC.</li>
-            <li>The money waits in a NEAR smart contract and goes to the host only after the event has started.</li>
+            <li>The money goes to the host as soon as you register. Tickets are not refunded.</li>
             <li>The host checks you in at the door with your QR pass.</li>
           </ul>
         </div>
@@ -65,7 +65,7 @@ export function RulesBox({ event }: { event: EventView }) {
 
 /** Under each guest after the event: what they made, or that they didn't come. Nothing before. */
 function note(event: EventView, g: GuestView): { text: string; dim: boolean } | null {
-  if (event.status === "Cancelled") return { text: "refunded", dim: false };
+  if (event.status === "Cancelled") return isTicket(event) ? null : { text: "refunded", dim: false };
   if (event.status !== "Finalized") return null;
   if (isTicket(event)) return g.status === "Attended" ? { text: "came", dim: false } : null;
   if (g.status !== "Attended") return { text: "no-show", dim: true };

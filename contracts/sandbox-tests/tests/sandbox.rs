@@ -231,7 +231,7 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     .await?
     .into_result()?;
 
-    // A short third-party payment returns to the friend without opening a balance.
+    // Paying for someone else returns the whole amount without opening a balance.
     let late: AccountId = "late.testnet".parse().unwrap();
     let short = 4 * 1_000_000;
     let friend_before = token_balance(&usdc, friend.id()).await?;
@@ -429,7 +429,8 @@ async fn measure_full_event_gas(
     escrow_wasm: &[u8],
 ) -> anyhow::Result<()> {
     let mut guests = Vec::new();
-    for _ in 0..300 {
+    // MAX_CAPACITY in the escrow.
+    for _ in 0..50 {
         guests.push(worker.dev_create_account().await?);
     }
     for batch in guests.chunks(16) {
@@ -503,8 +504,8 @@ async fn measure_full_event_gas(
             .deposit(yocto(1)).gas(Gas::from_tgas(300))
             .transact().await?.into_result()?;
         let gas = result.total_gas_burnt.as_gas();
-        eprintln!("300-guest {operation} used {gas} gas");
-        assert!(gas < 250_000_000_000_000, "300-guest {operation} used {gas} gas");
+        eprintln!("50-guest {operation} used {gas} gas");
+        assert!(gas < 250_000_000_000_000, "50-guest {operation} used {gas} gas");
         assert_eq!(escrow_balance(&target, guests.last().unwrap().id()).await?, 1_000_000);
     }
     Ok(())
@@ -533,7 +534,6 @@ async fn sandbox_ticket_cycle() -> anyhow::Result<()> {
         mint(&usdc, g, g.id(), price).await?;
     }
 
-    // Started a minute ago, so the host may close it right away.
     let now_ms = worker.view_block().await?.timestamp() / 1_000_000;
     let event_id: u64 = host
         .call(events.id(), "create_event")
@@ -555,14 +555,16 @@ async fn sandbox_ticket_cycle() -> anyhow::Result<()> {
     assert_eq!(view["deposit"], price.to_string());
     assert!(view.get("price").is_none() && view.get("cohosts").is_none());
 
-    for g in [&a, &b] {
+    for (i, g) in [&a, &b].into_iter().enumerate() {
         transfer_call(g, usdc.id(), events.id(), price, json!({ "action": "register", "event_id": event_id }))
             .await?
             .into_result()?;
         assert_eq!(token_balance(&usdc, g.id()).await?, 0);
+        // The host is paid at registration.
+        assert_eq!(escrow_balance(&events, host.id()).await?, (i as u128 + 1) * price);
     }
 
-    // Nobody checked in: in Ticket mode the host is still paid for both tickets.
+    // Finalize only closes the event; the host keeps exactly the two tickets.
     host.call(events.id(), "finalize")
         .args_json(json!({ "event_id": event_id, "attended": [] }))
         .deposit(yocto(1))

@@ -119,15 +119,22 @@ fn nobody_attended_refunds_everyone() {
 }
 
 #[test]
-fn overpayment_is_returned_and_friend_can_pay() {
+fn paying_for_another_guest_is_refunded() {
     let (mut c, id) = setup(10);
     let msg = format!(r#"{{"action":"register","event_id":{},"guest":"{}"}}"#, id, accounts(3));
     let refund = pay(&mut c, &accounts(2), 12 * USDC, &msg);
-    // Only the price is consumed. Change goes back to the payer.
-    assert_eq!(refund, 2 * USDC);
-    assert_eq!(c.balance_of(accounts(3)).0, 0);
-    assert_eq!(c.get_guest_status(id, accounts(3)), Some(GuestStatus::Registered));
+    assert_eq!(refund, 12 * USDC);
+    assert_eq!(c.get_guest_status(id, accounts(3)), None);
     assert_eq!(c.get_guest_status(id, accounts(2)), None);
+    assert_eq!(c.get_event(id).unwrap().guest_count, 0);
+}
+
+#[test]
+fn naming_yourself_as_guest_registers_and_returns_change() {
+    let (mut c, id) = setup(10);
+    let msg = format!(r#"{{"action":"register","event_id":{},"guest":"{}"}}"#, id, accounts(2));
+    assert_eq!(pay(&mut c, &accounts(2), 12 * USDC, &msg), 2 * USDC);
+    assert_eq!(c.get_guest_status(id, accounts(2)), Some(GuestStatus::Registered));
     assert_eq!(c.get_guests(id, None, None)[0].paid_by, accounts(2));
 }
 
@@ -278,8 +285,8 @@ fn dust_for_unknown_guests_cannot_create_balance_keys() {
 }
 
 #[test]
-#[should_panic(expected = "at most 5 open events")]
-fn host_cannot_open_a_sixth_event() {
+#[should_panic(expected = "at most 2 open events")]
+fn host_cannot_open_a_third_event() {
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = Contract::new(usdc(), None, None);
     for _ in 0..=MAX_OPEN_EVENTS_PER_HOST {
@@ -973,43 +980,49 @@ fn ticket_event_shows_mode_and_price() {
 }
 
 #[test]
-fn ticket_host_gets_every_ticket_after_start() {
+fn ticket_host_is_paid_at_registration() {
     let (mut c, id) = setup_tickets(10);
-    for g in [accounts(2), accounts(3), accounts(4)] {
-        buy(&mut c, id, &g);
-    }
+    buy(&mut c, id, &accounts(2));
+    assert_eq!(c.balance_of(accounts(0)).0, TICKET);
+    buy(&mut c, id, &accounts(3));
+    buy(&mut c, id, &accounts(4));
+    assert_eq!(c.balance_of(accounts(0)).0, 3 * TICKET);
     assert_eq!(c.get_event(id).unwrap().total_pool.0, 3 * TICKET);
 
     ctx_at(&accounts(0), one_yocto(), AFTER_START_NS);
     c.finalize(id, vec![accounts(2)]);
-    // Attended or not, nobody gets a share: the host is paid for 3 tickets.
+    // Finalize only closes: attended or not, nobody gets a share and the host gets nothing more.
     let e = c.get_event(id).unwrap();
     assert_eq!(e.status, EventStatus::Finalized);
     assert_eq!(e.payout_per_attendee.0, 0);
+    assert_eq!(e.attended_count, 1);
     assert_eq!(c.balance_of(accounts(0)).0, 3 * TICKET);
     assert_eq!(c.balance_of(accounts(2)).0, 0);
-    assert_eq!(c.balance_of(accounts(3)).0, 0);
     assert_eq!(open_of(&c, &accounts(0)), 0);
 }
 
 #[test]
-fn ticket_host_is_paid_even_if_nobody_is_checked_in() {
-    let (mut c, id) = setup_tickets(10);
-    buy(&mut c, id, &accounts(2));
-    buy(&mut c, id, &accounts(3));
-    ctx_at(&accounts(0), one_yocto(), AFTER_START_NS);
-    c.finalize(id, vec![]);
-    assert_eq!(c.balance_of(accounts(0)).0, 2 * TICKET);
-    assert_eq!(c.balance_of(accounts(2)).0, 0);
-}
-
-#[test]
-#[should_panic(expected = "Ticket money is released once the event has started")]
-fn ticket_finalize_before_start_is_rejected() {
+fn ticket_host_can_withdraw_before_the_event() {
     let (mut c, id) = setup_tickets(10);
     buy(&mut c, id, &accounts(2));
     ctx(&accounts(0), one_yocto());
+    c.withdraw(None, None, None);
+    assert_eq!(c.balance_of(accounts(0)).0, 0);
+    buy(&mut c, id, &accounts(3));
+    assert_eq!(c.balance_of(accounts(0)).0, TICKET);
+}
+
+#[test]
+fn ticket_finalize_before_start_is_allowed() {
+    let (mut c, id) = setup_tickets(10);
+    buy(&mut c, id, &accounts(2));
+    let reserved = c.reserved_bytes;
+    ctx(&accounts(0), one_yocto());
     c.finalize(id, vec![]);
+    assert_eq!(c.get_event(id).unwrap().status, EventStatus::Finalized);
+    assert_eq!(c.balance_of(accounts(0)).0, TICKET);
+    assert!(c.reserved_bytes < reserved);
+    assert_eq!(c.reserved_bytes, 0);
 }
 
 #[test]
@@ -1022,26 +1035,29 @@ fn deposit_finalize_before_start_still_works() {
 }
 
 #[test]
-fn ticket_cancel_refunds_every_ticket() {
+fn ticket_cancel_refunds_nothing() {
     let (mut c, id) = setup_tickets(10);
     buy(&mut c, id, &accounts(2));
     buy(&mut c, id, &accounts(3));
     ctx(&accounts(0), one_yocto());
     c.cancel(id);
-    assert_eq!(c.balance_of(accounts(2)).0, TICKET);
-    assert_eq!(c.balance_of(accounts(3)).0, TICKET);
-    assert_eq!(c.balance_of(accounts(0)).0, 0);
+    assert_eq!(c.get_event(id).unwrap().status, EventStatus::Cancelled);
+    assert_eq!(c.balance_of(accounts(2)).0, 0);
+    assert_eq!(c.balance_of(accounts(3)).0, 0);
+    assert_eq!(c.balance_of(accounts(0)).0, 2 * TICKET);
+    assert_eq!(c.reserved_bytes, 0);
 }
 
 #[test]
-fn ticket_abandoned_event_refunds_every_ticket() {
+fn ticket_abandoned_event_just_closes() {
     let (mut c, id) = setup_tickets(10);
     buy(&mut c, id, &accounts(2));
     let late_ms = meta().ends_at + ABANDON_GRACE_MS + 1;
     ctx_at(&accounts(5), one_yocto(), late_ms * 1_000_000);
     c.cancel(id);
-    assert_eq!(c.balance_of(accounts(2)).0, TICKET);
-    assert_eq!(c.balance_of(accounts(0)).0, 0);
+    assert_eq!(c.get_event(id).unwrap().status, EventStatus::Cancelled);
+    assert_eq!(c.balance_of(accounts(2)).0, 0);
+    assert_eq!(c.balance_of(accounts(0)).0, TICKET);
 }
 
 #[test]
@@ -1051,7 +1067,16 @@ fn ticket_short_payment_returns_to_verifier() {
     let refund = pay(&mut c, &"intents.near".parse().unwrap(), TICKET - 1, &msg);
     assert_eq!(refund, TICKET - 1);
     assert_eq!(c.get_guest_status(id, accounts(2)), None);
-    assert_eq!(c.balance_of(accounts(2)).0, 0);
+    assert_eq!(c.balance_of(accounts(0)).0, 0);
+}
+
+#[test]
+fn ticket_via_intents_pays_the_host() {
+    let (mut c, id) = setup_tickets(10);
+    let msg = format!(r#"{{"action":"register","event_id":{id},"guest":"{}"}}"#, accounts(2));
+    assert_eq!(pay(&mut c, &"intents.near".parse().unwrap(), TICKET, &msg), 0);
+    assert_eq!(c.get_guest_status(id, accounts(2)), Some(GuestStatus::Registered));
+    assert_eq!(c.balance_of(accounts(0)).0, TICKET);
 }
 
 #[test]

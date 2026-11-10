@@ -17,9 +17,12 @@ fee, and creating an event is free.
 - The host is a person (any NEAR account) with an optional door team (co-hosts)
   kept on the Near Me server; only the host can close or cancel.
 - In Deposit mode the host records who showed up but cannot take the pool. In
-  Ticket mode ticket funds go to the host after the event starts. The host can
-  cancel and refund everyone at any time; anyone can do it 30 days after the
-  event ended if the host never closed it.
+  Ticket mode each ticket goes to the host's balance at registration and is
+  never refunded. The host can cancel a Deposit event and refund everyone at
+  any time; anyone can do it 30 days after the event ended if the host never
+  closed it.
+- A guest always pays for their own seat; only a payment relayed by NEAR
+  Intents names the guest.
 
 Hackathon track focus: Real-World Money (USDC, NEAR Intents, gasless onboarding).
 
@@ -88,7 +91,7 @@ accounts from `~/.near-credentials`; Tidepool's faucet tops the guest up with te
 cd web
 export EVENTS_CONTRACT=escrow-tp4.nearevents-11022103.testnet HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet
 node scripts/smoke-intents-testnet.mjs   # deposit via 1Click → finalize(attended) → cash out to Base and into Intents
-node scripts/smoke-tickets-testnet.mjs   # paid ticket → finalize after the start → cancel refunds
+node scripts/smoke-tickets-testnet.mjs   # paid ticket → host paid at registration → finalize → cancel refunds nothing
 ```
 
 Those scripts last passed against an earlier testnet setup on 2026-11-05. Rerun
@@ -132,10 +135,10 @@ checks it is only a Near Me registration and submits it to `intents.near`
 
 | Method | Who | What |
 |---|---|---|
-| `create_event(metadata, deposit, capacity, mode)` | anyone (caller = host) | `metadata` = `{title, starts_at, ends_at}`. Free: the contract pays storage from its own balance; max 5 open events per host, at most 1000 events per contract (then a new escrow is deployed), capacity ≤ 300, deposit ≥ 0.1 USDC. Title and times cannot be changed later |
-| `ft_transfer_call` → `ft_on_transfer` | guest / friend / verifier | `{"action":"register","event_id":N,"guest":"..."}` |
-| `finalize(event_id, attended)` | host (+1 yocto) | `attended` = guests checked in at the door (kept off-chain on our server until now). Deposit: pool ÷ attendees, remainder to host, empty list → full refund. Ticket: all ticket money to the host after the start |
-| `cancel(event_id)` | host any time while open; anyone after event end + 30 days (+1 yocto) | refund every guest payment |
+| `create_event(metadata, deposit, capacity, mode)` | anyone (caller = host) | `metadata` = `{title, starts_at, ends_at}`. Free: the contract pays storage from its own balance; max 2 open events per host, at most 1000 events per contract (then a new escrow is deployed), capacity ≤ 50, deposit ≥ 0.1 USDC. Title and times cannot be changed later |
+| `ft_transfer_call` → `ft_on_transfer` | guest / verifier | `{"action":"register","event_id":N}`; `guest` only from the Intents verifier (from anyone else it must equal the sender, otherwise the whole amount is returned) |
+| `finalize(event_id, attended)` | host (+1 yocto) | `attended` = guests checked in at the door (kept off-chain on our server until now). Deposit: pool ÷ attendees, remainder to host, empty list → full refund. Ticket: only closes; the host was paid at registration |
+| `cancel(event_id)` | host any time while open; anyone after event end + 30 days (+1 yocto) | refund every deposit (Ticket: refunds nothing) |
 | `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to a NEAR account (e.g. a 1Click deposit address) or into NEAR Intents |
 | `payout_to_intents(account_id)` | owner or configured relayer | moves that account's balance into *its own* Intents balance; how EVM-wallet guests get paid |
 

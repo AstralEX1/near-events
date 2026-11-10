@@ -92,7 +92,7 @@ const PROMPTS: Record<Draft["step"], string> = {
   when: "When does it start? For example <code>2026-11-14 19:00</code> (your local time).",
   place: "Location details are no longer collected. How much is the deposit per guest in USDC?",
   deposit: "Deposit per guest in USDC? For example <code>10</code>.",
-  capacity: "How many spots? (max 300)",
+  capacity: "How many spots? (max 50)",
 };
 
 async function continueDraft(chat: number, d: Draft, text: string) {
@@ -119,7 +119,7 @@ async function continueDraft(chat: number, d: Draft, text: string) {
     next = "capacity";
   } else if (d.step === "capacity") {
     const n = Number(text);
-    if (!(Number.isInteger(n) && n >= 1 && n <= 300)) return say(chat, "A whole number from 1 to 300.");
+    if (!(Number.isInteger(n) && n >= 1 && n <= 50)) return say(chat, "A whole number from 1 to 50.");
     await updateStore((s) => void delete s.drafts[chat]);
     const start = new Date(d.startsAt!).toISOString().slice(0, 16);
     const q = new URLSearchParams({

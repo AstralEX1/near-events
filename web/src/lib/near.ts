@@ -2,7 +2,7 @@ import { EVENTS_CONTRACT, RPC_URL, USDC_CONTRACT, USDC_DECIMALS } from "./config
 
 export type EventStatus = "Open" | "Finalized" | "Cancelled";
 export type GuestStatus = "Registered" | "Attended";
-/** Deposit: show-ups split the no-shows' deposits. Ticket: a paid ticket, money to the host after the event. Never both. */
+/** Deposit: show-ups split the no-shows' deposits. Ticket: a paid ticket, money to the host at registration. Never both. */
 export type EventMode = "Deposit" | "Ticket";
 
 export const isTicket = (e: { mode?: EventMode }) => e.mode === "Ticket";
@@ -70,7 +70,7 @@ export const events = {
   /** The newest events first, up to 100. */
   list: () => view<EventView[]>("get_recent_events", { limit: RECENT_LIMIT }),
   get: (id: number) => view<EventView | null>("get_event", { event_id: id }),
-  guests: (id: number) => view<GuestView[]>("get_guests", { event_id: id, from_index: 0, limit: 300 }),
+  guests: (id: number) => view<GuestView[]>("get_guests", { event_id: id, from_index: 0, limit: 50 }),
   guestStatus: (id: number, account: string) =>
     view<GuestStatus | null>("get_guest_status", { event_id: id, account_id: account }),
   /** One call for up to 100 events, in the order of `ids`. */
