@@ -250,7 +250,8 @@ export function resolveEventVisual(config: EventVisualConfig): ResolvedEventVisu
     coverSize: aiPanel ? "500% 100%" : "cover",
     texture: TEXTURES[theme.id][variant],
     colors: PALETTES[theme.id][variant],
-    fontFamily: theme.group === "near-me" ? "var(--font-display)" : FONTS[font],
+    // Every theme uses the site font; `font` stays only so old seeds decode the same.
+    fontFamily: "var(--font-display)",
     font,
     layout,
     variant,

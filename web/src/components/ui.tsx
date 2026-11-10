@@ -54,7 +54,7 @@ export function Cover({ event, className = "", coverUrl = null, visual }: { even
 export function EventSkeleton() {
   const bar = "rounded-md bg-text/[.07]";
   return (
-    <div className="gc-event-shell gc-skeleton" role="status" aria-label="Loading event">
+    <div className="gc-skeleton" role="status" aria-label="Loading event">
       <div className="gc-event-content animate-pulse">
         <div className="space-y-6">
           <div className={`aspect-square w-full !rounded-2xl ${bar}`} />

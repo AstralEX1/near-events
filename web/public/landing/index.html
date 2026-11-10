@@ -5,6 +5,7 @@
 <link rel="icon" href="/brand/nearvent-icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-icon.png">
 <link rel="stylesheet" href="/brand/fonts.css">
+<base target="_top"><!-- shown inside /about under the app header; links open in the whole tab -->
 <script>var t;try{t=localStorage.getItem('near-me:appearance')}catch(e){}if(t!=='system')document.documentElement.dataset.theme=t==='dark'?'dark':'light'</script>
 <style>
 /* Layout: Luma-style photo hero, Unlock-style problem cards, then a numbered 4-step scheme where each step shows our real interface, no-show bars, quote, Luma-style CTA. */
@@ -33,7 +34,7 @@
   :root:not([data-theme="light"]) { --bg: #1a0b22; --soft: #28132f; --ink: #fff6fb; --muted: #cdb8d6; --line: #462a52; --accent: #ff6aa8; --accent-wash: #46193a; --accent-ink: #ffb0d0; --good: #86d0aa; --good-wash: #1f3328; --good-ink: #a6dfc1; --bad: #f1a1aa; color-scheme: dark; }
 }
 :root[data-theme="dark"] { --bg: #1a0b22; --soft: #28132f; --ink: #fff6fb; --muted: #cdb8d6; --line: #462a52; --accent: #ff6aa8; --accent-wash: #46193a; --accent-ink: #ffb0d0; --good: #86d0aa; --good-wash: #1f3328; --good-ink: #a6dfc1; --bad: #f1a1aa; color-scheme: dark; }
-h1, h2, h3, .h2, .brand { font-family: var(--display); }
+h1, h2, h3, .h2 { font-family: var(--display); }
 ::selection { background: var(--brand); color: #1e0b2b; }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 17px; line-height: 1.55; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -77,17 +78,10 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 }
 
 /* ---------- HERO ---------- */
-.hero { min-height: 100svh; display: flex; align-items: flex-end; position: relative; overflow: hidden; color: #fff; padding-block: 120px 72px; background: #1e0b2b; }
+.hero { min-height: 100svh; display: flex; align-items: flex-end; position: relative; overflow: hidden; color: #fff; padding-block: 72px; background: #1e0b2b; }
 .hero::before { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(180deg, rgba(28,22,40,.3) 0%, rgba(28,22,40,.35) 40%, rgba(28,22,40,.86) 100%); }
-.hero > .wrap, .hero header { position: relative; z-index: 2; }
+.hero > .wrap { position: relative; z-index: 2; }
 .hero > .wrap { width: 100%; display: flex; flex-direction: column; gap: 28px; }
-.hero header { position: absolute; top: 0; left: 0; right: 0; padding-top: env(safe-area-inset-top, 0px); }
-.hero header .wrap { display: flex; justify-content: space-between; align-items: center; padding-block: 20px; }
-.brand { font-weight: 800; font-size: 24px; text-decoration: none; letter-spacing: -0.04em; display: inline-flex; align-items: center; gap: .2em; }
-.nav { display: flex; align-items: center; gap: 18px; }
-.nav a { font-size: 15px; font-weight: 600; text-decoration: none; opacity: .85; }
-.nav a:hover { opacity: 1; }
-.signin { font-size: 15px; font-weight: 600; text-decoration: none; opacity: .85; }
 .hero h1 { font-size: clamp(46px, 8.4vw, 112px); font-weight: 700; letter-spacing: -0.045em; line-height: .96; max-width: 11em; }
 .hero h1 em { font-style: normal; background: linear-gradient(90deg, #ffb3d2, #ffd23f); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .hero .lead { color: rgba(255,255,255,.86); }
@@ -261,14 +255,6 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 
 <div class="hero">
   <div class="hero-bg" style="background-image:url(/landing/hero.jpg)" aria-hidden="true"></div>
-  <header><div class="wrap">
-    <a class="brand" href="/" aria-label="Nearvent home">nearvent</a>
-    <nav class="nav">
-      <a href="/create">Create Event</a>
-      <a href="/events">Explore</a>
-      <a class="signin" href="/me">Sign In</a>
-    </nav>
-  </div></header>
   <div class="wrap">
     <h1><span class="line">Events people</span><span class="line"><em>actually show up to.</em></span></h1>
     <p class="lead">Guests leave a small deposit when they sign up. Come, and you get it back with a share of what the no-shows left behind.</p>

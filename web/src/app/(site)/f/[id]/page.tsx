@@ -7,7 +7,7 @@ import { SlShare } from "@/components/SlUi";
 import { useFreeEvent } from "@/lib/freeEventsClient";
 import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
 import { Avatar, DateBadge, EventSkeleton, formatWhen, shortAccount } from "@/components/ui";
-import { EventPoster, VisualBackdrop } from "@/components/EventVisual";
+import { EventPageBackground, EventPoster } from "@/components/EventVisual";
 import { PublicText } from "@/components/PublicText";
 import { GoingList, ICONS, LocationRow, LocationSection, RegisterBox, Section } from "@/components/EventSections";
 import { SignInOptions } from "@/components/SignIn";
@@ -79,7 +79,8 @@ export default function FreeEventPage() {
   }
 
   return (
-    <VisualBackdrop visual={event.visual} className="gc-event-shell">
+    <>
+    <EventPageBackground visual={event.visual} />
       <div className="gc-event-content">
         <aside className="space-y-6">
           <EventPoster title={event.title} visual={event.visual} coverUrl={event.cover_url} className="aspect-square w-full rounded-2xl shadow-sm" />
@@ -121,6 +122,6 @@ export default function FreeEventPage() {
           {event.location && <LocationSection value={event.location} />}
         </section>
       </div>
-    </VisualBackdrop>
+    </>
   );
 }

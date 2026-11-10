@@ -14,16 +14,11 @@ function layerCount(images: string): number {
   return count;
 }
 
-/** themeFont: the theme's font sets the headings inside; body and buttons keep Geist so long text stays readable. Nearvent themes keep the brand fonts. */
-export function VisualBackdrop({ visual, className = "", themeFont = false, children }: { visual: EventVisualConfig; className?: string; themeFont?: boolean; children?: ReactNode }) {
+export function VisualBackdrop({ visual, className = "", children }: { visual: EventVisualConfig; className?: string; children?: ReactNode }) {
   const resolved = resolveEventVisual(visual);
   const [dark, mid] = resolved.colors;
-  const font = resolved.fontFamily;
-  const style = themeFont && resolved.theme.group !== "near-me"
-    ? { "--font-display": font, ...(/monospace/.test(font) && { "--title-tracking": "-.01em" }) } as CSSProperties
-    : undefined;
   if (resolved.theme.group === "near-me") {
-    return <div className={`relative isolate overflow-hidden ${className}`} style={{ ...style, backgroundColor: mid, backgroundImage: resolved.backgroundAsset ? undefined : generativeArt(visual) }}>
+    return <div className={`relative isolate overflow-hidden ${className}`} style={{ backgroundColor: mid, backgroundImage: resolved.backgroundAsset ? undefined : generativeArt(visual) }}>
       {resolved.backgroundAsset && <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center opacity-20" style={{ backgroundImage: `url("${resolved.backgroundAsset}")` }} />}
       <div className="relative z-10 flex h-full w-full flex-col justify-end">{children}</div>
     </div>;
@@ -45,7 +40,7 @@ export function VisualBackdrop({ visual, className = "", themeFont = false, chil
   return (
     <div
       className={`relative isolate overflow-hidden ${className}`}
-      style={{ ...style, backgroundColor: dark }}
+      style={{ backgroundColor: dark }}
     >
       <div
         aria-hidden="true"
@@ -58,10 +53,10 @@ export function VisualBackdrop({ visual, className = "", themeFont = false, chil
   );
 }
 
-/** Decoration stays behind the editor and never changes the application tokens. */
+/** The theme fills the whole screen behind the page; it never changes the application tokens or fonts. */
 export function EventPageBackground({ visual }: { visual: EventVisualConfig }) {
   return (
-    <div aria-hidden="true" className="fixed inset-0 -z-10 opacity-[0.13] pointer-events-none" data-event-page-background={`${visual.themeId}:${visual.seed}`}>
+    <div aria-hidden="true" className="fixed inset-0 -z-10 pointer-events-none" data-event-page-background={`${visual.themeId}:${visual.seed}`}>
       <VisualBackdrop visual={visual} className="h-full w-full" />
     </div>
   );

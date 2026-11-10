@@ -8,11 +8,11 @@ const nextConfig: NextConfig = {
   // sign-up window where guests sign transactions, can't be (clickjacking).
   // Short payment link a host can paste anywhere (Luma description, Instagram, WhatsApp).
   async redirects() {
-    return [{ source: "/p/:id", destination: "/embed/e/:id/join", permanent: false }];
-  },
-  // Landing page (approved artifact) is a static file in public/landing.
-  async rewrites() {
-    return { beforeFiles: [{ source: "/", destination: "/landing/index.html" }] };
+    return [
+      { source: "/p/:id", destination: "/embed/e/:id/join", permanent: false },
+      // The site opens on Explore; the logo leads to the landing at /about.
+      { source: "/", destination: "/events", permanent: false },
+    ];
   },
   async headers() {
     return [

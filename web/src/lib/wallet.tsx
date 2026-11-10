@@ -7,6 +7,7 @@ import { STAFF_MESSAGE } from "./staffShared";
 import { useRouter } from "next/navigation";
 import { connectEvm, evmAccount } from "./intents";
 import { RETURN_KEY, fastAuthEnsure, fastAuthLogin, fastAuthLogout, fastAuthPrepare, fastAuthProve, fastAuthRestore, fastAuthSend } from "./fastauth";
+import { demoLogin, demoLogout, demoProof, demoRestore, demoSend } from "./demoWallet";
 
 /** Implicit NEAR accounts from Google/email login are a 64-char hex id. */
 const isImplicit = (id: string) => /^[0-9a-f]{64}$/i.test(id);
@@ -25,7 +26,7 @@ const wrongNetworkMessage = (id: string) =>
   `${id} is on a different NEAR network than this site. ` +
   `Sign out, switch your wallet to the network this site uses, and sign in again.`;
 
-type Kind = "wallet" | "email" | "evm";
+type Kind = "wallet" | "email" | "evm" | "demo";
 const KIND_KEY = "near-events:login";
 
 const TGAS = 1_000_000_000_000n;
@@ -49,6 +50,8 @@ interface WalletState {
   signInWithEmail: () => Promise<void>;
   /** EVM wallet; the account is the wallet's NEAR Intents account (mainnet). */
   signInWithEvm: () => Promise<void>;
+  /** Demo account: a key kept in this browser, topped up with test money (testnet only). */
+  signInWithDemo: () => Promise<void>;
   signOut: () => Promise<void>;
   /** Signs and sends calls, one transaction each, in order. */
   send: (calls: Call[]) => Promise<void>;
@@ -135,7 +138,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         try {
           saved = localStorage.getItem(KIND_KEY);
         } catch {}
-        if (saved === "email" && !connecting.current) return;
+        if ((saved === "email" || saved === "demo") && !connecting.current) return;
         const userPicked = connecting.current;
         connecting.current = false;
         fastAuthLogout().catch(() => {});
@@ -151,7 +154,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       } catch {}
       fastAuthPrepare().catch(() => {});
       const returningFromAuth0 = new URLSearchParams(window.location.search).has("code");
-      if (saved === "evm") {
+      if (saved === "demo") {
+        const id = demoRestore();
+        if (!cancelled && id) remember("demo", id);
+      } else if (saved === "evm") {
         const id = await evmAccount();
         if (!cancelled && id) remember("evm", id);
       } else if (saved === "email" || returningFromAuth0) {
@@ -198,11 +204,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     remember("evm", await connectEvm());
   }, []);
 
+  const signInWithDemo = useCallback(async () => {
+    await connector.current?.disconnect().catch(() => {});
+    remember("demo", await demoLogin());
+  }, []);
+
   const signOut = useCallback(async () => {
     try {
       if (accountId) localStorage.removeItem(tokenKey(accountId));
     } catch {}
-    if (kind === "email") await fastAuthLogout();
+    if (kind === "demo") demoLogout();
+    else if (kind === "email") await fastAuthLogout();
     else await connector.current?.disconnect().catch(() => {});
     remember(null, null);
   }, [kind, accountId]);
@@ -210,6 +222,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const send = useCallback(
     async (calls: Call[]) => {
       if (!accountId) throw new Error("Sign in first.");
+
+      // Demo account: auto-sign, no prompt.
+      if (kind === "demo") {
+        for (const call of calls) await demoSend(call);
+        return;
+      }
 
       // Google/email (or a stale session that still shows an implicit account id).
       const useEmail = kind === "email" || (kind == null && isImplicit(accountId));
@@ -273,6 +291,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (kind === "email" || (kind == null && isImplicit(accountId))) {
       return exchangeProof({ mpc: await fastAuthProve() }, accountId);
     }
+    if (kind === "demo") return exchangeProof(await demoProof(), accountId);
     if (kind === "wallet") {
       const c = connector.current;
       if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");
@@ -290,6 +309,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         signIn,
         signInWithEmail,
         signInWithEvm,
+        signInWithDemo,
         signOut,
         send,
         staffToken,
