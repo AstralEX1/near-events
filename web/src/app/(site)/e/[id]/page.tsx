@@ -5,13 +5,15 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, isTicket, type EventView, type GuestView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
-import { Avatar, AvatarStack, Cover, DateBadge, StatusPill, formatWhen, shortAccount } from "@/components/ui";
+import { Avatar, Cover, DateBadge, StatusPill, formatWhen, shortAccount } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
 import { GuestGrid } from "@/components/EventParts";
 import { EVENTS_CONTRACT, EXPLORER_URL } from "@/lib/config";
 import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
 import type { EventDetails } from "@/lib/eventImport";
-import { LocationValue, PublicText } from "@/components/PublicText";
+import { PublicText } from "@/components/PublicText";
+import { GoingList, ICONS, LocationRow, LocationSection, RegisterBox, Section } from "@/components/EventSections";
+import { guestNamesApi, type GuestNames } from "@/lib/guestNamesClient";
 import { useEventVisual } from "@/lib/event-visual-client";
 import { VisualBackdrop } from "@/components/EventVisual";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
@@ -30,6 +32,7 @@ export default function EventPage() {
   const [details, setDetails] = useState<EventDetails | null>(null);
   const [detailsUnavailable, setDetailsUnavailable] = useState(false);
   const [doorTeam, setDoorTeam] = useState<string[]>([]);
+  const [names, setNames] = useState<GuestNames>({});
   const visual = useEventVisual(id, event?.metadata.title ?? "");
 
   const load = useCallback(async () => {
@@ -44,6 +47,7 @@ export default function EventPage() {
     setDetailsUnavailable(false);
     if (e) {
       cohostsApi.get(id).then(setDoorTeam).catch(() => setDoorTeam([]));
+      guestNamesApi.list(id).then(setNames).catch(() => setNames({}));
       void fetch(`/api/event-details?e=${encodeURIComponent(String(id))}`, { cache: "no-store" })
         .then(async (response) => {
           if (!response.ok) throw new Error("Event details are unavailable");
@@ -72,6 +76,10 @@ export default function EventPage() {
   const isStaff = !!accountId && (accountId === event.host || doorTeam.includes(accountId));
 
   const going = guests.map((g) => g.account_id);
+  const ticket = isTicket(event);
+  const price = `${formatUsdc(event.deposit)} USDC`;
+  const spots = Math.max(0, event.capacity - event.guest_count);
+  const open = event.status === "Open";
 
   // Cover, hosts and who's going on the left; title, time and registration on the right.
   return (
@@ -80,8 +88,7 @@ export default function EventPage() {
       <div className="gc-event-content">
         <aside className="space-y-6">
           <Cover event={event} visual={visual} coverUrl={details?.cover_url} className="aspect-square w-full rounded-2xl shadow-sm" />
-          <div>
-            <div className="label pb-2 mb-3 border-b border-border">Hosted by</div>
+          <Section label="Hosted by">
             <div className="space-y-2.5">
               {[event.host, ...doorTeam].map((a, i) => (
                 <Link key={a} href={`/u/${encodeURIComponent(a)}`} className="flex items-center gap-2 text-sm hover:text-accent">
@@ -91,14 +98,9 @@ export default function EventPage() {
                 </Link>
               ))}
             </div>
-          </div>
-          {going.length > 0 && (
-            <div>
-              <div className="label pb-2 mb-3 border-b border-border">{event.guest_count} going</div>
-              <AvatarStack accounts={going} max={9} linked />
-            </div>
-          )}
-          {isStaff && event.status === "Open" && (
+          </Section>
+          <GoingList accounts={going} names={names} total={event.guest_count} verb={open ? "Going" : "Went"} />
+          {isStaff && open && (
             <Link href={`/e/${id}/manage`} className="btn btn-ghost w-full">Manage event</Link>
           )}
         </aside>
@@ -106,7 +108,7 @@ export default function EventPage() {
         <section className="space-y-6 min-w-0">
           <div className="flex items-start gap-2">
             <div className="min-w-0">
-              {event.status !== "Open" && <StatusPill status={event.status} />}
+              {!open && <StatusPill status={event.status} />}
               <h1 className="gc-event-title mt-1">{event.metadata.title}</h1>
             </div>
             <MoreMenu id={id} isStaff={isStaff} />
@@ -122,48 +124,51 @@ export default function EventPage() {
                 </div>
               </div>
             </div>
-            <div className="text-sm text-muted">
-              {event.guest_count} going{event.status === "Open" && ` · ${Math.max(0, event.capacity - event.guest_count)} spot${event.capacity - event.guest_count === 1 ? "" : "s"} left`}
-            </div>
+            {details?.location && <LocationRow value={details.location} />}
           </div>
 
-          <div id="registration" className="gc-registration space-y-4">
-            <div>
-              <p className="gc-eyebrow">{me ? "Your place" : isTicket(event) ? "Paid ticket" : "Attendance deposit"}</p>
-              {!me && <p className="gc-price mt-1">{formatUsdc(event.deposit)} <span className="text-base text-muted">USDC</span></p>}
-            </div>
-            <RegistrationCard event={event} myStatus={me?.status ?? null} onChange={load} />
-          </div>
-
-          {(details?.location || details?.description) && (
-            <div className="card p-4 space-y-4">
-              {details.location && (
-                <section className="space-y-1">
-                  <h2 className="font-medium">Location</h2>
-                  <LocationValue value={details.location} />
-                </section>
-              )}
-              {details.description && (
-                <section className="space-y-1">
-                  <h2 className="font-medium">Event details</h2>
-                  <PublicText value={details.description} />
-                </section>
-              )}
-            </div>
+          {me ? (
+            <RegisterBox
+              head={open ? "You’re in" : "Your place"}
+              icon={ICONS.check}
+              tone="good"
+              title={ticket ? "You have a ticket" : me.status === "Attended" ? "You’re checked in" : "You’re registered"}
+              desc={`${price} ${ticket ? "ticket" : "deposit"}`}
+            >
+              <RegistrationCard event={event} myStatus={me.status} onChange={load} explain={false} />
+            </RegisterBox>
+          ) : open ? (
+            <RegisterBox
+              head="Registration"
+              aside={spots ? `${spots} spot${spots === 1 ? "" : "s"} left` : "Full"}
+              icon={ticket ? ICONS.ticket : ICONS.wallet}
+              title={ticket ? "Ticket" : "Attendance deposit"}
+              desc={ticket ? "Goes to the host, no refunds" : "Show up, get it back + a no-show share"}
+              price={price}
+            >
+              <RegistrationCard event={event} myStatus={null} onChange={load} explain={false} />
+            </RegisterBox>
+          ) : (
+            <RegisterBox head={event.status === "Cancelled" ? "Cancelled" : "Event ended"}>
+              <RegistrationCard event={event} myStatus={null} onChange={load} explain={false} />
+            </RegisterBox>
           )}
+
+          {details?.description && (
+            <Section label="About event"><PublicText value={details.description} /></Section>
+          )}
+          {details?.location && <LocationSection value={details.location} />}
           {detailsUnavailable && (
             <p className="text-sm text-muted">
               Event details are temporarily unavailable. <button type="button" className="underline underline-offset-2" onClick={() => void load()}>Retry</button>
             </p>
           )}
 
-
-
-          {event.status !== "Open" && <GuestGrid event={event} guests={guests} me={accountId} />}
+          {!open && <GuestGrid event={event} guests={guests} me={accountId} />}
         </section>
       </div>
     </VisualBackdrop>
-    {event.status === "Open" && !me && event.guest_count < event.capacity && <div className="gc-mobile-register"><span><b>{formatUsdc(event.deposit)} USDC</b><small className="block text-muted">{isTicket(event) ? "Paid ticket" : "Attendance deposit"}</small></span><a href="#registration" className="btn btn-accent">{isTicket(event) ? "Get a ticket" : "Join event"}</a></div>}
+    {open && !me && spots > 0 && <div className="gc-mobile-register"><span><b>{price}</b><small className="block text-muted">{ticket ? "Ticket" : "Attendance deposit"}</small></span><a href="#registration" className="btn btn-accent">{ticket ? "Get ticket" : "Register"}</a></div>}
     </>
   );
 }

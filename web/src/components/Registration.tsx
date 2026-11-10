@@ -26,11 +26,14 @@ export function RegistrationCard({
   myStatus,
   onChange,
   embedReturnTo,
+  explain = true,
 }: {
   event: EventView;
   myStatus: GuestStatus | null;
   onChange: () => Promise<void>;
   embedReturnTo?: string;
+  /** The event page shows a one-line summary above instead of the long rule text. */
+  explain?: boolean;
 }) {
   const { accountId, kind, send, staffToken } = useWallet();
   const router = useRouter();
@@ -318,7 +321,7 @@ export function RegistrationCard({
         )}
       {open && (
         <div className="space-y-1.5 text-sm text-muted leading-relaxed">
-          <p>{ticket ? "A paid ticket. The money goes to the host when you register; tickets are not refunded." : "Get checked in and receive your deposit plus a share of no-shows after the host closes the event. Miss it, and your deposit goes to the guests who came."}</p>
+          {explain && <p>{ticket ? "A paid ticket. The money goes to the host when you register; tickets are not refunded." : "Get checked in and receive your deposit plus a share of no-shows after the host closes the event. Miss it, and your deposit goes to the guests who came."}</p>}
           <DepositRulesTooltip ticket={ticket} amount={price} />
         </div>
       )}
