@@ -1,0 +1,41 @@
+/* Compact host look for the SL UI privacy toggle: one Event Options row, app tokens, app font. */
+.lu-rows .nv-approval.sl-toggle {
+  --toggle-track: color-mix(in srgb, var(--text) 16%, transparent);
+  --toggle-track-on: var(--accent);
+  --toggle-thumb: #fff;
+  --toggle-text: var(--text);
+  --toggle-muted: var(--muted);
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  gap: 0.75rem;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font-family: inherit;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.lu-rows .nv-approval.sl-toggle:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.nv-approval .sl-toggle__emblem,
+.nv-approval[data-checked="true"] .sl-toggle__emblem { width: 18px; height: 18px; border: 0; background: none; box-shadow: none; color: var(--muted); }
+.nv-approval[data-checked="true"] .sl-toggle__emblem { color: var(--accent); }
+.nv-approval .sl-toggle__emblem svg { width: 18px; height: 18px; stroke-width: 2; }
+.nv-approval .sl-toggle__copy { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+.nv-approval .sl-toggle__title { font-size: inherit; font-weight: inherit; line-height: inherit; letter-spacing: normal; }
+.nv-approval .sl-toggle__status,
+.nv-approval[data-checked="true"] .sl-toggle__status { font-size: 0.875rem; color: var(--muted); white-space: nowrap; }
+.nv-approval .sl-toggle__switch { width: 38px; height: 22px; }
+.nv-approval .sl-toggle__track { border-radius: 999px; border-color: transparent; box-shadow: inset 0 1px 2px #0002; }
+.nv-approval .sl-toggle__input:checked + .sl-toggle__track { border-color: transparent; box-shadow: none; }
+.nv-approval .sl-toggle__thumb { top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 999px; box-shadow: 0 1px 3px #0004; }
+.nv-approval .sl-toggle__input:checked + .sl-toggle__track .sl-toggle__thumb { transform: translateX(16px); }
+.nv-approval .sl-toggle__input:active + .sl-toggle__track .sl-toggle__thumb { width: 19px; }
+.nv-approval .sl-toggle__input:checked:active + .sl-toggle__track .sl-toggle__thumb { transform: translateX(13px); }
+.nv-approval .sl-toggle__input:focus-visible + .sl-toggle__track { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
+@media (max-width: 420px) {
+  .lu-rows .nv-approval.sl-toggle { padding: 0.5rem 0.75rem; gap: 0.75rem; }
+  .nv-approval .sl-toggle__emblem { width: 18px; height: 18px; }
+  .nv-approval .sl-toggle__title { font-size: inherit; }
+  /* Phones: the switch shows the state; keep the title whole instead. */
+  .nv-approval .sl-toggle__status { display: none; }
+}

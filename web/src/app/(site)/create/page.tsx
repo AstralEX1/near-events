@@ -16,6 +16,7 @@ import { LOCAL_TZ, city, dayLabel, fromEpoch, gmtLabel, toEpoch } from "@/lib/ti
 import { detectEventSource, IMPORT_ENDPOINT, locationProblem, type EventDetails, type ImportedEvent } from "@/lib/eventImport";
 import { createStep, integrationUrl, parseMode, startUrl, validAmount, type JoinMode } from "@/lib/flow";
 import { MAX_FREE_CAPACITY } from "@/lib/freeEventsShared";
+import { ApprovalToggle } from "@/components/ApprovalToggle";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 import { cohostsProblem, splitCohosts } from "@/lib/cohostsShared";
 import { StartStep } from "@/components/StartStep";
@@ -66,6 +67,8 @@ function CreateEvent() {
   });
   // Site-only: private events are reachable by link but left out of public listings.
   const [isPublic, setIsPublic] = useState(true);
+  // Free events only: guests request a spot and the host approves each one.
+  const [approval, setApproval] = useState(false);
   const [when, setWhen] = useState<When | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importUrl, setImportUrl] = useState("");
@@ -231,7 +234,7 @@ function CreateEvent() {
         const response = await fetch("/api/free-events", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ action: "create", event: { title, starts_at: when.start, ends_at: when.end, capacity, location, description, cover_url: cover, visual: eventVisual, public: isPublic } }),
+          body: JSON.stringify({ action: "create", event: { title, starts_at: when.start, ends_at: when.end, capacity, location, description, cover_url: cover, visual: eventVisual, public: isPublic, approval } }),
         });
         const json = await response.json().catch(() => ({}));
         if (!response.ok || typeof json.id !== "string") throw new Error(json.error ?? "Could not create the event");
@@ -535,6 +538,7 @@ function CreateEvent() {
               >
                 <input className="input" type="number" min="1" max={maxSeats} required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
               </OptionRow>
+              {free && <ApprovalToggle checked={approval} onChange={setApproval} />}
               {/* Door check-in is for paid events; free events only keep an RSVP list. */}
               {!free && <OptionRow
                 icon="M9 11l2 2 4-4M4 4h16v16H4z"

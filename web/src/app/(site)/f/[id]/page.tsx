@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { useWallet } from "@/lib/wallet";
+import { savedStaffToken, useWallet } from "@/lib/wallet";
 import type { FreeEvent } from "@/lib/freeEventsShared";
 import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
 import { Avatar, DateBadge, formatWhen, shortAccount } from "@/components/ui";
@@ -23,12 +23,14 @@ export default function FreeEventPage() {
   const [choosing, setChoosing] = useState(false);
 
   const load = useCallback(async () => {
-    const response = await fetch(`/api/free-events?id=${encodeURIComponent(id)}`, { cache: "no-store" }).catch(() => null);
+    // A saved sign-in token (never a wallet prompt) lets the host see requests and a guest see their own.
+    const token = accountId ? savedStaffToken(accountId) : null;
+    const response = await fetch(`/api/free-events?id=${encodeURIComponent(id)}`, { cache: "no-store", headers: token ? { Authorization: `Bearer ${token}` } : {} }).catch(() => null);
     if (response?.status === 404 || response?.status === 400) return setEvent(null);
     const json = await response?.json().catch(() => null);
     if (!response?.ok || !json?.event) return setError("Couldn’t load this event. Please try again in a moment.");
     setEvent(json.event as FreeEvent);
-  }, [id]);
+  }, [id, accountId]);
   useEffect(() => void load(), [load]);
 
   // Signed-in saves reuse the token from sign-in: no wallet window here.
@@ -62,6 +64,8 @@ export default function FreeEventPage() {
   const ended = event.ends_at < Date.now();
   const spots = Math.max(0, event.capacity - event.guest_count);
   const isHost = accountId === event.host;
+  const needsApproval = !!event.approval && !isHost;
+  const requests = event.requests ?? [];
 
   let action;
   if (going) {
@@ -69,6 +73,14 @@ export default function FreeEventPage() {
       <RegisterBox head={ended ? "You were there" : "You’re in"} icon={ICONS.check} tone="good" title={ended ? "You went ✓" : "You’re going"} desc={formatWhen(event.starts_at, event.ends_at)}>
         <button type="button" className="text-sm text-muted underline underline-offset-2 justify-self-start hover:text-text" disabled={busy} onClick={() => void rsvp(false)}>
           {busy ? "Saving…" : ended ? "I wasn’t there" : "Can’t go anymore"}
+        </button>
+      </RegisterBox>
+    );
+  } else if (event.requested) {
+    action = (
+      <RegisterBox head="Registration" aside="Pending" icon={ICONS.clock} title="Request sent" desc="The host will review it. Check back here.">
+        <button type="button" className="text-sm text-muted underline underline-offset-2 justify-self-start hover:text-text" disabled={busy} onClick={() => void rsvp(false)}>
+          {busy ? "Saving…" : "Cancel request"}
         </button>
       </RegisterBox>
     );
@@ -80,22 +92,22 @@ export default function FreeEventPage() {
         head={ended ? "Past event" : "Registration"}
         aside={ended ? undefined : `${spots} spot${spots === 1 ? "" : "s"} left`}
         icon={ended ? ICONS.clock : ICONS.heart}
-        title={ended ? "Were you there?" : "Free"}
-        desc={ended ? "Add yourself to the guest list." : "Just RSVP. No deposit, no ticket."}
+        title={ended ? "Were you there?" : needsApproval ? "Approval required" : "Free"}
+        desc={ended ? (needsApproval ? "Ask the host to add you to the guest list." : "Add yourself to the guest list.") : needsApproval ? "Free. The host approves each guest." : "Just RSVP. No deposit, no ticket."}
       >
         {accountId ? (
           <button type="button" className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy} onClick={() => void rsvp(true)}>
-            {busy ? "Saving…" : ended ? "I was there" : "Join event"}
+            {busy ? "Saving…" : needsApproval ? "Request to join" : ended ? "I was there" : "Join event"}
           </button>
         ) : choosing ? (
           <div className="space-y-2">
-            <div className="text-sm font-medium">Sign in to {ended ? "add yourself" : "join"}</div>
+            <div className="text-sm font-medium">Sign in to {needsApproval ? "request a spot" : ended ? "add yourself" : "join"}</div>
             <SignInOptions onDone={() => setChoosing(false)} />
             <button type="button" className="w-full text-xs text-muted pt-1" onClick={() => setChoosing(false)}>Back</button>
           </div>
         ) : (
           <button type="button" className="btn btn-accent w-full !py-3 text-base font-medium" onClick={() => setChoosing(true)}>
-            {ended ? "I was there" : "Join event"}
+            {needsApproval ? "Request to join" : ended ? "I was there" : "Join event"}
           </button>
         )}
       </RegisterBox>
@@ -154,6 +166,25 @@ export default function FreeEventPage() {
 
           {action}
           {error && <p className="text-sm text-warn break-words">{error}</p>}
+
+          {isHost && event.approval && (
+            <Section label={`Requests${requests.length ? ` · ${requests.length}` : ""}`}>
+              {requests.length ? (
+                <ul className="space-y-2">
+                  {requests.map((guest) => (
+                    <li key={guest} className="flex items-center gap-2 text-sm">
+                      <Avatar account={guest} size={24} />
+                      <span className="min-w-0 flex-1 truncate font-medium" title={guest}>{shortAccount(guest)}</span>
+                      <button type="button" className="lu-chip lu-hover" disabled={busy} onClick={() => void post({ action: "decline", guest })}>Decline</button>
+                      <button type="button" className="lu-chip lu-hover !text-accent" disabled={busy || spots === 0} title={spots === 0 ? "The event is full" : undefined} onClick={() => void post({ action: "approve", guest })}>Approve</button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted">No requests yet. Guests who ask to join show up here.</p>
+              )}
+            </Section>
+          )}
 
           {event.description && <Section label="About event"><PublicText value={event.description} /></Section>}
           {event.location && <LocationSection value={event.location} />}
