@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import { savedStaffToken, useWallet } from "@/lib/wallet";
-import type { FreeEvent } from "@/lib/freeEventsShared";
+import { useState } from "react";
+import { useFreeEvent } from "@/lib/freeEventsClient";
 import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
 import { Avatar, DateBadge, formatWhen, shortAccount } from "@/components/ui";
 import { EventPoster, VisualBackdrop } from "@/components/EventVisual";
@@ -15,44 +14,9 @@ import { SignInOptions } from "@/components/SignIn";
 /** A free event: same Luma layout as /e/<id>, but RSVP is a click, with nothing on chain. */
 export default function FreeEventPage() {
   const id = useParams<{ id: string }>().id;
-  const { accountId, staffToken } = useWallet();
-  const [event, setEvent] = useState<FreeEvent | null | undefined>(undefined);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { accountId, event, busy, error, post } = useFreeEvent(id);
   const [copied, setCopied] = useState(false);
   const [choosing, setChoosing] = useState(false);
-
-  const load = useCallback(async () => {
-    // A saved sign-in token (never a wallet prompt) lets the host see requests and a guest see their own.
-    const token = accountId ? savedStaffToken(accountId) : null;
-    const response = await fetch(`/api/free-events?id=${encodeURIComponent(id)}`, { cache: "no-store", headers: token ? { Authorization: `Bearer ${token}` } : {} }).catch(() => null);
-    if (response?.status === 404 || response?.status === 400) return setEvent(null);
-    const json = await response?.json().catch(() => null);
-    if (!response?.ok || !json?.event) return setError("Couldn’t load this event. Please try again in a moment.");
-    setEvent(json.event as FreeEvent);
-  }, [id, accountId]);
-  useEffect(() => void load(), [load]);
-
-  // Signed-in saves reuse the token from sign-in: no wallet window here.
-  const post = async (body: object) => {
-    setBusy(true);
-    setError(null);
-    try {
-      const token = await staffToken();
-      const response = await fetch("/api/free-events", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...body, id }),
-      });
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(json.error ?? "Could not save. Try again.");
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const rsvp = (going: boolean) => post({ action: going ? "join" : "leave" });
 
@@ -65,7 +29,6 @@ export default function FreeEventPage() {
   const spots = Math.max(0, event.capacity - event.guest_count);
   const isHost = accountId === event.host;
   const needsApproval = !!event.approval && !isHost;
-  const requests = event.requests ?? [];
 
   let action;
   if (going) {
@@ -129,20 +92,18 @@ export default function FreeEventPage() {
         </aside>
 
         <section className="space-y-6 min-w-0">
+          {isHost && (
+            <div className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm">
+              <span className="min-w-0 flex-1 text-muted">
+                You have manage access for this event.{event.approval && event.requests?.length ? ` ${event.requests.length} waiting for approval.` : ""}
+              </span>
+              <Link href={`/f/${id}/manage`} className="btn btn-accent shrink-0">Manage</Link>
+            </div>
+          )}
           <div className="flex items-start gap-2">
             <h1 className="gc-event-title mt-1 min-w-0">{event.title}</h1>
             <div className="ml-auto shrink-0 flex items-center gap-1.5">
-              {isHost ? (
-                <button
-                  type="button"
-                  className="lu-chip lu-hover"
-                  disabled={busy}
-                  data-tooltip={event.public ? "Shown in Events. Click to make it link-only." : "Only people with the link see it. Click to list it in Events."}
-                  onClick={() => void post({ action: "visibility", public: !event.public })}
-                >
-                  {event.public ? "Public" : "Private"}
-                </button>
-              ) : !event.public && <span className="lu-chip">Private</span>}
+              {!event.public && <span className="lu-chip">Private</span>}
               <button
                 type="button"
                 className="lu-chip lu-hover"
@@ -167,24 +128,6 @@ export default function FreeEventPage() {
           {action}
           {error && <p className="text-sm text-warn break-words">{error}</p>}
 
-          {isHost && event.approval && (
-            <Section label={`Requests${requests.length ? ` · ${requests.length}` : ""}`}>
-              {requests.length ? (
-                <ul className="space-y-2">
-                  {requests.map((guest) => (
-                    <li key={guest} className="flex items-center gap-2 text-sm">
-                      <Avatar account={guest} size={24} />
-                      <span className="min-w-0 flex-1 truncate font-medium" data-tooltip={guest}>{shortAccount(guest)}</span>
-                      <button type="button" className="lu-chip lu-hover" disabled={busy} onClick={() => void post({ action: "decline", guest })}>Decline</button>
-                      <button type="button" className="lu-chip lu-hover !text-accent" disabled={busy || spots === 0} data-tooltip={spots === 0 ? "The event is full" : undefined} onClick={() => void post({ action: "approve", guest })}>Approve</button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted">No requests yet. Guests who ask to join show up here.</p>
-              )}
-            </Section>
-          )}
 
           {event.description && <Section label="About event"><PublicText value={event.description} /></Section>}
           {event.location && <LocationSection value={event.location} />}
