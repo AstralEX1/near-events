@@ -98,17 +98,20 @@ export function Shot({ n, title, images, children }: { n: number; title: string;
   );
 }
 
-/** Unlock-style cards: a bold title and one line each. */
-export function Cards({ items }: { items: [string, ReactNode][] }) {
+/** A plain list: what you get, and the NEAR piece behind it in small mono. Not clickable, so no card borders. */
+export function Stack({ items }: { items: { title: string; text: ReactNode; tech?: string }[] }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {items.map(([t, d]) => (
-        <div key={t} className="card px-5 py-4">
-          <div className="font-medium">{t}</div>
-          <div className="text-sm text-muted mt-1">{d}</div>
+    <dl className="divide-y divide-border border-y border-border">
+      {items.map((it) => (
+        <div key={it.title} className="grid gap-1 py-5 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:gap-8">
+          <dt className="font-semibold">{it.title}</dt>
+          <dd>
+            <div className="text-[15px] leading-relaxed">{it.text}</div>
+            {it.tech && <div className="mt-2 font-mono text-xs text-muted">{it.tech}</div>}
+          </dd>
         </div>
       ))}
-    </div>
+    </dl>
   );
 }
 

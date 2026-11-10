@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { EVENTS_CONTRACT, EXPLORER_URL, USDC_CONTRACT } from "@/lib/config";
-import { Cards, Code, Ext, Mono, Next, Section, Table, Title } from "../parts";
+import { Code, Ext, Mono, Next, Section, Stack, Table, Title } from "../parts";
 
 export const metadata: Metadata = { title: "Smart Contract · Nearvent" };
 
@@ -29,12 +29,12 @@ export default function ContractDocs() {
       </Section>
 
       <Section id="rules" title="Money rules">
-        <Cards
+        <Stack
           items={[
-            ["Deposit", "Guests who came split the whole pool. Nobody came: full refund."],
-            ["Ticket", "The price goes to the host when a guest registers."],
-            ["Cancel", "The host can cancel a deposit event any time. Everyone is refunded."],
-            ["Safety valve", "30 days after the end, anyone can refund an event the host never closed."],
+            { title: "Deposit", text: "Guests who came split the whole pool. Nobody came: full refund." },
+            { title: "Ticket", text: "The price goes to the host when a guest registers." },
+            { title: "Cancel", text: "The host can cancel a deposit event any time. Everyone is refunded." },
+            { title: "Safety valve", text: "30 days after the end, anyone can refund an event the host never closed." },
           ]}
         />
       </Section>

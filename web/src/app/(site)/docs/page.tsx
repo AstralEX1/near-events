@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Cards, Faq, Next, Section, Shot, Title } from "./parts";
+import { Faq, Next, Section, Shot, Stack, Title } from "./parts";
 
 export default function DocsHome() {
   return (
@@ -38,13 +38,40 @@ export default function DocsHome() {
         </div>
       </Section>
 
-      <Section id="near" title="Built on NEAR">
-        <Cards
+      <Section id="near" title="How NEAR Powers It">
+        <p className="text-muted">You never need to think about chains. Here is what happens underneath.</p>
+        <Stack
           items={[
-            ["Escrow contract", <>Holds every deposit. <Link href="/docs/contract" className="text-accent underline">How it works</Link></>],
-            ["USDC", "A deposit keeps its value until the door."],
-            ["NEAR Intents", "Pay and withdraw from any chain."],
-            ["Google sign-in", "A real NEAR account, no seed phrase."],
+            {
+              title: "Your deposit is safe",
+              text: <>It sits in a smart contract, not with us or the host. The contract alone decides who gets paid. <Link href="/docs/contract" className="text-accent underline">Read the rules</Link></>,
+              tech: "Rust escrow · near-sdk · USDC (NEP-141) via ft_transfer_call",
+            },
+            {
+              title: "Pay from any chain",
+              text: "Have USDT on Arbitrum or ETH on Base? Pay with it. It is swapped to USDC on NEAR and lands in your Intents balance, then one click registers you.",
+              tech: "NEAR Intents · 1Click API → Intents balance → escrow",
+            },
+            {
+              title: "MetaMask works, no NEAR needed",
+              text: "Sign one message in your EVM wallet. We submit it and pay the gas. Your payout comes back to the same address.",
+              tech: "ERC-191 intent → intents.near execute_intents · relayer payout_to_intents",
+            },
+            {
+              title: "Cash out anywhere",
+              text: "Withdraw to your NEAR wallet, keep it in NEAR Intents, or send it to another chain.",
+              tech: "withdraw(to_intents) · 1Click deposit address",
+            },
+            {
+              title: "Sign in with Google",
+              text: "Google or email gives you a real NEAR account. No seed phrase, no extension. New accounts get a little NEAR for gas from us.",
+              tech: "NEAR Auth (FastAuth) · MPC signer · implicit account · sponsored gas",
+            },
+            {
+              title: "No pop-up for every guest",
+              text: "Hosts prove who they are once. Checking in 300 people costs nothing; only the final list goes on-chain.",
+              tech: "NEP-413 signed message · one finalize transaction",
+            },
           ]}
         />
       </Section>
