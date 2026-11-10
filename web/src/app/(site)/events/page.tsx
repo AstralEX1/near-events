@@ -76,7 +76,20 @@ export default function Events() {
       </div>
 
       {error && <p className="text-warn text-sm">Could not load events: {error}</p>}
-      {!items && !error && <p className="text-muted">Loading events…</p>}
+      {!items && !error && (
+        <div className="grid gap-5 grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Loading events">
+          {[0, 1, 2].map((n) => (
+            <div key={n} className="gc-list-card p-3 flex gap-4 items-center min-[480px]:block min-[480px]:space-y-3 animate-pulse">
+              <div className="w-24 shrink-0 aspect-square rounded-xl bg-text/5 min-[480px]:w-full" />
+              <div className="flex-1 space-y-2 px-1 pb-1">
+                <div className="h-3 w-24 rounded bg-text/5" />
+                <div className="h-4 w-3/4 rounded bg-text/10" />
+                <div className="h-3 w-20 rounded bg-text/5" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {items && shown.length === 0 && (
         <p className="text-muted">{q || kind !== "all" ? "Nothing matches. Try another search or filter." : tab === "upcoming" ? "No upcoming events yet. Host the first one." : "No past events yet."}</p>
       )}

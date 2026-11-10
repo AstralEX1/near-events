@@ -72,12 +72,10 @@ body:has(.embed-root) { background: transparent; }
 /* Event creator fields. */
 .lu-field { background: color-mix(in srgb, var(--text) 6%, transparent); border-radius: 0.75rem; }
 .lu-hover { transition: background-color 0.15s; cursor: pointer; }
-.lu-hover:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
 .lu-row { position: relative; display: flex; align-items: center; gap: 0.75rem; min-height: 2.5rem; padding: 0.5rem 0.75rem; width: 100%; background: color-mix(in srgb, var(--text) 6%, transparent); }
 /* Option stack: one block, hairline dividers that start after the icon. */
 .lu-rows > .lu-row + .lu-row::before { content: ""; position: absolute; top: 0; left: 2.5rem; right: 0; border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent); }
 .lu-pill { display: flex; align-items: center; justify-content: center; height: 2.25rem; padding: 0 0.75rem; background: color-mix(in srgb, var(--text) 6%, transparent); }
-.lu-pill:hover { background: color-mix(in srgb, var(--text) 12%, transparent); }
 .lu-chip { display: inline-flex; white-space: nowrap; align-items: center; gap: 0.4rem; height: 1.875rem; padding: 0 0.7rem; border-radius: 999px; font-size: 0.875rem; color: var(--muted); background: color-mix(in srgb, var(--text) 6%, transparent); }
 
 /* Good company application surfaces. */
@@ -100,9 +98,13 @@ button:not(:disabled), summary { cursor: pointer; }
 .gc-account { position: relative; }
 .gc-account summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); list-style: none; font-size: .875rem; }
 .gc-account summary::-webkit-details-marker { display: none; }
-.gc-account-panel { position: absolute; top: calc(100% + 10px); right: 0; min-width: 190px; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 12px 32px #1e0b2b12; }
+/* Pressables without .btn: same short squeeze as buttons. */
+.lu-pill, .gc-nav-link, .gc-manage-tabs button, .gc-mode-card, .gc-account summary { transition: transform 140ms var(--ease-out), background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease; }
+.lu-pill:active, .gc-nav-link:active, .gc-manage-tabs button:active, .gc-account summary:active { transform: scale(.97); }
+.gc-mode-card:active { transform: scale(.98); }
+.gc-account-panel { position: absolute; top: calc(100% + 10px); right: 0; min-width: 190px; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 12px 32px #1e0b2b12; transform-origin: top right; transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out); }
+@starting-style { .gc-account[open] .gc-account-panel { opacity: 0; transform: scale(.97) translateY(-4px); } }
 .gc-account-panel a, .gc-account-panel button { display: block; padding: 12px; width: 100%; text-align: left; border-radius: 10px; font-size: .875rem; }
-.gc-account-panel a:hover, .gc-account-panel button:hover { background: var(--accent-soft); }
 .gc-main { flex: 1; width: 100%; max-width: 1088px; margin: 0 auto; padding: 48px 24px 64px; }
 .gc-footer { max-width: 1088px; width: 100%; margin: auto; padding: 24px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; color: var(--muted); font-size: .8rem; }
 .gc-footer-links { display: flex; align-items: center; flex-wrap: wrap; gap: 20px; }
@@ -128,9 +130,9 @@ button:not(:disabled), summary { cursor: pointer; }
 .gc-integrate { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 .gc-integrate-field { flex: 1; display: grid; justify-content: end; grid-template-columns: 0fr; opacity: 0; transform: translateX(8px); transition: grid-template-columns 160ms cubic-bezier(.23,1,.32,1), opacity 100ms ease-out, transform 160ms cubic-bezier(.23,1,.32,1); }
 .gc-integrate-field > div { min-width: 0; overflow: hidden; }
-/* The clipped global outline showed as two bars at the field's sides; an inset ring stays whole. */
+/* Inputs inside a field drop their own outline; the field shows an inset ring instead (an outline gets clipped). */
 .gc-integrate input:focus-visible { outline: none; }
-.gc-integrate .lu-field:focus-within { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent); }
+.lu-field:focus-within { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent); }
 .gc-integrate[data-open="true"] .gc-integrate-field { grid-template-columns: 1fr; opacity: 1; transform: none; transition-duration: 220ms, 160ms, 220ms; }
 @media (prefers-reduced-motion: reduce) { .gc-integrate-field { transform: none; transition: opacity 120ms ease-out !important; } }
 .gc-switch-sm > span { top: 3px; left: 3px; width: 14px; height: 14px; }
@@ -158,6 +160,9 @@ button:not(:disabled), summary { cursor: pointer; }
   .btn-primary:hover { background: color-mix(in srgb, var(--text) 85%, var(--accent)); }
   .btn-ghost:hover, .gc-nav-link:hover { background: var(--accent-soft); color: var(--text); }
   .gc-mode-card:hover, .gc-list-card:hover { border-color: var(--accent); }
+  .lu-hover:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
+  .lu-pill:hover { background: color-mix(in srgb, var(--text) 12%, transparent); }
+  .gc-account-panel a:hover, .gc-account-panel button:hover { background: var(--accent-soft); }
 }
 @media (max-width: 767px) {
   .gc-event-content { grid-template-columns: minmax(0,1fr); gap: 28px; padding: 20px; }
@@ -193,19 +198,16 @@ button:not(:disabled), summary { cursor: pointer; }
 .gc-create-form textarea[aria-label="Event name"] { font-family:var(--font-display); font-size:clamp(28px,4vw,40px); line-height:1.15; min-height:52px; }
 
 /* Theme drawer (Luma-style bottom sheet). Kept mounted so it can slide out the way it came in. */
-.gc-theme-drawer { position:fixed; inset:auto 0 0 0; z-index:60; max-height:70vh; overflow-y:auto; background:var(--surface); color:var(--text); border-top:1px solid var(--border); border-radius:24px 24px 0 0; box-shadow:0 -24px 60px -30px rgb(36 33 46 / .35); transform:translateY(100%); visibility:hidden; transition:transform 320ms var(--ease-drawer), visibility 0s linear 320ms; }
+.gc-theme-drawer { position:fixed; inset:auto 0 0 0; z-index:60; max-height:70vh; overflow-y:auto; background:var(--surface); color:var(--text); border-top:1px solid var(--border); border-radius:24px 24px 0 0; box-shadow:0 -24px 60px -30px rgb(36 33 46 / .35); transform:translateY(100%); visibility:hidden; transition:transform 220ms var(--ease-drawer), visibility 0s linear 220ms; }
 .gc-theme-drawer[data-open="true"] { transform:translateY(0); visibility:visible; transition:transform 320ms var(--ease-drawer), visibility 0s; }
 .gc-theme-tile { transition:transform 140ms var(--ease-out); }
-/* A new look (theme, colour, Regenerate) remounts the poster; blur hides the swap of two backgrounds. */
-.gc-poster { animation:gc-look-in 220ms var(--ease-out); }
-@keyframes gc-look-in { from { opacity:.6; filter:blur(4px); } }
 .gc-theme-tile:active { transform:scale(.97); }
 .gc-icon-button { display:flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:999px; background:rgb(255 255 255 / .9); color:#1e0b2b; box-shadow:0 6px 18px -8px rgb(0 0 0 / .45); backdrop-filter:blur(8px); transition:transform 140ms var(--ease-out), background-color 160ms ease; }
 .gc-icon-button:active { transform:scale(.94); }
 @media (hover:hover) and (pointer:fine) { .gc-icon-button:hover { background:#fff; } }
-/* A new cover or theme fades in instead of swapping abruptly. */
-.gc-poster { animation:gc-poster-in 260ms var(--ease-out); }
-@keyframes gc-poster-in { from { opacity:.6; transform:scale(.985); } }
+/* A new look (theme, colour, cover, Regenerate) remounts the poster; blur hides the swap of two backgrounds. */
+.gc-poster { animation:gc-poster-in 240ms var(--ease-out); }
+@keyframes gc-poster-in { from { opacity:.6; filter:blur(4px); transform:scale(.985); } }
 
 /* Creating an event: a spinner while the wallet confirms, then a short success moment. */
 .gc-spinner { width:16px; height:16px; border-radius:999px; border:2px solid currentColor; border-right-color:transparent; animation:gc-spin 700ms linear infinite; }
@@ -235,7 +237,8 @@ button:not(:disabled), summary { cursor: pointer; }
   max-width:300px; padding:4px 8px; border-radius:4px;
   background:rgba(97,97,97,.92); color:#fff;
   font-size:0.6875rem; font-weight:500; line-height:1.4em; overflow-wrap:break-word; white-space:pre-line;
-  opacity:0; transform:scale(.75); transition:opacity 150ms cubic-bezier(.4,0,.2,1), transform 100ms cubic-bezier(.4,0,.2,1);
+  opacity:0; transform:scale(.97); transition:opacity 125ms var(--ease-out), transform 125ms var(--ease-out);
 }
-.nv-tooltip.is-open { opacity:1; transform:none; transition-duration:200ms; }
+.nv-tooltip.is-open { opacity:1; transform:none; transition-duration:150ms; }
+.nv-tooltip.is-instant { transition-duration:0ms; }
 @media (prefers-reduced-motion: reduce) { .nv-tooltip { transform:none; } }

@@ -778,7 +778,7 @@ function TzBox({ tz, at, onChange }: { tz: string; at: number; onChange: (tz: st
       </button>
       {open && (
         <Popover onClose={() => setOpen(false)} className="right-0 w-72 p-1">
-          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search for a time zone" className="w-full px-3 py-2 mb-1 bg-transparent outline-none border-b border-border text-sm" />
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search for a time zone" className="w-full px-3 py-2 mb-1 bg-transparent outline-none border-b border-border focus:border-accent text-sm" />
           <div className="max-h-64 overflow-y-auto">
             {list.map((z) => (
               <button

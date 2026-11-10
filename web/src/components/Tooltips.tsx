@@ -19,9 +19,11 @@ export function Tooltips() {
     document.body.append(tip);
     let anchor: HTMLElement | null = null;
     let timer = 0;
+    let closedAt = 0; // when a visible tooltip last closed
 
     const hide = () => {
       clearTimeout(timer);
+      if (tip.classList.contains("is-open")) closedAt = Date.now();
       anchor?.removeAttribute("aria-describedby");
       anchor = null;
       tip.classList.remove("is-open");
@@ -35,7 +37,9 @@ export function Tooltips() {
       anchor = el;
       tip.textContent = text; // set now so screen readers get the description on focus
       el.setAttribute("aria-describedby", tip.id);
-      timer = window.setTimeout(() => {
+      // Moving straight from one tooltip to the next skips the delay and the animation.
+      const instant = Date.now() - closedAt < 300;
+      const place = () => {
         const a = el.getBoundingClientRect();
         const t = { width: tip.offsetWidth, height: tip.offsetHeight }; // unscaled size, unlike getBoundingClientRect
         const below = a.bottom + GAP + t.height <= window.innerHeight - EDGE || a.top - GAP - t.height < EDGE;
@@ -43,8 +47,11 @@ export function Tooltips() {
         tip.style.left = `${left}px`;
         tip.style.top = `${below ? a.bottom + GAP : a.top - GAP - t.height}px`;
         tip.style.transformOrigin = `${a.left + a.width / 2 - left}px ${below ? "top" : "bottom"}`;
+        tip.classList.toggle("is-instant", instant);
         tip.classList.add("is-open");
-      }, 100); // MUI enterDelay
+      };
+      if (instant) place();
+      else timer = window.setTimeout(place, 100); // MUI enterDelay
     };
 
     const find = (e: Event) => (e.target as Element | null)?.closest?.<HTMLElement>("[data-tooltip]") ?? null;
