@@ -30,10 +30,11 @@ Hackathon track: Real-World Money (USDC deposits, NEAR Intents, gasless onboardi
 
 - Hosted demo: [www.nearvent.site](https://www.nearvent.site) (Vercel + Upstash
   Redis), open demo event: [www.nearvent.site/e/4](https://www.nearvent.site/e/4).
-- Escrow used by the app: [`escrow-tp7.tp7-nv1110.testnet`](https://testnet.nearblocks.io/address/escrow-tp7.tp7-nv1110.testnet).
-  The account has no keys; the owner can upgrade the code until `freeze`
-  (`get_config` shows the owner and whether it is frozen). Evidence in
-  [docs/DEPLOY.md](docs/DEPLOY.md).
+- Escrow used by the app: [`escrow-tp7.tp7-nv1110.testnet`](https://testnet.nearblocks.io/address/escrow-tp7.tp7-nv1110.testnet),
+  running the CI reproducible WASM (code hash
+  `D3VY2iUDYKtuYvWBAYQQ6UAudNCZqWQqwxV2HiXH7WAx`). The account has no keys; the
+  owner can upgrade the code until `freeze` (`get_config` shows the owner and
+  whether it is frozen). Evidence in [docs/DEPLOY.md](docs/DEPLOY.md).
 - Test USDC: [`usdc.tidepool-sandbox.testnet`](https://testnet.nearblocks.io/address/usdc.tidepool-sandbox.testnet).
   Older escrows (`tp3`–`tp6`) keep their test data on chain but the app does not read them.
 
