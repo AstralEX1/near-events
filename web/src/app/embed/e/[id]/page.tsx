@@ -89,7 +89,7 @@ export default function EmbedCard() {
             {isTicket(event)
               ? "Refunded if the host cancels"
               : `Show up and get it back plus a share of the no-shows${Number(event.total_pool) > 0 ? ` · pool ${formatUsdc(event.total_pool)} USDC` : ""}`}{" "}
-            · Near Me
+            · Nearvent
           </p>
         </div>
       )}

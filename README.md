@@ -1,4 +1,4 @@
-# Near Me: show up, split the pool
+# Nearvent: show up, split the pool
 
 Kickback-style events on NEAR. In Deposit mode, every guest puts down the same
 small USDC deposit; guests who show up get it back plus an equal share of the
@@ -18,7 +18,7 @@ fee, and creating an event is free.
   ~1.95 NEAR for 300).
 - Each guest's profile shows how many events they attended (an on-chain counter).
 - The host is a person (any NEAR account) with an optional door team (co-hosts)
-  kept on the Near Me server; only the host can close or cancel.
+  kept on the Nearvent server; only the host can close or cancel.
 - In Deposit mode the host records who showed up but cannot take the pool. In
   Ticket mode each ticket goes to the host's balance at registration and is
   never refunded. The host can cancel a Deposit event and refund everyone at
@@ -33,7 +33,7 @@ Hackathon track focus: Real-World Money (USDC, NEAR Intents, gasless onboarding)
 
 The app uses the verified `escrow-tp4` deployment. A hosted test event verified
 registration with faucet USDC, event-detail saving, and off-chain check-in.
-The Vercel demo is [near-event-me.vercel.app](https://near-event-me.vercel.app/e/4);
+The Vercel demo is [www.nearvent.site](https://www.nearvent.site/e/4);
 it uses Upstash Redis for hosted event details and check-ins. The local env file
 is `/Users/astralex/nearhackathon/web/.env.local` (git-ignored, mode 600); secret
 values are not documented here. Mainnet release checks remain pending.
@@ -105,11 +105,11 @@ the current release smoke against `escrow-tp4` before relying on that result.
 Add a registration button to an existing event page with two lines:
 
 ```html
-<script src="https://YOUR-NEAR-ME-HOST/embed.js" async></script>
+<script src="https://YOUR-NEARVENT-HOST/embed.js" async></script>
 <near-event event="YOUR_EVENT_ID" mode="button"></near-event>
 ```
 
-The button opens Near Me checkout in a separate window when the browser allows
+The button opens Nearvent checkout in a separate window when the browser allows
 it; on phones it may open a new tab, and blocked pop-ups fall back to the
 current tab. After registering, the button stays available to reopen the guest's
 QR pass or, after the event closes, their payout or refund page; guests may need
@@ -133,7 +133,7 @@ Contract: `contracts/events/src/lib.rs` (unit tests in `tests.rs`).
 
 **EVM wallet flow (mainnet; release smoke pending):** the guest signs an ERC-191 intent
 `ft_withdraw {token: USDC, receiver_id: escrow, msg: register}`; `/api/intents/execute`
-checks it is only a Near Me registration and submits it to `intents.near`
+checks it is only a Nearvent registration and submits it to `intents.near`
 (`execute_intents`), which calls `ft_transfer_call` on the escrow.
 
 | Method | Who | What |
@@ -149,7 +149,7 @@ Views: `get_event`, `get_recent_events(limit ≤ 100)`, `get_guests`,
 `get_guest_status`, `get_guest_statuses(account_id, event_ids ≤ 100)`, `balance_of`,
 `create_event_cost(host, capacity)` (yoctoNEAR, 0 when free), `get_attended_count(account_id)`.
 There is no pause, owner, event editing or single-guest refund. The door team,
-location, description and cover live on the Near Me server, not in the escrow.
+location, description and cover live on the Nearvent server, not in the escrow.
 
 Init is private and runs atomically with deploy. Set `relayer` at initialization
 for an escrow accepting EVM guests. Privileged mutators require exactly 1 yoctoNEAR.

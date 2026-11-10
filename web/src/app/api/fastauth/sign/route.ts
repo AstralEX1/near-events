@@ -90,7 +90,7 @@ export async function POST(req: Request) {
   const { guard_id, verify_payload, sign_payload } = request;
   const tx = allowedSigner(sign_payload);
   if (!tx) {
-    return Response.json({ error: "Only Near Me transactions are relayed" }, { status: 400 });
+    return Response.json({ error: "Only Nearvent transactions are relayed" }, { status: 400 });
   }
   const account = tx.signerId;
   try {

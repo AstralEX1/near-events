@@ -265,7 +265,7 @@ function ManageEvent() {
               run(
                 "cancel",
                 { event_id: id },
-                `Cancel this event?\n\nEveryone gets their money back: ${event.guest_count} ${ticket ? "ticket" : "deposit"}${event.guest_count === 1 ? "" : "s"} (${formatUsdc(event.total_pool)} USDC) return to the guests' Near Me balances.\n\nThis cannot be undone.`,
+                `Cancel this event?\n\nEveryone gets their money back: ${event.guest_count} ${ticket ? "ticket" : "deposit"}${event.guest_count === 1 ? "" : "s"} (${formatUsdc(event.total_pool)} USDC) return to the guests' Nearvent balances.\n\nThis cannot be undone.`,
               )
             }
             doorTeam={doorTeam}
@@ -542,7 +542,7 @@ function RegistrationTab({
           <div className="font-medium">{isTicket(event) ? "Paid ticket" : "Standard deposit"}</div>
           <p className="text-sm text-muted">
             {isTicket(event)
-              ? "Same price for everyone. Each ticket goes to your Near Me balance as soon as the guest registers. No platform fee."
+              ? "Same price for everyone. Each ticket goes to your Nearvent balance as soon as the guest registers. No platform fee."
               : "Same amount for everyone. Who shows up gets it back plus a share of no-shows. No platform fee."}
           </p>
           <div className="text-sm font-mono mt-2">{formatUsdc(event.deposit)} USDC · {event.capacity} spots</div>

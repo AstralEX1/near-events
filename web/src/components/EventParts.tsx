@@ -30,7 +30,7 @@ export function RulesBox({ event }: { event: EventView }) {
         <div>
           <div className="font-semibold text-accent">Good to know</div>
           <ul className="list-disc pl-5 mt-1 space-y-0.5">
-            <li>If the host cancels, refunds go to your Near Me balance. If the event stays open for 30 days, a refund can be requested.</li>
+            <li>If the host cancels, refunds go to your Nearvent balance. If the event stays open for 30 days, a refund can be requested.</li>
             <li>No platform fee.</li>
           </ul>
         </div>
@@ -47,7 +47,7 @@ export function RulesBox({ event }: { event: EventView }) {
             The host checks you in at the door. Deposits of people who don’t come are <b>split equally among those who
             came</b>.
           </li>
-          <li>After the host closes the event, your deposit and share are credited to your Near Me balance. You can then withdraw.</li>
+          <li>After the host closes the event, your deposit and share are credited to your Nearvent balance. You can then withdraw.</li>
         </ul>
       </div>
       <div>
@@ -55,7 +55,7 @@ export function RulesBox({ event }: { event: EventView }) {
         <ul className="list-disc pl-5 mt-1 space-y-0.5">
           <li>You can’t cancel once you’re registered.</li>
           <li>Only a check-in by the host or their door team counts.</li>
-          <li>If the host cancels, refunds go to your Near Me balance. If the event stays open for 30 days, a refund can be requested.</li>
+          <li>If the host cancels, refunds go to your Nearvent balance. If the event stays open for 30 days, a refund can be requested.</li>
           <li>The money is held by a NEAR smart contract, not the organizer. No platform fee.</li>
         </ul>
       </div>
@@ -133,7 +133,7 @@ function icsUrl(event: EventView, url: string): string {
   const ics = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Near Me//EN",
+    "PRODID:-//Nearvent//EN",
     "BEGIN:VEVENT",
     `UID:near-events-${event.id}@near-events`,
     `DTSTAMP:${fmt(Date.now())}`,

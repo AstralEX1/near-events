@@ -465,7 +465,7 @@ function CancelEvent({ event, busy, onCancel }: { event: EventView; busy: boolea
         <p className="text-sm text-muted mt-0.5">
           Everyone gets their money back.{" "}
           {event.guest_count > 0
-            ? `${event.guest_count} ${ticket ? (event.guest_count === 1 ? "ticket" : "tickets") : (event.guest_count === 1 ? "deposit" : "deposits")} (${formatUsdc(event.total_pool)} USDC) go back to the guests' Near Me balances, ready to withdraw.`
+            ? `${event.guest_count} ${ticket ? (event.guest_count === 1 ? "ticket" : "tickets") : (event.guest_count === 1 ? "deposit" : "deposits")} (${formatUsdc(event.total_pool)} USDC) go back to the guests' Nearvent balances, ready to withdraw.`
             : "Nobody has paid yet."}{" "}
           This cannot be undone.
         </p>
