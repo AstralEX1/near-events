@@ -12,7 +12,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <head>
         <link rel="stylesheet" href="/brand/fonts.css" />
-        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('near-me:appearance');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}` }} />
+        <script dangerouslySetInnerHTML={{ __html: `var t;try{t=localStorage.getItem('near-me:appearance')}catch(e){}if(t!=='system')document.documentElement.dataset.theme=t==='dark'?'dark':'light'` }} />
       </head>
       <body className="min-h-full flex flex-col">
         <WalletProvider>{children}</WalletProvider>

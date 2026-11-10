@@ -1,77 +1,66 @@
 @font-face {
-  font-family: 'Geist';
+  font-family: 'Bricolage Grotesque';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 600;
+  font-stretch: normal;
   font-display: swap;
   src: url(/brand/font-0.ttf) format('truetype');
 }
 @font-face {
-  font-family: 'Geist';
+  font-family: 'Bricolage Grotesque';
   font-style: normal;
-  font-weight: 500;
+  font-weight: 700;
+  font-stretch: normal;
   font-display: swap;
   src: url(/brand/font-1.ttf) format('truetype');
 }
 @font-face {
-  font-family: 'Geist';
+  font-family: 'Bricolage Grotesque';
   font-style: normal;
-  font-weight: 600;
+  font-weight: 800;
+  font-stretch: normal;
   font-display: swap;
   src: url(/brand/font-2.ttf) format('truetype');
 }
 @font-face {
-  font-family: 'Geist';
+  font-family: 'DM Sans';
   font-style: normal;
-  font-weight: 700;
+  font-weight: 400;
   font-display: swap;
   src: url(/brand/font-3.ttf) format('truetype');
 }
 @font-face {
-  font-family: 'Geist Mono';
+  font-family: 'DM Sans';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 500;
   font-display: swap;
   src: url(/brand/font-4.ttf) format('truetype');
 }
 @font-face {
-  font-family: 'Geist Mono';
+  font-family: 'DM Sans';
   font-style: normal;
-  font-weight: 500;
+  font-weight: 600;
   font-display: swap;
   src: url(/brand/font-5.ttf) format('truetype');
 }
 @font-face {
-  font-family: 'Manrope';
+  font-family: 'DM Sans';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 700;
   font-display: swap;
   src: url(/brand/font-6.ttf) format('truetype');
 }
 @font-face {
-  font-family: 'Manrope';
+  font-family: 'Geist Mono';
   font-style: normal;
-  font-weight: 500;
+  font-weight: 400;
   font-display: swap;
   src: url(/brand/font-7.ttf) format('truetype');
 }
 @font-face {
-  font-family: 'Manrope';
+  font-family: 'Geist Mono';
   font-style: normal;
-  font-weight: 600;
+  font-weight: 500;
   font-display: swap;
   src: url(/brand/font-8.ttf) format('truetype');
-}
-@font-face {
-  font-family: 'Manrope';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url(/brand/font-9.ttf) format('truetype');
-}
-@font-face {
-  font-family: 'Manrope';
-  font-style: normal;
-  font-weight: 800;
-  font-display: swap;
-  src: url(/brand/font-10.ttf) format('truetype');
 }

@@ -92,7 +92,7 @@ export function EventPoster({ title, visual, coverUrl = null, className = "" }: 
       <div className={`relative isolate overflow-hidden ${className}`} style={{ containerType: "inline-size", backgroundColor: mid, color: ink }}>
         {imageAsset && <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `linear-gradient(180deg, #0002, #0008), url("${imageAsset}")` }} />}
         <div className="absolute inset-0 flex flex-col justify-between p-[9%]" style={{ fontFamily: "var(--font-display)" }}>
-          <span className="text-[clamp(.65rem,4cqw,1rem)] font-bold tracking-[-.05em]">near me</span>
+          <span className="text-[clamp(.65rem,4cqw,1rem)] font-bold tracking-[-.05em]">nearvent</span>
           <span style={{ fontSize: titleSize, lineHeight: 1.12, letterSpacing: "-.045em", fontWeight: 600, overflowWrap: "anywhere" }}>{title}</span>
           <span className="text-[clamp(.5rem,2.6cqw,.75rem)] uppercase tracking-[.14em]">You’re invited</span>
         </div>
