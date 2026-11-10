@@ -206,7 +206,9 @@ request at runtime. Fonts cover Latin, Latin Extended and Cyrillic.
 | Eyebrow | 0.75rem, UPPERCASE, accent color | 600 | 0.12em | `.gc-eyebrow` |
 
 - Headings use `text-wrap: balance` and tight negative tracking.
-- Sentence case everywhere ("Create event", not "Create Event").
+- Title Case for navigation tabs, menu items and short button labels
+  ("Explore", "My Events", "Create Event", "Sign In"); sentence case for
+  headings and running text.
 - Money and numbers in Geist Mono with tabular figures: `12.50 USDC`, `24 going`.
 
 ## Layout
@@ -320,7 +322,9 @@ text the name is written **Nearvent** (one word, capital N).
   [`web/public/landing/illustrations/`](web/public/landing/illustrations/)
   (each has a `-dark` version). New ones come from ready free-license sources
   (unDraw, CC0 photos), recolored to the palette.
-- Icons: simple line icons in `currentColor`; token logos in
+- Icons: [Lucide](https://lucide.dev) line icons (ISC license) in `currentColor`,
+  16px next to nav labels (see `NavLabel` in
+  [`Header.tsx`](web/src/components/Header.tsx)); token logos in
   [`web/public/landing/icons/`](web/public/landing/icons/).
 - Web images: WebP/AVIF around 1600px wide; credit sources next to the files.
 
