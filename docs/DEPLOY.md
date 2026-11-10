@@ -191,7 +191,11 @@ upgrade with no keys left, broken WASM leaves the old code, upgrade after
 
 Deploy: local `cargo near build non-reproducible-wasm` (285,139 bytes, NEAR code
 hash `5n4RCTYYN2AUbJbsCuZbFTry8RGPuyBjfAS85GuD2WyU`); CI's reproducible build
-differs, so the owner upgrades to the CI artifact once main is pushed.
+differs, so the owner then upgraded tp7 to the CI artifact of main `19403d4`
+(run 42789902597, all jobs green: 285,919 bytes, NEAR code hash
+`D3VY2iUDYKtuYvWBAYQQ6UAudNCZqWQqwxV2HiXH7WAx`, upgrade tx
+`BLbikMLW6SSphoew8YKUhpiWdgL4im5GdsM5ZPtVBy2r`); `verify-escrow-code.mjs` matched
+and the demo event kept its six guests.
 `deploy-escrow.mjs` created `escrow-tp7.tp7-nv1110.testnet` (9.5 NEAR) under the
 faucet account `tp7-nv1110.testnet` (also the owner), deployed, initialised and
 deleted the account's key in one transaction, then checked `get_config` and an
@@ -220,6 +224,9 @@ mode on|off | add <accounts> | remove <accounts> | upgrade <wasm> | freeze`.
 For mainnet the owner should be a Ledger account; `freeze` only after the code
 is final.
 
-Not covered: the app's `/api/intents/execute` relaying an EVM host's
-`auth_call` from the browser (the route was exercised by the smoke only when
-`APP_URL` is set), UI for EVM hosts, mainnet.
+The smoke was run a second time with `APP_URL=http://localhost:3000`, so the
+EVM host's `auth_call`s went through the app's `/api/intents/execute` route; it
+passed. The site switched: Vercel Production/Preview `NEXT_PUBLIC_EVENTS_CONTRACT`
+= tp7, main `19403d4` deployed, www.nearvent.site serves tp7 and `/e/4`.
+
+Not covered: UI for EVM hosts (contract and relayer only), mainnet.
