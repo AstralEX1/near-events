@@ -88,9 +88,10 @@ button:not(:disabled), summary { cursor: pointer; }
   outline: 2px solid var(--accent);
   outline-offset: 4px;
 }
-::selection { background: var(--brand); color: #24212e; }
+::selection { background: var(--brand); color: #1e0b2b; }
 .bg-accent.text-white { color: var(--on-accent); }
-.gc-brand { font-family: var(--font-display); font-weight: 800; font-size: 27px; letter-spacing: -.065em; line-height: 1; white-space: nowrap; }
+.gc-brand { font-family: var(--font-display); font-weight: 800; font-size: 27px; letter-spacing: -.04em; line-height: 1; white-space: nowrap; display: inline-flex; align-items: center; gap: .2em; }
+.gc-brand em { font-style: normal; background: var(--accent); color: var(--on-accent); padding: .06em .28em .12em; border-radius: .3em; display: inline-block; transform: rotate(-4deg); }
 .gc-eyebrow { font-size: .75rem; letter-spacing: .12em; font-weight: 600; text-transform: uppercase; color: var(--accent); }
 .gc-page-title { font-size: clamp(1.85rem, 4vw, 2.75rem); font-weight: 600; letter-spacing: -.045em; line-height: 1.15; }
 .gc-header { position: sticky; top: 0; z-index: 30; background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }
@@ -100,7 +101,7 @@ button:not(:disabled), summary { cursor: pointer; }
 .gc-account { position: relative; }
 .gc-account summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); list-style: none; font-size: .875rem; }
 .gc-account summary::-webkit-details-marker { display: none; }
-.gc-account-panel { position: absolute; top: calc(100% + 10px); right: 0; min-width: 190px; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 12px 32px #24212e12; }
+.gc-account-panel { position: absolute; top: calc(100% + 10px); right: 0; min-width: 190px; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 12px 32px #1e0b2b12; }
 .gc-account-panel a, .gc-account-panel button { display: block; padding: 12px; width: 100%; text-align: left; border-radius: 10px; font-size: .875rem; }
 .gc-account-panel a:hover, .gc-account-panel button:hover { background: var(--accent-soft); }
 .gc-main { flex: 1; width: 100%; max-width: 1088px; margin: 0 auto; padding: 48px 24px 64px; }
@@ -125,7 +126,7 @@ button:not(:disabled), summary { cursor: pointer; }
 .gc-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .gc-reveal { animation: gc-reveal 220ms cubic-bezier(.23,1,.32,1); }
 @keyframes gc-reveal { from { opacity: 0; transform: translateY(-4px); } }
-.gc-create-form { padding: 28px; border: 1px solid var(--border); border-radius: 28px; background: var(--surface); box-shadow: 0 20px 60px #24212e05; }
+.gc-create-form { padding: 28px; border: 1px solid var(--border); border-radius: 28px; background: var(--surface); box-shadow: 0 20px 60px #1e0b2b05; }
 .gc-event-shell { padding: 24px; border-radius: 28px; }
 .gc-event-content { display: grid; gap: 36px; grid-template-columns: 320px minmax(0,1fr); padding: 28px; border-radius: 22px; background: var(--surface); }
 .gc-event-title { font-family: var(--font-display); font-size: clamp(1.9rem, 4vw, 2.6rem); font-weight: 600; line-height: 1.15; letter-spacing: -.045em; overflow-wrap: anywhere; }
@@ -135,7 +136,7 @@ button:not(:disabled), summary { cursor: pointer; }
 .gc-pass-code { padding: 16px; background: #fff; border-radius: 18px; flex-shrink: 0; }
 .gc-pass-copy { flex: 1; min-width: 150px; }
 .gc-price { font-size: 2rem; line-height: 1.15; font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
-.gc-list-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; transition: border-color 160ms ease; box-shadow: 0 2px 4px #24212e02; }
+.gc-list-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; transition: border-color 160ms ease; box-shadow: 0 2px 4px #1e0b2b02; }
 .gc-checkout { max-width: 480px; margin: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 28px; padding: 28px; }
 @media (hover: hover) and (pointer: fine) {
   .btn-primary:hover { background: color-mix(in srgb, var(--text) 85%, var(--accent)); }
@@ -147,7 +148,7 @@ button:not(:disabled), summary { cursor: pointer; }
   .gc-event-shell { padding: 12px; }
   .gc-event-content aside { max-width: 420px; width: 100%; margin: auto; }
   .gc-create-form { padding: 20px; }
-  .gc-mobile-register { display: flex; position: fixed; z-index: 20; bottom: 0; left: 0; right: 0; padding: 12px 20px max(12px, env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); gap: 16px; align-items: center; justify-content: space-between; box-shadow: 0 -8px 24px #24212e06; }
+  .gc-mobile-register { display: flex; position: fixed; z-index: 20; bottom: 0; left: 0; right: 0; padding: 12px 20px max(12px, env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); gap: 16px; align-items: center; justify-content: space-between; box-shadow: 0 -8px 24px #1e0b2b06; }
   .gc-mobile-register .btn { flex-shrink: 0; }
   body:has(.gc-mobile-register) .gc-footer { margin-bottom: 86px; }
 }
@@ -179,8 +180,11 @@ button:not(:disabled), summary { cursor: pointer; }
 .gc-theme-drawer { position:fixed; inset:auto 0 0 0; z-index:60; max-height:70vh; overflow-y:auto; background:var(--surface); color:var(--text); border-top:1px solid var(--border); border-radius:24px 24px 0 0; box-shadow:0 -24px 60px -30px rgb(36 33 46 / .35); transform:translateY(100%); visibility:hidden; transition:transform 320ms var(--ease-drawer), visibility 0s linear 320ms; }
 .gc-theme-drawer[data-open="true"] { transform:translateY(0); visibility:visible; transition:transform 320ms var(--ease-drawer), visibility 0s; }
 .gc-theme-tile { transition:transform 140ms var(--ease-out); }
+/* A new look (theme, colour, Regenerate) remounts the poster; blur hides the swap of two backgrounds. */
+.gc-poster { animation:gc-look-in 220ms var(--ease-out); }
+@keyframes gc-look-in { from { opacity:.6; filter:blur(4px); } }
 .gc-theme-tile:active { transform:scale(.97); }
-.gc-icon-button { display:flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:999px; background:rgb(255 255 255 / .9); color:#24212e; box-shadow:0 6px 18px -8px rgb(0 0 0 / .45); backdrop-filter:blur(8px); transition:transform 140ms var(--ease-out), background-color 160ms ease; }
+.gc-icon-button { display:flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:999px; background:rgb(255 255 255 / .9); color:#1e0b2b; box-shadow:0 6px 18px -8px rgb(0 0 0 / .45); backdrop-filter:blur(8px); transition:transform 140ms var(--ease-out), background-color 160ms ease; }
 .gc-icon-button:active { transform:scale(.94); }
 @media (hover:hover) and (pointer:fine) { .gc-icon-button:hover { background:#fff; } }
 /* A new cover or theme fades in instead of swapping abruptly. */

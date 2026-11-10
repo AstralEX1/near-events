@@ -76,7 +76,7 @@ export default function EventPage() {
   // Cover, hosts and who's going on the left; title, time and registration on the right.
   return (
     <>
-    <VisualBackdrop visual={visual} className="gc-event-shell">
+    <VisualBackdrop visual={visual} className="gc-event-shell" themeFont>
       <div className="gc-event-content">
         <aside className="space-y-6">
           <Cover event={event} visual={visual} coverUrl={details?.cover_url} className="aspect-square w-full rounded-2xl shadow-sm" />

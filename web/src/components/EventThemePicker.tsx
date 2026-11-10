@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { createRandomVisual, EVENT_FONTS, EVENT_LAYOUTS, EVENT_THEMES, eventPalettes, resolveEventVisual, shuffleEventVisual, withVisualOptions, type EventThemeId, type EventVisualConfig } from "@/lib/event-visuals";
+import { createRandomVisual, EVENT_FONTS, EVENT_LAYOUTS, EVENT_THEMES, eventPalettes, regenerateEventVisual, resolveEventVisual, shuffleEventVisual, withVisualOptions, type EventThemeId, type EventVisualConfig } from "@/lib/event-visuals";
 import { EventPoster, VisualBackdrop } from "@/components/EventVisual";
 
 /** A small preview of a theme: its background with "Title" in its font, like Luma's tiles. */
@@ -81,7 +81,7 @@ export function EventThemePicker({ value, title, coverUrl, photo, onPhoto, onCha
   return (
     <div className="space-y-3">
       <div className="relative">
-        <EventPoster key={photo ?? coverUrl ?? "theme"} title={title.trim() || "Your event title"} visual={value} coverUrl={photo ?? coverUrl} className="gc-poster aspect-square w-full rounded-3xl shadow-lg" />
+        <EventPoster key={photo ?? coverUrl ?? `${value.themeId}:${value.seed}`} title={title.trim() || "Your event title"} visual={value} coverUrl={photo ?? coverUrl} className="gc-poster aspect-square w-full rounded-3xl shadow-lg" />
         {onPhoto && (
           <div className="absolute bottom-3 right-3 flex gap-2">
             {photo && (
@@ -127,6 +127,16 @@ export function EventThemePicker({ value, title, coverUrl, photo, onPhoto, onCha
           </div>
 
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-border pt-3">
+            {!selected.backgroundAsset && (
+              <Setting label="Background">
+                <Option label="Regenerate background" active={false} onClick={() => onChange(regenerateEventVisual(value))}>
+                  <span className="inline-flex items-center gap-1.5">
+                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" /></svg>
+                    Regenerate
+                  </span>
+                </Option>
+              </Setting>
+            )}
             <Setting label="Color">
               {eventPalettes(value.themeId).map((colors, index) => (
                 <button key={colors[1]} type="button" aria-label={`Color ${index + 1}`} aria-pressed={selected.variant === index} onClick={() => onChange(withVisualOptions(value, { variant: index }))}
@@ -170,7 +180,7 @@ function Setting({ label, children }: { label: string; children: ReactNode }) {
 
 function Option({ label, active, onClick, children }: { label: string; active: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <button type="button" aria-label={label} aria-pressed={active} onClick={onClick} className={`h-8 rounded-full px-3 text-xs ${active ? "bg-text text-bg" : "lu-pill !h-8 text-muted"}`}>
+    <button type="button" aria-label={label} aria-pressed={active} onClick={onClick} className={`h-8 rounded-full px-3 text-xs transition-transform duration-150 ease-out active:scale-[.97] ${active ? "bg-text text-bg" : "lu-pill !h-8 text-muted"}`}>
       {children}
     </button>
   );

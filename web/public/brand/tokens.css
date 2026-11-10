@@ -1,24 +1,24 @@
-/* Good company: shared by the landing and application. */
+/* Party poster brand: shared by the landing and application. */
 :root, .embed[data-theme] {
   color-scheme: light;
-  --bg: #f7f5f0;
+  --bg: #fff6fb;
   --surface: #ffffff;
-  --text: #24212e;
-  --muted: #68616f;
-  --border: #e6e0e8;
-  --field-border: #a29aa9;
-  --accent: #6550b9;
+  --text: #1e0b2b;
+  --muted: #6e5a78;
+  --border: #f1dce8;
+  --field-border: #b79dbd;
+  --accent: #d61f69;
   --on-accent: #ffffff;
-  --accent-soft: #eee8fa;
-  --brand: #c3b6f2;
-  --apricot: #f3b99f;
-  --sage: #cedfcb;
+  --accent-soft: #ffe4f0;
+  --brand: #ffb3d2;
+  --apricot: #ffd23f;
+  --sage: #d2ccff;
   --good: #237a57;
   --warn: #8c5a13;
   --danger: #b53e49;
-  --font-body: 'Geist', system-ui, sans-serif;
-  --font-display: 'Manrope', 'Geist', system-ui, sans-serif;
-  --font-geist-sans: 'Geist', system-ui, sans-serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'DM Sans', system-ui, sans-serif;
+  --font-geist-sans: 'DM Sans', system-ui, sans-serif;
   --font-geist-mono: 'Geist Mono', ui-monospace, monospace;
   --ease-out: cubic-bezier(.23, 1, .32, 1);
   --ease-drawer: cubic-bezier(.32, .72, 0, 1);
@@ -26,16 +26,16 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]), .embed[data-theme="auto"] {
     color-scheme: dark;
-    --bg: #19171f; --surface: #25222d; --text: #f7f5f0; --muted: #bdb7c8;
-    --border: #3b3546; --field-border: #80768e;
-    --accent: #b6a5ef; --on-accent: #24212e; --accent-soft: #342d46;
+    --bg: #1a0b22; --surface: #28132f; --text: #fff6fb; --muted: #cdb8d6;
+    --border: #462a52; --field-border: #8f6f9a;
+    --accent: #ff6aa8; --on-accent: #1e0b2b; --accent-soft: #46193a;
     --good: #86d0aa; --warn: #ebbf80; --danger: #f1a1aa;
   }
 }
 :root[data-theme="dark"], .embed[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #19171f; --surface: #25222d; --text: #f7f5f0; --muted: #bdb7c8;
-  --border: #3b3546; --field-border: #80768e;
-  --accent: #b6a5ef; --on-accent: #24212e; --accent-soft: #342d46;
+  --bg: #1a0b22; --surface: #28132f; --text: #fff6fb; --muted: #cdb8d6;
+  --border: #462a52; --field-border: #8f6f9a;
+  --accent: #ff6aa8; --on-accent: #1e0b2b; --accent-soft: #46193a;
   --good: #86d0aa; --warn: #ebbf80; --danger: #f1a1aa;
 }
