@@ -81,7 +81,7 @@ export function EventThemePicker({ value, title, coverUrl, photo, onPhoto, onCha
   return (
     <div className="space-y-3">
       <div className="relative">
-        <EventPoster key={photo ?? coverUrl ?? "theme"} title={title.trim() || "Your event title"} visual={value} coverUrl={photo ?? coverUrl} className="gc-poster aspect-square w-full rounded-3xl shadow-lg" />
+        <EventPoster key={photo ?? coverUrl ?? `${value.themeId}:${value.seed}`} title={title.trim() || "Your event title"} visual={value} coverUrl={photo ?? coverUrl} className="gc-poster aspect-square w-full rounded-3xl shadow-lg" />
         {onPhoto && (
           <div className="absolute bottom-3 right-3 flex gap-2">
             {photo && (
@@ -180,7 +180,7 @@ function Setting({ label, children }: { label: string; children: ReactNode }) {
 
 function Option({ label, active, onClick, children }: { label: string; active: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <button type="button" aria-label={label} aria-pressed={active} onClick={onClick} className={`h-8 rounded-full px-3 text-xs ${active ? "bg-text text-bg" : "lu-pill !h-8 text-muted"}`}>
+    <button type="button" aria-label={label} aria-pressed={active} onClick={onClick} className={`h-8 rounded-full px-3 text-xs transition-transform duration-150 ease-out active:scale-[.97] ${active ? "bg-text text-bg" : "lu-pill !h-8 text-muted"}`}>
       {children}
     </button>
   );
