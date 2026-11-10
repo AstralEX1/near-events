@@ -63,6 +63,10 @@ export async function POST(req: Request) {
   if (!tx) {
     return Response.json({ error: "Only Nearvent transactions are relayed" }, { status: 400 });
   }
+  // The relayer would also pay a delegate action's deposits, so /api/fastauth/relay refuses them; don't sign them either.
+  if (tx.delegate && tx.calls.some((call) => call.deposit > 1n)) {
+    return Response.json({ error: "Google and email accounts can create free events only: up to 50 seats, 2 open events, ending within 60 days." }, { status: 400 });
+  }
   const account = tx.signerId;
   try {
     if (await unpaidBeyondFreeTier(tx)) {
