@@ -15,19 +15,24 @@ export default function DocsHome() {
       </div>
 
       <Section id="flow" title="Four steps">
-        <div className="space-y-10">
-          <Shot n={1} src="/docs/create.png" w={1480} h={1080} title="Create an event">
-            Stake to RSVP, sell tickets, or keep it free. Up to 50 seats costs the host nothing.
+        <div className="space-y-12">
+          <Shot n={1} title="Create an event" images={[{ src: "/docs/create.png", w: 1480, h: 1080, alt: "Choosing Stake to RSVP, Ticket or Free" }]}>
+            Stake to RSVP, sell tickets, or keep it free. Up to 50 seats is free for the host.
           </Shot>
-          <Shot n={2} src="/docs/register.png" w={1304} h={506} title="Guests register">
+          <Shot n={2} title="Guests register" images={[{ src: "/docs/register.png", w: 1304, h: 506, alt: "Register button with a 0.1 USDC deposit" }]}>
             One click puts down the deposit in USDC.
           </Shot>
-          <Shot n={3} src="/docs/pass.png" w={1304} h={722} title="Check in at the door">
+          <Shot
+            n={3}
+            title="Check in at the door"
+            images={[
+              { src: "/docs/pass.png", w: 1304, h: 722, alt: "Guest QR pass" },
+              { src: "/docs/checkin.png", w: 1840, h: 156, alt: "Guest marked as checked in" },
+            ]}
+          >
             Guests show their QR. The host or door team marks them in.
           </Shot>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/docs/checkin.png" width={1840} height={156} alt="A guest marked as checked in" loading="lazy" className="w-full h-auto rounded-2xl border border-border -mt-6" />
-          <Shot n={4} src="/docs/payout.png" w={1304} h={1030} title="Get paid">
+          <Shot n={4} title="Get paid" images={[{ src: "/docs/payout.png", w: 1304, h: 1030, alt: "Payout ready to withdraw" }]}>
             The host closes the event. Everyone who came gets their deposit back plus a share of the no-shows.
           </Shot>
         </div>

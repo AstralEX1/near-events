@@ -75,20 +75,26 @@ export function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
   );
 }
 
-/** A real screenshot from the site with a short title and one line under it. */
-export function Shot({ src, w, h, n, title, children }: { src: string; w: number; h: number; n: number; title: string; children: ReactNode }) {
+type Img = { src: string; w: number; h: number; alt: string };
+
+/** One step: number and a line on the left, real screenshots from the site on the right. */
+export function Shot({ n, title, images, children }: { n: number; title: string; images: Img[]; children: ReactNode }) {
   return (
-    <figure className="space-y-3">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} width={w} height={h} alt={title} loading="lazy" className="w-full h-auto rounded-2xl border border-border" />
-      <figcaption className="flex gap-3">
-        <span className="w-7 h-7 shrink-0 rounded-full bg-accent-soft text-accent text-sm font-semibold flex items-center justify-center">{n}</span>
-        <span>
-          <span className="block font-medium">{title}</span>
-          <span className="block text-sm text-muted">{children}</span>
-        </span>
-      </figcaption>
-    </figure>
+    <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:gap-8 md:items-center">
+      <div className="flex gap-3">
+        <span className="w-8 h-8 shrink-0 rounded-full bg-accent-soft text-accent font-semibold flex items-center justify-center">{n}</span>
+        <div>
+          <div className="font-semibold text-lg leading-snug">{title}</div>
+          <div className="text-sm text-muted mt-1">{children}</div>
+        </div>
+      </div>
+      <div className="space-y-2 pointer-events-none select-none">
+        {images.map((im) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={im.src} src={im.src} width={im.w} height={im.h} alt={im.alt} loading="lazy" className="w-full h-auto rounded-2xl shadow-lg shadow-black/5" />
+        ))}
+      </div>
+    </div>
   );
 }
 
