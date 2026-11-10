@@ -21,7 +21,8 @@ export function GoingList({ accounts, names = {}, avatars, total, verb = "Going"
   const shown = accounts.slice(0, 2).map((a) => names[a] || shortAccount(a));
   return (
     <Section label={`${total} ${verb}`}>
-      <SlAvatars accounts={accounts} names={names} avatars={avatars} role={verb === "Going" ? "Going · view profile" : "Went · view profile"} />
+      {/* Remount when names arrive: the avatars widget keeps the first name it rendered. */}
+      <SlAvatars key={Object.values(names).join("|")} accounts={accounts} names={names} avatars={avatars} role={verb === "Going" ? "Going · view profile" : "Went · view profile"} />
       <p className="mt-2 text-sm text-muted break-words">{goingLine(shown, total)}</p>
     </Section>
   );
