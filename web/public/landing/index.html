@@ -207,7 +207,7 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .strip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (hover: none) { .strip-nav { display: none; } }
 /* photos run from the text column to the screen edge; swipe on phones, arrows on desktop */
-.strip { --pad: max(20px, calc((100% - 1160px) / 2 + 20px)); display: flex; gap: 12px; margin-top: clamp(28px, 4vw, 48px); padding-inline: var(--pad); scroll-padding-inline: var(--pad); overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; }
+.strip { --pad: max(20px, calc((100% - 1160px) / 2 + 20px)); position: relative; display: flex; gap: 12px; margin-top: clamp(28px, 4vw, 48px); padding-inline: var(--pad); scroll-padding-inline: var(--pad); overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; }
 .strip::-webkit-scrollbar { display: none; }
 .strip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .strip img { flex: none; height: clamp(260px, 34vw, 440px); width: auto; border-radius: 20px; scroll-snap-align: start; background: var(--soft); }
@@ -309,7 +309,13 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     <script>
       (() => {
         const strip = document.querySelector('.strip'), [prev, next] = document.querySelectorAll('.strip-btn');
-        const go = dir => strip.scrollBy({ left: dir * strip.clientWidth * 0.8, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        // next: start at the first photo cut off on the right; prev: go back about one screen
+        const go = dir => {
+          const imgs = [...strip.querySelectorAll('img')], pad = parseFloat(getComputedStyle(strip).paddingLeft), x = strip.scrollLeft;
+          const to = dir > 0 ? imgs.find(i => i.offsetLeft + i.offsetWidth > x + strip.clientWidth - 1)
+                             : imgs.find(i => i.offsetLeft - pad >= x - (strip.clientWidth - 2 * pad) - 1);
+          strip.scrollTo({ left: to ? to.offsetLeft - pad : 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        };
         const sync = () => { prev.disabled = strip.scrollLeft < 4; next.disabled = strip.scrollLeft + strip.clientWidth > strip.scrollWidth - 4; };
         prev.onclick = () => go(-1); next.onclick = () => go(1);
         strip.addEventListener('scroll', sync, { passive: true }); addEventListener('resize', sync); addEventListener('load', sync); sync();
