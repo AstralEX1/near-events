@@ -3,8 +3,11 @@ import type { EventMode } from "./near";
 
 // Where each step of the Create and Integrate flows lives. See createStep for the rules.
 
+/** How guests join: a deposit or a ticket on chain, or Free (our server only, see freeEventsShared.ts). */
+export type JoinMode = EventMode | "Free";
+
 export interface Choice {
-  mode: EventMode;
+  mode: JoinMode;
   amount: string;
   /** The Luma or BaliSquad link, in the Integrate flow only. */
   link?: string;
@@ -15,8 +18,8 @@ interface Params {
   has(name: string): boolean;
 }
 
-export function parseMode(value: string | null | undefined): EventMode | null {
-  return value === "Deposit" || value === "Ticket" ? value : null;
+export function parseMode(value: string | null | undefined): JoinMode | null {
+  return value === "Deposit" || value === "Ticket" || value === "Free" ? value : null;
 }
 
 /** At least 0.1 USDC, which has 6 decimals. */
@@ -27,9 +30,11 @@ export function validAmount(value: string | null | undefined): boolean {
 /** Which screen /create shows. `from` (Duplicate event) has always opened the form directly. */
 export function createStep(params: Params): "form" | "start-create" | "start-widget" {
   if (params.has("from")) return "form";
-  const chosen = !!parseMode(params.get("mode")) && validAmount(params.get("amount"));
+  const mode = parseMode(params.get("mode"));
+  const chosen = mode === "Free" || (!!mode && validAmount(params.get("amount")));
   if (params.get("flow") === "widget") {
-    return chosen && detectEventSource(params.get("import") ?? "") ? "form" : "start-widget";
+    // The site button takes payment, so Integrate never opens a free event.
+    return chosen && mode !== "Free" && detectEventSource(params.get("import") ?? "") ? "form" : "start-widget";
   }
   return chosen && params.get("step") !== "start" ? "form" : "start-create";
 }
