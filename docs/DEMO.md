@@ -4,8 +4,9 @@ The hosted demo is https://www.nearvent.site/e/4 ("NEAR Builders Night Bali",
 escrow-tp7, Paradise theme, 1 USDC deposit, six registered demo guests, 3 Dec
 2026). It was created by `web/scripts/seed-demo.mjs`, which also hides the
 earlier QA events from the public feed (Private = link only). Do not present
-mainnet payment or EVM flows as live until the release checks in
-[`DEPLOY.md`](DEPLOY.md) pass. (Updated 2026-11-10, Claude)
+mainnet payments as live until the mainnet release checks in
+[`DEPLOY.md`](DEPLOY.md#mainnet-release) pass; once the site runs on mainnet,
+record the same script there with a 0.1 USDC event. (Updated 2026-11-10, Claude)
 
 | Time | Show | Say |
 |---|---|---|

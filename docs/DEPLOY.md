@@ -24,10 +24,13 @@ read-only checks; no mainnet transaction has been sent.
   a mainnet site can never fall back to the testnet escrow.
 - NEAR Auth (Google/email): `fast-auth.near`, MPC `v1.signer`, issuer
   `login.auth.near.org`. Mainnet accounts hold no NEAR: the relayer creates each
-  new account with 0.003 NEAR (its storage) and pays all gas through NEP-366
-  meta-transactions (`/api/fastauth/relay`), and pays USDC storage for 1Click
-  cash-out addresses. Without `NEXT_PUBLIC_FASTAUTH_CLIENT_ID` the Google button
-  is hidden (the shared testnet client does not work on mainnet).
+  new account with 0.003 NEAR (its storage) and sends every action as a NEP-366
+  meta-transaction (`/api/fastauth/relay`), paying its gas and its 1 yoctoNEAR
+  deposit; it also pays USDC storage for 1Click cash-out addresses. Because the
+  relayer would pay any deposit inside a meta-transaction, deposits above 1 yocto
+  are refused: Google/email hosts get free-tier events only (like EVM hosts).
+  Without `NEXT_PUBLIC_FASTAUTH_CLIENT_ID` the Google button is hidden (the shared
+  testnet client does not work on mainnet).
 - 1Click: `https://1click.chaindefuser.com`; `ONECLICK_API_KEY` is sent as
   `Authorization: Bearer` (without a key 1Click adds 0.25% per quote).
 - Demo account and test USDC faucet are testnet-only and switch off by themselves.
@@ -330,3 +333,19 @@ passed. The site switched: Vercel Production/Preview `NEXT_PUBLIC_EVENTS_CONTRAC
 = tp7, main `19403d4` deployed, www.nearvent.site serves tp7 and `/e/4`.
 
 Not covered: UI for EVM hosts (contract and relayer only), mainnet.
+
+## Meta-transaction testnet check (2026-11-10, Claude)
+
+`web/scripts/smoke-meta-tx.mjs` against the local app (`localhost:3000`, testnet,
+`escrow-tp7`, relayer `relayer-nearevents-11022103.testnet`). A fresh implicit
+account, made like a Google/email one, was activated by `/api/fastauth/fund`.
+Through `/api/fastauth/relay` it created free event 12
+(`HLKPc1iNMcmCZREinpEvK5hNiX41SooBhEtVaHuFYNrU`) and cancelled it
+(`6ZTCtzNkFCeoFHswU7iX3M2qJHUthhzho6UHYiGf242v`); its NEAR balance did not move,
+so the relayer paid the gas and the 1 yocto deposit. A forged signature (401),
+another contract (400) and a create with 1 NEAR attached (400) were refused before
+anything was sent. `storageFor` registered USDC storage for a fresh account
+(`765b386e…57cbcc`, 0.00125 NEAR from the relayer); a second call saw it registered
+and sent nothing. Earlier runs found that NEP-366 bills inner deposits to the
+relayer; that is why deposits above 1 yocto are refused. Events 10 and 11 are
+cancelled leftovers of those runs.

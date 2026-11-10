@@ -4,6 +4,8 @@
 // fresh account. The key is made here and never saved.
 // Env: APP_URL (default http://localhost:3000), NETWORK (default testnet), EVENTS_CONTRACT.
 // On mainnet this spends a little of the relayer's real NEAR (≈0.01).
+// Against a local server without Redis the in-memory limit allows about 8 relay calls a
+// minute, so the last step may answer 429; wait a minute and run it again.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { actions, buildDelegateAction, encodeDelegateAction, KeyPair } from "near-api-js";
