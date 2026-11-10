@@ -197,6 +197,18 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .quote { display: flex; }
 .quote blockquote { margin: 0; text-align: left; font-size: clamp(28px, 3.6vw, 44px); font-weight: 650; letter-spacing: -0.035em; line-height: 1.08; max-width: 15em; }
 
+/* ---------- LIVE (BaliSquad) ---------- */
+.live { border-top: 1px solid var(--line); }
+.live .wrap { display: flex; flex-direction: column; gap: clamp(28px, 4vw, 48px); }
+.live-photos { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; aspect-ratio: 2 / 1; }
+.live-photos img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 20px; background: var(--soft); }
+.live-photos img:first-child { grid-row: span 2; }
+@media (max-width: 860px) {
+  .live-photos { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; aspect-ratio: auto; }
+  .live-photos img { height: auto; aspect-ratio: 1; border-radius: 16px; }
+  .live-photos img:first-child { grid-row: auto; grid-column: 1 / -1; aspect-ratio: 4 / 3; }
+}
+
 
 /* ---------- INTEGRATE ---------- */
 .integrate { background: var(--soft); border-top: 1px solid var(--line); }
@@ -214,8 +226,8 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .snippet .tok-tag { color: #d2ccff; }
 .snippet .tok-attr { color: #ffb3d2; }
 .snippet .tok-val { color: #ffd23f; }
-.integrate .more { font-size: 15px; font-weight: 650; color: var(--accent-ink); text-decoration: none; }
-.integrate .more:hover { text-decoration: underline; }
+.integrate .more, .live .more { font-size: 15px; font-weight: 650; color: var(--accent-ink); text-decoration: none; }
+.integrate .more:hover, .live .more:hover { text-decoration: underline; }
 
 /* ---------- WHY NEAR ---------- */
 .near-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
@@ -388,6 +400,22 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       </div>
       <div class="quote reveal">
         <blockquote>“It costs nothing to click Sign in. Which ruins everything.”</blockquote>
+      </div>
+    </div>
+  </section>
+
+  <section class="live" id="live">
+    <div class="wrap">
+      <div class="txt reveal">
+        <span class="eyebrow">Already live</span>
+        <h2 class="h2">Running with BaliSquad.</h2>
+        <p class="lead">AI Coworking Meetup in Uluwatu, 9 November. 7 guests put down a deposit. All 7 checked in.</p>
+        <a class="more" href="https://balisquad.com/event/bukitsocial-z3CmSN" target="_blank" rel="noreferrer">See the event on BaliSquad →</a>
+      </div>
+      <div class="live-photos reveal">
+        <img src="/landing/photos/balisquad-room.webp" alt="Guests at the BaliSquad AI Coworking Meetup; a laptop in front shows a Nearvent QR pass" width="1200" height="900" loading="lazy" decoding="async" />
+        <img src="/landing/photos/balisquad-scan.webp" alt="Host checks in guests by scanning a QR pass with the laptop camera" width="910" height="512" loading="lazy" decoding="async" style="object-position: 40% center" />
+        <img src="/landing/photos/balisquad-guest.webp" alt="Guest shows a QR pass at the door" width="910" height="512" loading="lazy" decoding="async" style="object-position: 75% center" />
       </div>
     </div>
   </section>
