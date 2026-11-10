@@ -192,8 +192,8 @@ function ManageEvent() {
 
   const exportCsv = () => {
     const rows = [
-      ["name", "account", "status", "registered_at", "paid_by"],
-      ...guests.map((g) => [guestNames[g.account_id] ?? "", g.account_id, g.status, new Date(g.registered_at).toISOString(), g.paid_by]),
+      ["name", "account", "status", "registered_at"],
+      ...guests.map((g) => [guestNames[g.account_id] ?? "", g.account_id, g.status, new Date(g.registered_at).toISOString()]),
     ];
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
@@ -508,7 +508,6 @@ function GuestsTab({
                     <div className="text-xs text-muted">
                       {name ? `${shortAccount(g.account_id)} · ` : ""}
                       {attended ? "Checked in" : "Paid · going"}
-                      {g.paid_by !== g.account_id ? ` · paid by ${shortAccount(g.paid_by)}` : ""}
                     </div>
                   </div>
                   {attended ? (

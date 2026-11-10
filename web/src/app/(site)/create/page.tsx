@@ -4,7 +4,7 @@ import { SlAmount, SlCopy } from "@/components/SlUi";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { events, formatNear, FREE_MAX_CAPACITY, FREE_MAX_OPEN_EVENTS, MAX_CAPACITY, toUnits, type EventMode, type EventView } from "@/lib/near";
+import { events, formatNear, FREE_MAX_CAPACITY, FREE_MAX_DAYS, FREE_MAX_OPEN_EVENTS, MAX_CAPACITY, toUnits, type EventMode, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { Cover } from "@/components/ui";
@@ -190,20 +190,21 @@ function CreateEvent() {
   const missing = !free && when && when.end < Date.now() ? "Pick Free to add a past event" : !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? `Set the capacity: 1 to ${maxSeats}` : doorTeamProblem ?? undefined;
   // yoctoNEAR the host pays for storage beyond the free tier; "0" when free.
   const [storageCost, setStorageCost] = useState("0");
+  const endsAt = when?.end;
   useEffect(() => {
     if (free || !accountId || !seatsOk) return setStorageCost("0");
     let live = true;
     const timer = setTimeout(() => {
-      events.createCost(accountId, seats).then((c) => live && setStorageCost(c)).catch(() => {});
+      events.createCost(accountId, seats, endsAt).then((c) => live && setStorageCost(c)).catch(() => {});
     }, 300);
     return () => {
       live = false;
       clearTimeout(timer);
     };
-  }, [free, accountId, seats, seatsOk]);
+  }, [free, accountId, seats, seatsOk, endsAt]);
   const costNote = storageCost !== "0" && (
     <p className="text-sm text-muted">
-      Created at your expense: ~{formatNear(storageCost)} NEAR (storage). Free events are up to {FREE_MAX_CAPACITY} seats and {FREE_MAX_OPEN_EVENTS} open events.
+      Created at your expense: ~{formatNear(storageCost)} NEAR (storage). Free events are up to {FREE_MAX_CAPACITY} seats and {FREE_MAX_OPEN_EVENTS} open events, ending within {FREE_MAX_DAYS} days.
     </p>
   );
 
@@ -244,7 +245,7 @@ function CreateEvent() {
         return;
       }
       // Checked again right before signing: the host may have opened another event meanwhile.
-      const deposit = BigInt(await events.createCost(accountId, capacity));
+      const deposit = BigInt(await events.createCost(accountId, capacity, when.end));
       const submittedAt = Date.now();
       // Theme, image, font and random-seed choices are presentation data; save them off-chain below.
       await send([

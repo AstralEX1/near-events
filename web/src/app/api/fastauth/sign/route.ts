@@ -17,8 +17,9 @@ async function unpaidBeyondFreeTier(tx: Tx): Promise<boolean> {
   for (const action of tx.actions) {
     const call = action.functionCall;
     if (call?.methodName !== "create_event") continue;
-    const capacity = Number(JSON.parse(new TextDecoder().decode(call.args)).capacity);
-    const cost = BigInt(await events.createCost(tx.signerId, capacity));
+    const args = JSON.parse(new TextDecoder().decode(call.args));
+    const endsAt = Number(args.metadata?.ends_at);
+    const cost = BigInt(await events.createCost(tx.signerId, Number(args.capacity), Number.isSafeInteger(endsAt) ? endsAt : undefined));
     if (cost > 0n && BigInt(call.deposit) < cost) return true;
   }
   return false;
@@ -95,7 +96,7 @@ export async function POST(req: Request) {
   const account = tx.signerId;
   try {
     if (await unpaidBeyondFreeTier(tx)) {
-      return Response.json({ error: "Free events are up to 50 seats and 2 open events per host. Attach the storage deposit shown on the create page." }, { status: 400 });
+      return Response.json({ error: "Free events are up to 50 seats and 2 open events per host, ending within 60 days. Attach the storage deposit shown on the create page." }, { status: 400 });
     }
   } catch {
     return Response.json({ error: "Could not check the event's storage cost" }, { status: 502 });

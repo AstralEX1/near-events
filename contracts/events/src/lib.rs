@@ -24,50 +24,64 @@
 //! A guest always pays for their own seat. Only the NEAR Intents verifier
 //! names a guest other than the sender.
 //!
-//! Free tier: an event of up to `FREE_MAX_CAPACITY` seats, while the host has
-//! fewer than `FREE_MAX_OPEN_EVENTS` open events, is free. The contract pays
-//! for storage from its own NEAR balance, which the operator keeps topped up.
-//! Anything bigger, or more open events, the host pays for: `create_event`
-//! takes the storage cost (`create_event_cost`) as attached NEAR and returns
-//! the excess. The deposit has a floor so seats always cost guests something.
+//! Free tier: an event of up to `FREE_MAX_CAPACITY` seats that ends within
+//! `FREE_MAX_HORIZON_MS`, while the host has fewer than `FREE_MAX_OPEN_EVENTS`
+//! open events, is free. With the whitelist mode on, only whitelisted hosts
+//! get the free tier. The contract pays for storage from its own NEAR
+//! balance, which the operator keeps topped up. Anything else the host pays
+//! for: `create_event` takes the storage cost (`create_event_cost`) as
+//! attached NEAR, returns the excess, and gives back the share of empty seats
+//! when the event closes. The deposit has a floor so seats always cost guests
+//! something.
+//!
+//! Accounts that live in NEAR Intents (EVM, Solana, passkey wallets) act as
+//! hosts through the verifier's `auth_call` intent, which calls `on_auth`.
+//!
+//! The owner can replace the code (`upgrade`) until `freeze`, which is one-way.
+//! The escrow account keeps no access keys, so after `freeze` nobody can
+//! change the code. The owner also runs the host whitelist.
 //!
 //! Each guest's finalized attendances are counted (`get_attended_count`).
 
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::{self, json};
-use near_sdk::store::{LookupMap, Vector};
+use near_sdk::store::{LookupMap, LookupSet, Vector};
 use near_sdk::{
     env, ext_contract, near, require, AccountId, BorshStorageKey, Gas, NearToken, PanicOnDefault,
     Promise, PromiseOrValue,
 };
 
 // Sizes below are the measured worst case (64-char accounts, 120-char title)
-// plus ~25%: event 432 B, registration 261 B, balance entry 141 B,
-// attendance counter 113 B. `tests.rs` checks real storage stays under them.
+// plus ~25%: event 444 B, registration 191 B, balance entry 141 B,
+// attendance counter 113 B, whitelist entry 110 B. `tests.rs` checks real
+// storage stays under them.
 /// Storage for one registration and its indexes. Each seat also reserves
 /// a separate balance entry and an attendance counter for settlement.
-pub const STORAGE_BYTES_PER_GUEST: u64 = 328;
+pub const STORAGE_BYTES_PER_GUEST: u64 = 240;
 const BALANCE_BYTES: u64 = 176;
 /// One entry in `attended_events`.
 const ATTENDED_BYTES: u64 = 144;
+/// One entry in `whitelist`.
+const WHITELIST_BYTES: u64 = 140;
 /// Written per guest at settlement: their balance and attendance counter.
 const SETTLE_BYTES: u64 = BALANCE_BYTES + ATTENDED_BYTES;
 const SEAT_BYTES: u64 = STORAGE_BYTES_PER_GUEST + SETTLE_BYTES;
 const MAX_VIEW_PAGE: u32 = 100;
 /// Upper bound for one event record: max-length title, the vector slot and the
 /// host's open-event counter.
-const EVENT_RECORD_BYTES: u64 = 540;
+const EVENT_RECORD_BYTES: u64 = 560;
 /// Largest event the contract pays storage for.
 pub const FREE_MAX_CAPACITY: u32 = 50;
 /// The free tier applies while the host has fewer open events than this.
 pub const FREE_MAX_OPEN_EVENTS: u32 = 2;
+/// A free event must end within this time, so spam reservations expire fast.
+pub const FREE_MAX_HORIZON_MS: u64 = 60 * 24 * 60 * 60 * 1000;
 /// Smallest deposit: 0.1 USDC (6 decimals). Stops events with a dust deposit
 /// where seats cost us storage but cost guests nothing.
 pub const MIN_DEPOSIT: u128 = 100_000;
-/// Technical cap, not a pricing limit: `finalize` walks every guest in one
-/// call and must stay well under the 300 Tgas block limit. Sandbox exercises
-/// this exact capacity.
+/// `finalize` walks every guest in one call: 300 guests use ~198 Tgas, well
+/// under the 1000 Tgas transaction limit. Sandbox exercises this capacity.
 pub const MAX_CAPACITY: u32 = 300;
 /// After `ends_at` + this grace period, anyone can `cancel` an unfinalized event.
 pub const ABANDON_GRACE_MS: u64 = 30 * 24 * 60 * 60 * 1000;
@@ -75,10 +89,12 @@ pub const ABANDON_GRACE_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 const MAX_TITLE_LEN: usize = 120;
 /// Events must end within a year, so the abandoned-event refund is always reachable.
 const MAX_EVENT_HORIZON_MS: u64 = 365 * 24 * 60 * 60 * 1000;
+const MAX_WHITELIST_BATCH: usize = 100;
 
 const GAS_FT_TRANSFER: Gas = Gas::from_tgas(10);
 const GAS_FT_TRANSFER_CALL: Gas = Gas::from_tgas(100);
 const GAS_WITHDRAW_CALLBACK: Gas = Gas::from_tgas(10);
+const GAS_MIGRATE: Gas = Gas::from_tgas(30);
 
 #[derive(BorshStorageKey)]
 #[near]
@@ -89,6 +105,7 @@ enum StorageKey {
     Balances,
     OpenEvents,
     AttendedEvents,
+    Whitelist,
 }
 
 #[near(serializers = [borsh, json])]
@@ -141,7 +158,8 @@ pub struct Event {
     pub created_at: u64,
     /// When the event was finalized or cancelled; 0 while open.
     pub closed_at: u64,
-    reserved_seats: u32,
+    /// NEAR (yocto) the host paid for storage; 0 on the free tier.
+    storage_paid: u128,
 }
 
 #[near(serializers = [json])]
@@ -167,14 +185,23 @@ pub struct GuestView {
     pub account_id: AccountId,
     pub status: GuestStatus,
     pub registered_at: u64,
-    pub paid_by: AccountId,
 }
 
 #[near(serializers = [borsh])]
 pub struct GuestRecord {
     pub status: GuestStatus,
     pub registered_at: u64,
-    pub paid_by: AccountId,
+}
+
+#[near(serializers = [json])]
+pub struct ConfigView {
+    pub usdc: AccountId,
+    pub intents: Option<AccountId>,
+    pub relayer: Option<AccountId>,
+    pub owner: AccountId,
+    /// True once `freeze` ran: the code can never change again.
+    pub frozen: bool,
+    pub whitelist_mode: bool,
 }
 
 /// `msg` accepted by `ft_on_transfer`.
@@ -184,6 +211,19 @@ pub enum TransferMsg {
     /// Take a seat for the sender. `guest` is only for payments relayed by
     /// NEAR Intents; from anyone else it must be absent or equal the sender.
     Register { event_id: u64, guest: Option<AccountId> },
+}
+
+/// `msg` accepted by `on_auth`: the same actions as the direct methods, done
+/// by the Intents account that signed the `auth_call` intent.
+#[near(serializers = [json])]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum AuthMsg {
+    CreateEvent { metadata: EventMetadata, deposit: U128, capacity: u32, mode: Option<EventMode> },
+    Finalize { event_id: u64, attended: Vec<AccountId> },
+    Cancel { event_id: u64 },
+    SetWhitelistMode { enabled: bool },
+    AddToWhitelist { accounts: Vec<AccountId> },
+    RemoveFromWhitelist { accounts: Vec<AccountId> },
 }
 
 #[ext_contract(ext_ft)]
@@ -204,7 +244,7 @@ struct Balance {
 #[derive(PanicOnDefault)]
 pub struct Contract {
     usdc: AccountId,
-    /// NEAR Intents verifier (`intents.near` on mainnet). None on testnet.
+    /// NEAR Intents verifier (`intents.near` on mainnet).
     intents: Option<AccountId>,
     events: Vector<Event>,
     guests: LookupMap<(u64, AccountId), GuestRecord>,
@@ -217,13 +257,19 @@ pub struct Contract {
     attended_events: LookupMap<AccountId, u32>,
     /// Optional account allowed to call `payout_to_intents` for other users (web relayer).
     relayer: Option<AccountId>,
+    /// Upgrades the code until `frozen`, and runs the whitelist.
+    owner: AccountId,
+    frozen: bool,
+    /// When on, only whitelisted hosts get the free tier.
+    whitelist_mode: bool,
+    whitelist: LookupSet<AccountId>,
 }
 
 #[near]
 impl Contract {
     #[init]
     #[private]
-    pub fn new(usdc: AccountId, intents: Option<AccountId>, relayer: Option<AccountId>) -> Self {
+    pub fn new(usdc: AccountId, intents: Option<AccountId>, relayer: Option<AccountId>, owner: AccountId) -> Self {
         Self {
             usdc,
             intents,
@@ -235,6 +281,10 @@ impl Contract {
             attended_events: LookupMap::new(StorageKey::AttendedEvents),
             relayer,
             reserved_bytes: 0,
+            owner,
+            frozen: false,
+            whitelist_mode: false,
+            whitelist: LookupSet::new(StorageKey::Whitelist),
         }
     }
 
@@ -252,51 +302,8 @@ impl Contract {
         capacity: u32,
         mode: Option<EventMode>,
     ) -> u64 {
-        let host = env::predecessor_account_id();
-        let mode = mode.unwrap_or_default();
-        validate_metadata(&metadata);
-        require!(deposit.0 >= MIN_DEPOSIT, "Deposit must be at least 0.1 USDC");
-        require!(capacity > 0 && capacity <= MAX_CAPACITY, "Capacity out of range");
-        let open = self.open_events.get(&host).copied().unwrap_or(0);
-        // The whole event, full house included, must be paid for up front.
-        let reserve = SEAT_BYTES * u64::from(capacity) + BALANCE_BYTES;
-        let cost = event_cost(open, capacity);
         let attached = env::attached_deposit().as_yoctonear();
-        if cost == 0 {
-            self.require_storage_pool(EVENT_RECORD_BYTES + reserve);
-        } else {
-            require!(
-                attached >= cost,
-                format!(
-                    "This event is beyond the free tier ({} seats, {} open events). Attach {} yoctoNEAR for its storage",
-                    FREE_MAX_CAPACITY, FREE_MAX_OPEN_EVENTS, cost
-                )
-            );
-        }
-        if attached > cost {
-            Promise::new(host.clone()).transfer(NearToken::from_yoctonear(attached - cost)).detach();
-        }
-        self.reserved_bytes += reserve;
-
-        let id = self.events.len() as u64;
-        self.events.push(Event {
-            host: host.clone(),
-            metadata,
-            deposit: deposit.0,
-            mode,
-            capacity,
-            status: EventStatus::Open,
-            guest_count: 0,
-            attended_count: 0,
-            payout_per_attendee: 0,
-            created_at: env::block_timestamp_ms(),
-            closed_at: 0,
-            reserved_seats: capacity,
-        });
-        self.open_events.insert(host.clone(), open + 1);
-
-        emit("event_created", json!({ "event_id": id, "host": host, "deposit": deposit, "mode": mode }));
-        id
+        self.create_event_for(env::predecessor_account_id(), metadata, deposit, capacity, mode, attached)
     }
 
     /// Closes the event with the guests who came (`attended`, checked in at
@@ -308,51 +315,7 @@ impl Contract {
     #[payable]
     pub fn finalize(&mut self, event_id: u64, attended: Vec<AccountId>) {
         near_sdk::assert_one_yocto();
-        let event = self.event(event_id);
-        require!(env::predecessor_account_id() == event.host, "Only the host");
-        require!(event.status == EventStatus::Open, "Event is closed");
-        require!(attended.len() <= MAX_CAPACITY as usize, "Too many accounts");
-        let (host, deposit, guest_count, mode) = (event.host.clone(), event.deposit, event.guest_count, event.mode);
-
-        let mut came = 0u32;
-        for account in &attended {
-            let record = self
-                .guests
-                .get_mut(&(event_id, account.clone()))
-                .unwrap_or_else(|| env::panic_str(&format!("{} is not registered", account)));
-            if record.status == GuestStatus::Registered {
-                record.status = GuestStatus::Attended;
-                came += 1;
-                *self.attended_events.entry(account.clone()).or_insert(0) += 1;
-            }
-        }
-        self.event_mut(event_id).attended_count = came;
-        if mode == EventMode::Ticket {
-            return self.finalize_tickets(event_id);
-        }
-        if came == 0 {
-            return self.close_with_refunds(event_id, EventStatus::Finalized);
-        }
-
-        let pool = deposit * guest_count as u128;
-        let share = pool / came as u128;
-        let remainder = pool - share * came as u128;
-        for i in 0..guest_count {
-            let account = self.guest_index[&(event_id, i)].clone();
-            if self.guests[&(event_id, account.clone())].status == GuestStatus::Attended {
-                self.credit(&account, share);
-            }
-        }
-        if remainder > 0 {
-            self.credit(&host, remainder);
-        }
-
-        self.event_mut(event_id).payout_per_attendee = share;
-        self.mark_closed(event_id, EventStatus::Finalized);
-        emit(
-            "finalized",
-            json!({ "event_id": event_id, "mode": EventMode::Deposit, "attended": came, "payout_per_attendee": U128(share) }),
-        );
+        self.finalize_by(&env::predecessor_account_id(), event_id, attended);
     }
 
     /// Cancels the event and refunds every guest deposit (`Ticket` mode refunds
@@ -363,15 +326,88 @@ impl Contract {
     #[payable]
     pub fn cancel(&mut self, event_id: u64) {
         near_sdk::assert_one_yocto();
-        let event = self.event(event_id);
-        require!(event.status == EventStatus::Open, "Event is closed");
-        if env::predecessor_account_id() != event.host {
-            require!(
-                env::block_timestamp_ms() > event.metadata.ends_at + ABANDON_GRACE_MS,
-                "Only the host can cancel before 30 days after the event ends"
-            );
+        self.cancel_by(&env::predecessor_account_id(), event_id);
+    }
+
+    /// Entry point of the NEAR Intents `auth_call` intent: the verifier has
+    /// checked the signature of `signer_id`, who then acts as the caller.
+    /// No NEAR may be attached: the verifier would not refund it on failure,
+    /// so paid (beyond free tier) events need a NEAR wallet.
+    #[payable]
+    pub fn on_auth(&mut self, signer_id: AccountId, msg: String) -> PromiseOrValue<()> {
+        require!(Some(&env::predecessor_account_id()) == self.intents.as_ref(), "Only the NEAR Intents verifier");
+        require!(env::attached_deposit().is_zero(), "Attach no NEAR to Intents calls");
+        let action: AuthMsg = serde_json::from_str(&msg).unwrap_or_else(|_| env::panic_str("Invalid msg"));
+        match action {
+            AuthMsg::CreateEvent { metadata, deposit, capacity, mode } => {
+                self.create_event_for(signer_id, metadata, deposit, capacity, mode, 0);
+            }
+            AuthMsg::Finalize { event_id, attended } => self.finalize_by(&signer_id, event_id, attended),
+            AuthMsg::Cancel { event_id } => self.cancel_by(&signer_id, event_id),
+            AuthMsg::SetWhitelistMode { enabled } => self.set_mode(&signer_id, enabled),
+            AuthMsg::AddToWhitelist { accounts } => self.whitelist_add(&signer_id, accounts),
+            AuthMsg::RemoveFromWhitelist { accounts } => self.whitelist_remove(&signer_id, accounts),
         }
-        self.close_with_refunds(event_id, EventStatus::Cancelled);
+        PromiseOrValue::Value(())
+    }
+
+    // --------------------------------------------------------------- owner
+
+    /// Turns the whitelist mode on or off. Owner only.
+    #[payable]
+    pub fn set_whitelist_mode(&mut self, enabled: bool) {
+        near_sdk::assert_one_yocto();
+        self.set_mode(&env::predecessor_account_id(), enabled);
+    }
+
+    /// Owner only. Up to 100 accounts per call; storage comes from the pool.
+    #[payable]
+    pub fn add_to_whitelist(&mut self, accounts: Vec<AccountId>) {
+        near_sdk::assert_one_yocto();
+        self.whitelist_add(&env::predecessor_account_id(), accounts);
+    }
+
+    #[payable]
+    pub fn remove_from_whitelist(&mut self, accounts: Vec<AccountId>) {
+        near_sdk::assert_one_yocto();
+        self.whitelist_remove(&env::predecessor_account_id(), accounts);
+    }
+
+    /// Replaces the code with the call input (raw WASM, not JSON) and runs
+    /// the new code's `migrate` in the same batch: if `migrate` fails, the old
+    /// code stays. Owner only, until `freeze`.
+    #[payable]
+    pub fn upgrade(&mut self) -> Promise {
+        near_sdk::assert_one_yocto();
+        require!(env::predecessor_account_id() == self.owner, "Only the owner");
+        require!(!self.frozen, "The code is frozen");
+        let code = env::input()
+            .filter(|code| !code.is_empty())
+            .unwrap_or_else(|| env::panic_str("Pass the new WASM as the call input"));
+        emit("upgrade", json!({ "code_bytes": code.len() }));
+        Promise::new(env::current_account_id())
+            .deploy_contract(code)
+            .function_call("migrate".to_string(), Vec::new(), NearToken::from_yoctonear(0), GAS_MIGRATE)
+            .as_return()
+    }
+
+    /// Run by `upgrade` on the new code. This version keeps the state as is;
+    /// a version that changes the state layout converts it here.
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate() -> Self {
+        env::state_read().unwrap_or_else(|| env::panic_str("No state to migrate"))
+    }
+
+    /// Makes the code permanent: `upgrade` stops working for good. One-way.
+    /// The owner keeps running the whitelist.
+    #[payable]
+    pub fn freeze(&mut self) {
+        near_sdk::assert_one_yocto();
+        require!(env::predecessor_account_id() == self.owner, "Only the owner");
+        require!(!self.frozen, "Already frozen");
+        self.frozen = true;
+        emit("code_frozen", json!({}));
     }
 
     // --------------------------------------------------------------- guest
@@ -454,12 +490,7 @@ impl Contract {
             .map(|i| {
                 let account = self.guest_index[&(event_id, i)].clone();
                 let record = &self.guests[&(event_id, account.clone())];
-                GuestView {
-                    account_id: account,
-                    status: record.status,
-                    registered_at: record.registered_at,
-                    paid_by: record.paid_by.clone(),
-                }
+                GuestView { account_id: account, status: record.status, registered_at: record.registered_at }
             })
             .collect()
     }
@@ -483,9 +514,26 @@ impl Contract {
     }
 
     /// NEAR (yocto) `host` must attach to create an event of `capacity` seats
-    /// now; 0 on the free tier.
-    pub fn create_event_cost(&self, host: AccountId, capacity: u32) -> U128 {
-        U128(event_cost(self.open_events.get(&host).copied().unwrap_or(0), capacity))
+    /// now; 0 on the free tier. Pass `ends_at` to apply the free tier's end
+    /// date limit as well.
+    pub fn create_event_cost(&self, host: AccountId, capacity: u32, ends_at: Option<u64>) -> U128 {
+        let open = self.open_events.get(&host).copied().unwrap_or(0);
+        U128(self.event_cost(&host, open, capacity, ends_at))
+    }
+
+    pub fn is_whitelisted(&self, account_id: AccountId) -> bool {
+        self.whitelist.contains(&account_id)
+    }
+
+    pub fn get_config(&self) -> ConfigView {
+        ConfigView {
+            usdc: self.usdc.clone(),
+            intents: self.intents.clone(),
+            relayer: self.relayer.clone(),
+            owner: self.owner.clone(),
+            frozen: self.frozen,
+            whitelist_mode: self.whitelist_mode,
+        }
     }
 }
 
@@ -523,6 +571,165 @@ impl FungibleTokenReceiver for Contract {
 }
 
 impl Contract {
+    fn create_event_for(
+        &mut self,
+        host: AccountId,
+        metadata: EventMetadata,
+        deposit: U128,
+        capacity: u32,
+        mode: Option<EventMode>,
+        attached: u128,
+    ) -> u64 {
+        let mode = mode.unwrap_or_default();
+        validate_metadata(&metadata);
+        require!(deposit.0 >= MIN_DEPOSIT, "Deposit must be at least 0.1 USDC");
+        require!(capacity > 0 && capacity <= MAX_CAPACITY, "Capacity out of range");
+        let open = self.open_events.get(&host).copied().unwrap_or(0);
+        // The whole event, full house included, must be paid for up front.
+        let reserve = SEAT_BYTES * u64::from(capacity) + BALANCE_BYTES;
+        let cost = self.event_cost(&host, open, capacity, Some(metadata.ends_at));
+        if cost == 0 {
+            self.require_storage_pool(EVENT_RECORD_BYTES + reserve);
+        } else {
+            require!(
+                attached >= cost,
+                format!(
+                    "This event is beyond the free tier (up to {} seats, {} open events, ending within 60 days{}). Attach {} yoctoNEAR for its storage",
+                    FREE_MAX_CAPACITY,
+                    FREE_MAX_OPEN_EVENTS,
+                    if self.whitelist_mode { ", whitelisted hosts" } else { "" },
+                    cost
+                )
+            );
+        }
+        if attached > cost {
+            Promise::new(host.clone()).transfer(NearToken::from_yoctonear(attached - cost)).detach();
+        }
+        self.reserved_bytes += reserve;
+
+        let id = self.events.len() as u64;
+        self.events.push(Event {
+            host: host.clone(),
+            metadata,
+            deposit: deposit.0,
+            mode,
+            capacity,
+            status: EventStatus::Open,
+            guest_count: 0,
+            attended_count: 0,
+            payout_per_attendee: 0,
+            created_at: env::block_timestamp_ms(),
+            closed_at: 0,
+            storage_paid: cost,
+        });
+        self.open_events.insert(host.clone(), open + 1);
+
+        emit("event_created", json!({ "event_id": id, "host": host, "deposit": deposit, "mode": mode }));
+        id
+    }
+
+    fn finalize_by(&mut self, caller: &AccountId, event_id: u64, attended: Vec<AccountId>) {
+        let event = self.event(event_id);
+        require!(*caller == event.host, "Only the host");
+        require!(event.status == EventStatus::Open, "Event is closed");
+        require!(attended.len() <= MAX_CAPACITY as usize, "Too many accounts");
+        let (host, deposit, guest_count, mode) = (event.host.clone(), event.deposit, event.guest_count, event.mode);
+
+        let mut came = 0u32;
+        for account in &attended {
+            let record = self
+                .guests
+                .get_mut(&(event_id, account.clone()))
+                .unwrap_or_else(|| env::panic_str(&format!("{} is not registered", account)));
+            if record.status == GuestStatus::Registered {
+                record.status = GuestStatus::Attended;
+                came += 1;
+                *self.attended_events.entry(account.clone()).or_insert(0) += 1;
+            }
+        }
+        self.event_mut(event_id).attended_count = came;
+        if mode == EventMode::Ticket {
+            return self.finalize_tickets(event_id);
+        }
+        if came == 0 {
+            return self.close_with_refunds(event_id, EventStatus::Finalized);
+        }
+
+        let pool = deposit * guest_count as u128;
+        let share = pool / came as u128;
+        let remainder = pool - share * came as u128;
+        for i in 0..guest_count {
+            let account = self.guest_index[&(event_id, i)].clone();
+            if self.guests[&(event_id, account.clone())].status == GuestStatus::Attended {
+                self.credit(&account, share);
+            }
+        }
+        if remainder > 0 {
+            self.credit(&host, remainder);
+        }
+
+        self.event_mut(event_id).payout_per_attendee = share;
+        self.mark_closed(event_id, EventStatus::Finalized);
+        emit(
+            "finalized",
+            json!({ "event_id": event_id, "mode": EventMode::Deposit, "attended": came, "payout_per_attendee": U128(share) }),
+        );
+    }
+
+    fn cancel_by(&mut self, caller: &AccountId, event_id: u64) {
+        let event = self.event(event_id);
+        require!(event.status == EventStatus::Open, "Event is closed");
+        if *caller != event.host {
+            require!(
+                env::block_timestamp_ms() > event.metadata.ends_at + ABANDON_GRACE_MS,
+                "Only the host can cancel before 30 days after the event ends"
+            );
+        }
+        self.close_with_refunds(event_id, EventStatus::Cancelled);
+    }
+
+    fn require_owner(&self, caller: &AccountId) {
+        require!(*caller == self.owner, "Only the owner");
+    }
+
+    fn set_mode(&mut self, caller: &AccountId, enabled: bool) {
+        self.require_owner(caller);
+        self.whitelist_mode = enabled;
+        emit("whitelist_mode", json!({ "enabled": enabled }));
+    }
+
+    fn whitelist_add(&mut self, caller: &AccountId, accounts: Vec<AccountId>) {
+        self.require_owner(caller);
+        require!(!accounts.is_empty() && accounts.len() <= MAX_WHITELIST_BATCH, "Pass 1 to 100 accounts");
+        self.require_storage_pool(WHITELIST_BYTES * accounts.len() as u64);
+        for account in &accounts {
+            self.whitelist.insert(account.clone());
+        }
+        emit("whitelist_added", json!({ "accounts": accounts }));
+    }
+
+    fn whitelist_remove(&mut self, caller: &AccountId, accounts: Vec<AccountId>) {
+        self.require_owner(caller);
+        require!(!accounts.is_empty() && accounts.len() <= MAX_WHITELIST_BATCH, "Pass 1 to 100 accounts");
+        for account in &accounts {
+            self.whitelist.remove(account);
+        }
+        emit("whitelist_removed", json!({ "accounts": accounts }));
+    }
+
+    /// Storage cost of a new event for a host with `open` open events; 0 when free.
+    fn event_cost(&self, host: &AccountId, open: u32, capacity: u32, ends_at: Option<u64>) -> u128 {
+        let free = capacity <= FREE_MAX_CAPACITY
+            && open < FREE_MAX_OPEN_EVENTS
+            && ends_at.map_or(true, |end| end <= env::block_timestamp_ms() + FREE_MAX_HORIZON_MS)
+            && (!self.whitelist_mode || self.whitelist.contains(host));
+        if free {
+            0
+        } else {
+            bytes_cost(EVENT_RECORD_BYTES + SEAT_BYTES * u64::from(capacity) + BALANCE_BYTES)
+        }
+    }
+
     /// `Ticket` mode close: the host was credited at each registration, so
     /// this only closes the event. `paid_to_host` is logged for indexers.
     fn finalize_tickets(&mut self, event_id: u64) {
@@ -551,21 +758,27 @@ impl Contract {
         );
     }
 
+    /// Releases the event's unused reservation. A host who paid for storage
+    /// gets back the share of seats nobody took; the event record stays paid.
     fn mark_closed(&mut self, event_id: u64, status: EventStatus) {
         let event = self.event_mut(event_id);
         event.status = status;
         event.closed_at = env::block_timestamp_ms();
         let host = event.host.clone();
-        let release = SEAT_BYTES * u64::from(event.reserved_seats)
-            + SETTLE_BYTES * u64::from(event.guest_count)
-            + BALANCE_BYTES;
-        event.reserved_seats = 0;
+        let empty = u64::from(event.capacity - event.guest_count);
+        let release = SEAT_BYTES * empty + SETTLE_BYTES * u64::from(event.guest_count) + BALANCE_BYTES;
+        let refund = bytes_cost(SEAT_BYTES * empty)
+            .min(event.storage_paid.saturating_sub(bytes_cost(EVENT_RECORD_BYTES + BALANCE_BYTES)));
         self.reserved_bytes -= release;
         let open = self.open_events.get(&host).copied().unwrap_or(1);
         if open <= 1 {
             self.open_events.remove(&host);
         } else {
-            self.open_events.insert(host, open - 1);
+            self.open_events.insert(host.clone(), open - 1);
+        }
+        if refund > 0 {
+            emit("storage_refund", json!({ "event_id": event_id, "host": host, "amount": U128(refund) }));
+            Promise::new(host).transfer(NearToken::from_yoctonear(refund)).detach();
         }
     }
 
@@ -613,48 +826,36 @@ impl Contract {
         )
     }
 
+    fn keyless_ok(&self, guest: &AccountId) -> bool {
+        !guest.as_str().starts_with("0x") || guest.as_str().len() != 42
+            || (self.intents.is_some() && self.relayer.is_some())
+    }
+
     fn can_register(&self, event_id: u64, guest: &AccountId) -> bool {
         let event = self.event(event_id);
         event.status == EventStatus::Open
             && event.guest_count < event.capacity
-            && (!guest.as_str().starts_with("0x") || guest.as_str().len() != 42
-                || (self.intents.is_some() && self.relayer.is_some()))
-            && (event.reserved_seats > 0 || self.unreserved_storage() >= bytes_cost(SEAT_BYTES))
+            && self.keyless_ok(guest)
             && !self.guests.contains_key(&(event_id, guest.clone()))
     }
 
+    /// Every seat was reserved when the event was created, so a registration
+    /// only moves its bytes from the reservation into real storage.
     fn register(&mut self, event_id: u64, guest: AccountId, paid_by: AccountId) {
         let event = self.event(event_id);
         require!(event.status == EventStatus::Open, "Event is closed");
         require!(event.guest_count < event.capacity, "Event is full");
         require!(!self.guests.contains_key(&(event_id, guest.clone())), "Already registered");
-        require!(
-            !guest.as_str().starts_with("0x") || guest.as_str().len() != 42
-                || (self.intents.is_some() && self.relayer.is_some()),
-            "Keyless registration requires Intents and a relayer"
-        );
-        let prepaid = event.reserved_seats > 0;
+        require!(self.keyless_ok(&guest), "Keyless registration requires Intents and a relayer");
         let index = event.guest_count;
-        if prepaid {
-            self.reserved_bytes -= STORAGE_BYTES_PER_GUEST;
-        } else {
-            self.require_storage_pool(SEAT_BYTES);
-            self.reserved_bytes += SETTLE_BYTES;
-        }
+        self.reserved_bytes -= STORAGE_BYTES_PER_GUEST;
         self.guests.insert(
             (event_id, guest.clone()),
-            GuestRecord {
-                status: GuestStatus::Registered,
-                registered_at: env::block_timestamp_ms(),
-                paid_by: paid_by.clone(),
-            },
+            GuestRecord { status: GuestStatus::Registered, registered_at: env::block_timestamp_ms() },
         );
         self.guest_index.insert((event_id, index), guest.clone());
         let event = self.event_mut(event_id);
         event.guest_count += 1;
-        if prepaid {
-            event.reserved_seats -= 1;
-        }
 
         let (mode, host, deposit) = (event.mode, event.host.clone(), event.deposit);
         if mode == EventMode::Ticket {
@@ -691,15 +892,6 @@ impl Contract {
 
 fn bytes_cost(bytes: u64) -> u128 {
     env::storage_byte_cost().as_yoctonear() * bytes as u128
-}
-
-/// Storage cost of a new event for a host with `open` open events; 0 when free.
-fn event_cost(open: u32, capacity: u32) -> u128 {
-    if capacity <= FREE_MAX_CAPACITY && open < FREE_MAX_OPEN_EVENTS {
-        0
-    } else {
-        bytes_cost(EVENT_RECORD_BYTES + SEAT_BYTES * u64::from(capacity) + BALANCE_BYTES)
-    }
 }
 
 /// Contract NEAR not locked for storage already in use. NEAR attached to this

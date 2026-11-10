@@ -4,13 +4,15 @@ import { keccak_256 } from "@noble/hashes/sha3.js";
 import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "@/lib/config";
 import { relayer } from "@/lib/relayer";
-import { events } from "@/lib/near";
+import { events, MAX_CAPACITY } from "@/lib/near";
 import { cleanGuestName, setGuestName } from "@/lib/guestNames";
 
-// Submits a guest's signed intent to intents.near; the relayer pays the gas.
-// Only two shapes are relayed: a registration (one `ft_withdraw` of USDC to the
-// escrow with a register message) and a cash-out (one USDC `transfer` inside
-// NEAR Intents). The verifier checks the signature again on-chain.
+// Submits a signed intent to intents.near; the relayer pays the gas.
+// Only three shapes are relayed: a registration (one `ft_withdraw` of USDC to
+// the escrow with a register message), a cash-out (one USDC `transfer` inside
+// NEAR Intents), and a host action (one `auth_call` to the escrow: create,
+// finalize or cancel an event, no NEAR attached). The verifier checks the
+// signature again on-chain.
 export async function POST(req: Request) {
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
   if (!INTENTS_CONTRACT) return Response.json({ error: "NEAR Intents is not configured" }, { status: 403 });
@@ -18,9 +20,10 @@ export async function POST(req: Request) {
   let signer: string;
   let nonce: string;
   let registration: { eventId: number; amount: string } | undefined;
+  let hostAction: { create: { capacity: number; endsAt: number } } | { eventId: number } | undefined;
   try {
     signed = await req.json();
-    if (signed.standard !== "erc191" || typeof signed.payload !== "string" || signed.payload.length > 4096
+    if (signed.standard !== "erc191" || typeof signed.payload !== "string" || signed.payload.length > 24_576
       || typeof signed.signature !== "string" || !/^secp256k1:[1-9A-HJ-NP-Za-km-z]{80,92}$/.test(signed.signature)) throw new Error();
     const payload = JSON.parse(signed.payload);
     signer = payload.signer_id;
@@ -39,6 +42,20 @@ export async function POST(req: Request) {
       if (intent.token !== USDC_CONTRACT || intent.receiver_id !== EVENTS_CONTRACT || !positiveAmount(intent.amount)
         || msg.action !== "register" || msg.guest !== signer || !Number.isSafeInteger(msg.event_id) || msg.event_id < 0) throw new Error();
       registration = { eventId: msg.event_id, amount: intent.amount };
+    } else if (intent.intent === "auth_call") {
+      // The escrow refuses NEAR attached to `on_auth`; the verifier would not refund it anyway.
+      if (intent.contract_id !== EVENTS_CONTRACT || intent.attached_deposit !== undefined || intent.min_gas !== undefined
+        || typeof intent.msg !== "string") throw new Error();
+      const msg = JSON.parse(intent.msg);
+      if (msg.action === "create_event") {
+        const capacity = Number(msg.capacity);
+        const endsAt = Number(msg.metadata?.ends_at);
+        if (!Number.isSafeInteger(capacity) || !Number.isSafeInteger(endsAt)) throw new Error();
+        hostAction = { create: { capacity, endsAt } };
+      } else if ((msg.action === "finalize" || msg.action === "cancel") && Number.isSafeInteger(msg.event_id) && msg.event_id >= 0) {
+        if (msg.action === "finalize" && (!Array.isArray(msg.attended) || msg.attended.length > MAX_CAPACITY)) throw new Error();
+        hostAction = { eventId: msg.event_id };
+      } else throw new Error();
     } else if (intent.intent !== "transfer" || typeof intent.receiver_id !== "string"
       || intent.receiver_id.length > 64 || !/^[a-z0-9]+([._-][a-z0-9]+)*$/.test(intent.receiver_id)
       || Object.keys(intent.tokens).join() !== `nep141:${USDC_CONTRACT}`
@@ -62,6 +79,17 @@ export async function POST(req: Request) {
       const existing = await events.guestStatus(registration.eventId, signer);
       if (!event || event.status !== "Open" || event.guest_count >= event.capacity || existing || event.deposit !== registration.amount) {
         return Response.json({ error: "This registration is unavailable. Your USDC is still in NEAR Intents." }, { status: 409 });
+      }
+    }
+    // Host actions that would fail on chain still burn relayer gas; refuse them here.
+    if (hostAction && "create" in hostAction) {
+      if (await events.createCost(signer, hostAction.create.capacity, hostAction.create.endsAt) !== "0") {
+        return Response.json({ error: "Wallets outside NEAR can create free events only: up to 50 seats, 2 open events, ending within 60 days." }, { status: 409 });
+      }
+    } else if (hostAction) {
+      const event = await events.get(hostAction.eventId);
+      if (!event || event.host !== signer || event.status !== "Open") {
+        return Response.json({ error: "Only the host can close this event while it is open." }, { status: 409 });
       }
     }
     if (await paidRequestLimited(req, "execute", signer, nonce)) return Response.json({ error: "Relayer quota unavailable or exceeded" }, { status: 429 });

@@ -53,7 +53,7 @@ export default function ConfirmEvent() {
             deposit: toUnits(deposit),
             capacity,
           },
-          deposit: BigInt(await events.createCost(accountId, capacity)),
+          deposit: BigInt(await events.createCost(accountId, capacity, starts!.getTime() + 3 * 3600_000)),
         },
       ]);
       const mine = (await events.list()).find((e) => e.host === accountId && e.metadata.title === title);

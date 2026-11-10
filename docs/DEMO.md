@@ -1,7 +1,7 @@
 # Demo video script (about 2 minutes)
 
-The hosted demo is https://www.nearvent.site/e/11 ("NEAR Builders Night Bali",
-escrow-tp6, Paradise theme, 1 USDC deposit, six registered demo guests, 3 Dec
+The hosted demo is https://www.nearvent.site/e/4 ("NEAR Builders Night Bali",
+escrow-tp7, Paradise theme, 1 USDC deposit, six registered demo guests, 3 Dec
 2026). It was created by `web/scripts/seed-demo.mjs`, which also hides the
 earlier QA events from the public feed (Private = link only). Do not present
 mainnet payment or EVM flows as live until the release checks in
