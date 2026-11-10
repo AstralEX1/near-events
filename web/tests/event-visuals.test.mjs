@@ -149,3 +149,23 @@ test("unsaved events keep their fallback theme after new themes were added", asy
   const legacy = ["ethereum", "bitcoin", "base", "near", "solana", "paradise", "claude", "codex", "cursor", "grok", "hermes"];
   for (let id = 0; id < 40; id++) assert.ok(legacy.includes(fallbackEventVisual(id, `Event ${id}`).themeId));
 });
+
+test("generated art is stable per seed and Regenerate changes only the art bits", async () => {
+  const { generativeArt, regenerateEventVisual, meshGradient } = await import("../src/lib/event-visuals.ts");
+  for (const theme of EVENT_THEMES) {
+    const visual = { themeId: theme.id, seed: 0x1234_5678 };
+    if (resolveEventVisual(visual).backgroundAsset) {
+      assert.deepEqual(regenerateEventVisual(visual), visual, theme.id);
+      continue;
+    }
+    assert.equal(generativeArt(visual), generativeArt({ ...visual }), theme.id);
+    const next = regenerateEventVisual(visual);
+    assert.equal(next.themeId, theme.id);
+    assert.notEqual(next.seed >>> 16, 0x1234, theme.id);
+    assert.notEqual(generativeArt(next), generativeArt(visual), theme.id);
+    const a = resolveEventVisual(visual), b = resolveEventVisual(next);
+    assert.deepEqual([b.variant, b.layout, b.font, b.backgroundAsset], [a.variant, a.layout, a.font, a.backgroundAsset]);
+  }
+  assert.notEqual(meshGradient(1, ["red"]), meshGradient(2, ["red"]));
+  assert.ok(!meshGradient(0, ["red", "blue"]).includes("NaN"));
+});

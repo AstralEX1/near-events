@@ -2,7 +2,7 @@
 
 import type { EventStatus, EventView } from "@/lib/near";
 import { useEventVisual } from "@/lib/event-visual-client";
-import type { EventVisualConfig } from "@/lib/event-visuals";
+import { meshGradient, type EventVisualConfig } from "@/lib/event-visuals";
 import { EventPoster } from "@/components/EventVisual";
 
 /** Implicit accounts (Google/email users) and EVM addresses (Intents accounts) are shortened for display. */
@@ -16,24 +16,19 @@ function hash(s: string): number {
   return h;
 }
 
-/** Deterministic gradient avatar for a NEAR account. */
+/** A generated avatar: the account name seeds soft colour blobs, so everyone sees the same picture. */
 export function Avatar({ account, size = 32 }: { account: string; size?: number }) {
   const h = hash(account);
-  const a = h % 360;
-  const b = (a + 60 + (h % 90)) % 360;
+  const hue = h % 360;
+  const colors = [0, 45, 160, 210].map((shift, i) => `hsl(${(hue + shift) % 360} ${70 + i * 5}% ${58 + (i % 2) * 10}%)`);
   return (
     <span
+      role="img"
+      aria-label={account}
       title={account}
-      className="inline-flex shrink-0 items-center justify-center rounded-full text-white font-semibold ring-2 ring-surface"
-      style={{
-        width: size,
-        height: size,
-        fontSize: size * 0.42,
-        background: `linear-gradient(135deg, hsl(${a} 80% 62%), hsl(${b} 75% 55%))`,
-      }}
-    >
-      {account[0]?.toUpperCase()}
-    </span>
+      className="inline-block shrink-0 rounded-full ring-2 ring-surface"
+      style={{ width: size, height: size, backgroundColor: colors[0], backgroundImage: meshGradient(h, colors.slice(1), 3) }}
+    />
   );
 }
 

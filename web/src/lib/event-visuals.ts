@@ -256,3 +256,53 @@ export function resolveEventVisual(config: EventVisualConfig): ResolvedEventVisu
     variant,
   };
 }
+
+/** Small deterministic PRNG (xorshift32), so the same seed draws the same art for every visitor. */
+function seededRandom(seed: number): () => number {
+  let state = (Math.imul(seed >>> 0, 0x9e3779b1) + 0x6d2b79f5) >>> 0 || 1;
+  return () => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return (state >>> 0) / 0x1_0000_0000;
+  };
+}
+
+const GRAIN = `url("data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(#n)' opacity='.14'/></svg>")}")`;
+
+/** Soft colour blobs placed by the seed, like a mesh gradient. Returns CSS background layers. */
+export function meshGradient(seed: number, colors: readonly string[], blobs = 4): string {
+  const random = seededRandom(seed);
+  return Array.from({ length: blobs }, (_, index) => {
+    const color = colors[index % colors.length];
+    const x = Math.round(random() * 100);
+    const y = Math.round(30 + random() * 70); // keep the top band calm so the theme mark stays readable
+    const reach = Math.round(35 + random() * 35);
+    return `radial-gradient(circle at ${x}% ${y}%, ${color} 0%, transparent ${reach}%)`;
+  }).join(", ");
+}
+
+/**
+ * The generated background of a theme without a photo. Seed bits 16-31 drive the art only,
+ * so Regenerate never changes colour, font or title position (bits 0-15).
+ */
+export function generativeArt(config: EventVisualConfig, withGrain = true): string {
+  const { colors, theme } = resolveEventVisual(config);
+  const [dark, mid, light] = colors;
+  const art = config.seed >>> 16;
+  const layers = theme.group === "near-me"
+    ? `${meshGradient(art, [light, `${dark}26`, light, mid])}, linear-gradient(160deg, ${mid}, ${light})`
+    : `${meshGradient(art, [mid, `${light}99`, `${mid}cc`, `${light}66`])}, linear-gradient(145deg, ${dark}, ${dark})`;
+  return withGrain ? `${GRAIN}, ${layers}` : layers;
+}
+
+/** New art for the same theme, colour, font and title position. */
+export function regenerateEventVisual(current: EventVisualConfig): EventVisualConfig {
+  if (resolveEventVisual(current).backgroundAsset) return current; // photo or panel themes have no generated art
+  const random = createRandomVisual(current.themeId).seed >>> 16;
+  const art = random === current.seed >>> 16 ? (random + 1) & 0xffff : random;
+  const { variant, font } = resolveEventVisual(current);
+  const layout = EVENT_LAYOUTS.indexOf(resolveEventVisual(current).layout);
+  // Colour and title position are taken modulo 3 of the whole seed, so pin them again after the swap.
+  return withVisualOptions({ themeId: current.themeId, seed: ((art << 16) | (current.seed & 0xffff)) >>> 0 }, { variant, layout, font });
+}
