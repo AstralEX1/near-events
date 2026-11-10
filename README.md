@@ -33,7 +33,7 @@ Hackathon track focus: Real-World Money (USDC, NEAR Intents, gasless onboarding)
 
 The app uses the verified `escrow-tp4` deployment. A hosted test event verified
 registration with faucet USDC, event-detail saving, and off-chain check-in.
-The Vercel demo is [www.nearvent.site](https://www.nearvent.site/e/4);
+The Vercel demo is [www.nearvent.site](https://www.nearvent.site/e/11);
 it uses Upstash Redis for hosted event details and check-ins. The local env file
 is `/Users/astralex/nearhackathon/web/.env.local` (git-ignored, mode 600); secret
 values are not documented here. Mainnet release checks remain pending.

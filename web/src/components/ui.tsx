@@ -50,6 +50,31 @@ export function Cover({ event, className = "", coverUrl = null, visual }: { even
   return <EventPoster title={event.metadata.title} visual={visual ?? savedVisual} coverUrl={coverUrl} className={className} />;
 }
 
+/** Placeholder in the shape of the event page, so content lands where the eye already is. */
+export function EventSkeleton() {
+  const bar = "rounded-md bg-text/[.07]";
+  return (
+    <div className="gc-event-shell gc-skeleton" role="status" aria-label="Loading event">
+      <div className="gc-event-content animate-pulse">
+        <div className="space-y-6">
+          <div className={`aspect-square w-full !rounded-2xl ${bar}`} />
+          <div className={`h-3 w-20 ${bar}`} />
+          <div className={`h-5 w-36 ${bar}`} />
+        </div>
+        <div className="space-y-6 min-w-0">
+          <div className={`h-10 w-3/4 ${bar}`} />
+          <div className="flex items-center gap-3">
+            <div className={`w-11 h-12 !rounded-lg ${bar}`} />
+            <div className="flex-1 space-y-2"><div className={`h-3.5 w-56 max-w-full ${bar}`} /><div className={`h-3 w-32 ${bar}`} /></div>
+          </div>
+          <div className={`h-52 !rounded-3xl ${bar}`} />
+          <div className="space-y-2"><div className={`h-3 w-full ${bar}`} /><div className={`h-3 w-5/6 ${bar}`} /></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DateBadge({ ms }: { ms: number }) {
   const d = new Date(ms);
   return (

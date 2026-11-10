@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import { events } from "@/lib/near";
 import type { FreeEvent } from "@/lib/freeEventsShared";
 import { EventCard, fromChain, fromFree, type Item } from "@/components/EventCard";
+import { Icon } from "@/components/EventSections";
+
+const CALENDAR_PLUS = ["M8 2v4", "M16 2v4", "M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8", "M3 10h18", "M16 19h6", "M19 16v6"];
 
 type Tab = "upcoming" | "past";
 type Kind = "all" | Item["kind"];
@@ -38,6 +41,7 @@ export default function Events() {
     .filter((i) => i.past === (tab === "past") && (kind === "all" || i.kind === kind) && (!q || i.title.toLowerCase().includes(q)))
     .sort((a, b) => (tab === "upcoming" ? a.startsAt - b.startsAt : b.startsAt - a.startsAt));
 
+  const invite = !!items && tab === "upcoming" && !q && kind === "all" && shown.length < 3;
   const pill = (active: boolean) => `px-3.5 py-1.5 rounded-full text-sm border ${active ? "bg-text text-bg border-text" : "border-border text-muted hover:text-text"}`;
 
   return (
@@ -90,14 +94,22 @@ export default function Events() {
           ))}
         </div>
       )}
-      {items && shown.length === 0 && (
-        <p className="text-muted">{q || kind !== "all" ? "Nothing matches. Try another search or filter." : tab === "upcoming" ? "No upcoming events yet. Host the first one." : "No past events yet."}</p>
+      {items && shown.length === 0 && !invite && (
+        <p className="text-muted">{q || kind !== "all" ? "Nothing matches. Try another search or filter." : "No past events yet."}</p>
       )}
-      {shown.length > 0 && (
+      {(shown.length > 0 || invite) && (
         <div className="grid gap-5 grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3">
           {shown.map((i) => (
             <EventCard key={i.key} item={i} />
           ))}
+          {/* A sparse feed reads as dead; fill the row with a way in instead. */}
+          {invite && (
+            <Link href="/create" className="gc-list-card gc-invite-card">
+              <span className="gc-reg-icon"><Icon paths={CALENDAR_PLUS} size={20} /></span>
+              <span className="font-semibold">Host Your Own</span>
+              <span className="text-sm text-muted">Free, deposit or ticket.</span>
+            </Link>
+          )}
         </div>
       )}
     </div>

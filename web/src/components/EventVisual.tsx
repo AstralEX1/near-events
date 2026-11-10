@@ -14,13 +14,13 @@ function layerCount(images: string): number {
   return count;
 }
 
-/** themeFont: the theme's font replaces body, heading and button fonts inside (Nearvent themes keep the brand fonts). */
+/** themeFont: the theme's font sets the headings inside; body and buttons keep Geist so long text stays readable. Nearvent themes keep the brand fonts. */
 export function VisualBackdrop({ visual, className = "", themeFont = false, children }: { visual: EventVisualConfig; className?: string; themeFont?: boolean; children?: ReactNode }) {
   const resolved = resolveEventVisual(visual);
   const [dark, mid] = resolved.colors;
   const font = resolved.fontFamily;
   const style = themeFont && resolved.theme.group !== "near-me"
-    ? { fontFamily: font, "--font-body": font, "--font-display": font, "--font-geist-sans": font } as CSSProperties
+    ? { "--font-display": font, ...(/monospace/.test(font) && { "--title-tracking": "-.01em" }) } as CSSProperties
     : undefined;
   if (resolved.theme.group === "near-me") {
     return <div className={`relative isolate overflow-hidden ${className}`} style={{ ...style, backgroundColor: mid, backgroundImage: resolved.backgroundAsset ? undefined : generativeArt(visual) }}>

@@ -79,31 +79,6 @@ export function ToastHost() {
   );
 }
 
-// ---------------------------------------------------------------- skeleton
-
-/** Same-size placeholder while an event loads. */
-export function PageSkeleton() {
-  const [ref] = useSl<Feedback>(loadFeedback, (el) => lib("MatteFeedback").mount(el));
-  return (
-    <div ref={ref as RefObject<HTMLDivElement>} className="fb-demo nv-skeleton" data-feedback="skeleton" tabIndex={-1}>
-      <div className="fb-scene">
-        <div className="fb-card fb-skeleton-card" data-content="" aria-busy="true">
-          <div className="fb-skeleton" aria-hidden="true">
-            <div className="fb-skel-top"><div className="fb-skel-avatar" /><div className="fb-skel-title"><div className="fb-skel-line" style={{ width: "62%" }} /><div className="fb-skel-line" style={{ width: "40%", height: 6 }} /></div></div>
-            <div className="fb-skel-body"><div className="fb-skel-line" /><div className="fb-skel-line" style={{ width: "86%" }} /></div>
-            <div className="fb-skel-bottom"><div className="fb-skel-line" /><div className="fb-skel-line" /></div>
-          </div>
-          <div className="fb-loaded" data-loaded="" aria-hidden="true" inert>
-            <div className="fb-loaded-top"><span className="fb-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m12 3 9 5-9 5-9-5Zm-9 9 9 5 9-5m-18 5 9 5 9-5" /></svg></span><div><h3>Event</h3><p>Loaded</p></div></div>
-          </div>
-        </div>
-      </div>
-      <span className="fb-sr" data-live="" role="status" aria-live="polite" aria-atomic="true">Loading event…</span>
-      <span className="fb-sr" data-error="" role="alert" aria-atomic="true" />
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------- copy
 
 /** Copies `text`; shows Copied only after the browser confirms the write. */

@@ -1,16 +1,11 @@
 # Demo video script (about 2 minutes)
 
-The hosted Vercel testnet demo at https://www.nearvent.site/e/4 uses
-Upstash Redis. Event 4 last passed a faucet-USDC registration, event-detail
-save, and off-chain check-in on 2026-11-07. On 2026-11-08, the new production
-domain returned HTTP 200 for `/` and `/e/4`. The app still targets TP4; the
-separately QA-verified TP5 contract is not the hosted target. For a clean
-recording, create a fresh event on Vercel or run
-the app locally (`npm --prefix web run dev`). Do not present mainnet payment or
-EVM flows as live until the release checks in
-[`DEPLOY.md`](DEPLOY.md) pass. Add a separate
-mainnet clip only after those checks.
-(Updated 2026-11-08, Codex)
+The hosted demo is https://www.nearvent.site/e/11 ("NEAR Builders Night Bali",
+escrow-tp6, Paradise theme, 1 USDC deposit, six registered demo guests, 3 Dec
+2026). It was created by `web/scripts/seed-demo.mjs`, which also hides the
+earlier QA events from the public feed (Private = link only). Do not present
+mainnet payment or EVM flows as live until the release checks in
+[`DEPLOY.md`](DEPLOY.md) pass. (Updated 2026-11-10, Claude)
 
 | Time | Show | Say |
 |---|---|---|

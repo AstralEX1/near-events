@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createRandomVisual, EVENT_FONTS, EVENT_LAYOUTS, EVENT_THEMES, eventPalettes, regenerateEventVisual, resolveEventVisual, shuffleEventVisual, withVisualOptions, type EventThemeId, type EventVisualConfig } from "@/lib/event-visuals";
 import { EventPoster, VisualBackdrop } from "@/components/EventVisual";
 
@@ -67,6 +67,36 @@ export function EventThemePicker({ value, title, coverUrl, photo, onPhoto, onCha
     };
   }, [open]);
 
+  // Drag to dismiss. The sheet tracks the pointer 1:1; on release it either snaps back or closes,
+  // judged by where the gesture would come to rest (Apple's projection, deceleration 0.998).
+  const drag = useRef<{ y: number; t: number; v: number; dy: number } | null>(null);
+  const dragStart = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest("button") || !panel.current) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { y: e.clientY, t: e.timeStamp, v: 0, dy: 0 };
+    panel.current.style.transition = "none";
+  };
+  const dragMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d || !panel.current) return;
+    const dy = e.clientY - d.y;
+    if (e.timeStamp > d.t) d.v = ((dy - d.dy) / (e.timeStamp - d.t)) * 1000;
+    d.dy = dy;
+    d.t = e.timeStamp;
+    // Upward there is nothing more to show: resist instead of stopping dead.
+    panel.current.style.transform = `translateY(${dy >= 0 ? dy : -12 * Math.log1p(-dy / 12)}px)`;
+  };
+  const dragEnd = () => {
+    const d = drag.current;
+    const el = panel.current;
+    drag.current = null;
+    if (!d || !el) return;
+    // Hand back to the CSS transition, which animates from where the finger left the sheet.
+    el.style.transition = "";
+    el.style.transform = "";
+    if (d.dy + (d.v / 1000) * 0.998 / (1 - 0.998) > el.offsetHeight / 2) setOpen(false);
+  };
+
   const pickTheme = (themeId: EventThemeId) => onChange(themeId === value.themeId ? shuffleEventVisual(value) : createRandomVisual(themeId));
   const pickPhoto = async (file: File | undefined) => {
     if (!file || !onPhoto) return;
@@ -108,10 +138,14 @@ export function EventThemePicker({ value, title, coverUrl, photo, onPhoto, onCha
       </button>
 
       <div ref={panel} role="dialog" aria-label="Theme" aria-hidden={!open} inert={!open} tabIndex={-1} data-open={open} className="gc-theme-drawer outline-none">
-        <div className="mx-auto max-w-[920px] space-y-4 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:px-6">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold">Theme</span>
-            <button type="button" className="lu-pill rounded-full !h-8 text-sm" onClick={() => { setOpen(false); trigger.current?.focus(); }}>Done</button>
+        <div className="mx-auto max-w-[920px] space-y-4 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
+          {/* Grab the top strip to pull the sheet down; it follows the finger and a flick closes it. */}
+          <div className="gc-sheet-handle -mx-4 px-4 pt-2 sm:-mx-6 sm:px-6" onPointerDown={dragStart} onPointerMove={dragMove} onPointerUp={dragEnd} onPointerCancel={dragEnd}>
+            <div className="gc-grabber" aria-hidden="true" />
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-sm font-semibold">Theme</span>
+              <button type="button" className="lu-pill rounded-full !h-8 text-sm" onClick={() => { setOpen(false); trigger.current?.focus(); }}>Done</button>
+            </div>
           </div>
 
           <div className="-mx-4 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 pb-3 pt-1 sm:-mx-6 sm:px-6" role="listbox" aria-label="Themes">
@@ -139,7 +173,7 @@ export function EventThemePicker({ value, title, coverUrl, photo, onPhoto, onCha
             )}
             <Setting label="Color">
               {eventPalettes(value.themeId).map((colors, index) => (
-                <button key={colors[1]} type="button" aria-label={`Color ${index + 1}`} aria-pressed={selected.variant === index} onClick={() => onChange(withVisualOptions(value, { variant: index }))}
+                <button key={index} type="button" aria-label={`Color ${index + 1}`} aria-pressed={selected.variant === index} onClick={() => onChange(withVisualOptions(value, { variant: index }))}
                   className={`h-6 w-6 rounded-full ring-offset-2 ring-offset-surface ${selected.variant === index ? "ring-2 ring-text" : ""}`}
                   style={{ background: `linear-gradient(140deg, ${colors[0]}, ${colors[1]} 60%, ${colors[2]})` }} />
               ))}

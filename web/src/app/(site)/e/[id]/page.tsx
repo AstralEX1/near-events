@@ -1,12 +1,12 @@
 "use client";
 
-import { PageSkeleton, SlShare } from "@/components/SlUi";
+import { SlShare } from "@/components/SlUi";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, isTicket, type EventView, type GuestView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
-import { Avatar, Cover, DateBadge, StatusPill, formatWhen, shortAccount } from "@/components/ui";
+import { Avatar, Cover, DateBadge, EventSkeleton, StatusPill, formatWhen, shortAccount } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
 import { GuestGrid } from "@/components/EventParts";
 import { EVENTS_CONTRACT, EXPLORER_URL } from "@/lib/config";
@@ -70,7 +70,7 @@ export default function EventPage() {
   }, [load]);
 
   if (loadError) return <div className="card p-6 space-y-3"><h1 className="text-xl font-semibold">Couldn’t load this event</h1><p className="text-muted">Please try again in a moment.</p><button className="btn btn-accent" onClick={() => void load()}>Try again</button></div>;
-  if (event === undefined) return <PageSkeleton />;
+  if (event === undefined) return <EventSkeleton />;
   if (event === null) return <p>Event not found.</p>;
 
   const me = guests.find((g) => g.account_id === accountId);
@@ -107,7 +107,7 @@ export default function EventPage() {
           <div className="flex items-start gap-2">
             <div className="min-w-0">
               {!open && <StatusPill status={event.status} />}
-              <h1 className="gc-event-title mt-1">{event.metadata.title}</h1>
+              <h1 className="gc-event-title mt-1" data-long={event.metadata.title.length > 36 || undefined}>{event.metadata.title}</h1>
             </div>
             <div className="ml-auto shrink-0 flex items-center gap-1.5">
               {isStaff && <Link href={`/e/${id}/manage`} className="btn btn-accent !py-2 text-sm">Manage</Link>}

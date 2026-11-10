@@ -172,10 +172,7 @@ export function RegistrationCard({
       <div className="space-y-2">
         <p className="text-sm">This event was cancelled. Refunds were credited to guests’ Nearvent balances.</p>
         {!accountId ? (
-          <div className="space-y-2">
-            <p className="text-sm text-muted">Sign in to view your refund.</p>
-            <SignInOptions onDone={refreshAfterSignIn} />
-          </div>
+          <SignInFolded hint="Registered? Sign in to see your refund." onDone={refreshAfterSignIn} />
         ) : balanceLoading ? (
           <p className="text-sm text-muted">Checking your refund…</p>
         ) : balanceError ? (
@@ -189,10 +186,7 @@ export function RegistrationCard({
     body = ticket ? (
       <p className="text-sm">This event is over. Thanks for coming.</p>
     ) : !accountId ? (
-      <div className="space-y-2">
-        <p className="text-sm">Sign in to view your payout or deposit outcome.</p>
-        <SignInOptions onDone={refreshAfterSignIn} />
-      </div>
+      <SignInFolded hint="Went to this event? Sign in to see your payout." onDone={refreshAfterSignIn} />
     ) : event.attended_count === 0 && myStatus ? (
       <div className="space-y-2">
         <p className="text-sm">Nobody was checked in. Your deposit was credited to Nearvent.</p>
@@ -325,6 +319,17 @@ export function RegistrationCard({
           <DepositRulesTooltip ticket={ticket} amount={price} />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Visitors who only browse see one quiet button; the wallet choices open on tap. */
+function SignInFolded({ hint, onDone }: { hint: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-muted">{hint}</p>
+      {open ? <SignInOptions onDone={onDone} /> : <button type="button" className="btn btn-ghost w-full" onClick={() => setOpen(true)}>Sign In</button>}
     </div>
   );
 }
