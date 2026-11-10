@@ -37,9 +37,9 @@ demo and for development.
 - Hosted site: [www.nearvent.site](https://www.nearvent.site) (Vercel + Upstash
   Redis), still on testnet until the mainnet escrow is deployed; demo event:
   [www.nearvent.site/e/4](https://www.nearvent.site/e/4).
-- The testnet escrow runs a local build with the 2026-11-10 audit fixes (code
-  hash `9bzLSqerBC3jV1BTGuivp1eqVkxua6vUAK2RTHKELEoa`; the CI reproducible WASM
-  replaces it once these commits are pushed). The account has no keys; the
+- The testnet escrow runs the CI reproducible WASM of main `96cb1ee` with the
+  2026-11-10 audit fixes (code hash
+  `571uYapS2GwgvfAXrzAcHaLgpb1s1gScUbSb35ESWztE`). The account has no keys; the
   owner can upgrade the code until `freeze` (`get_config` shows the owner and
   whether it is frozen). Evidence in [docs/DEPLOY.md](docs/DEPLOY.md).
 - Mainnet pieces checked read-only on 2026-11-10 with `web/scripts/check-release.mjs`:

@@ -306,8 +306,12 @@ whitelist was on, sponsored mode limits the free tier, the owner listed a host o
 both lists through one NEP-413 `auth_call`, an EVM host's late registration was
 refunded and its finalize passed after the end, an Intents duplicate came back,
 a relayed payout, and an owner upgrade (`DPgkvaGVeTRnL2zVvchyXQZeqM5x6og93ey7YtdsFakC`).
-Not done yet: the CI reproducible WASM on tp7 (needs the push), and the smoke
-through the app relayer (`APP_URL`) after merge.
+The smoke also passed through the local app relayer (`APP_URL`), which refused
+the early finalize with 409. Then main `96cb1ee` was pushed on Alex's command (CI
+run 42817864435 green) and the owner upgraded tp7 to its reproducible WASM
+(306,474 bytes, code hash `571uYapS2GwgvfAXrzAcHaLgpb1s1gScUbSb35ESWztE`, tx
+`Hcz1haKBEhiaVbwPkzimWqem4JFHNS75zq1JaLPypDwK`); `verify-escrow-code.mjs` matched
+and the demo `/e/4` kept its six guests.
 
 ## TP7 testnet deploy (2026-11-10, Claude)
 
