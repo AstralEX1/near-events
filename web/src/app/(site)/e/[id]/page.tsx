@@ -100,12 +100,15 @@ export default function EventPage() {
             </div>
           </Section>
           <GoingList accounts={going} names={names} total={event.guest_count} verb={open ? "Going" : "Went"} />
-          {isStaff && open && (
-            <Link href={`/e/${id}/manage`} className="btn btn-ghost w-full">Manage event</Link>
-          )}
         </aside>
 
         <section className="space-y-6 min-w-0">
+          {isStaff && (
+            <div className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm">
+              <span className="min-w-0 flex-1 text-muted">You have manage access for this event.</span>
+              <Link href={`/e/${id}/manage`} className="btn btn-accent shrink-0">Manage</Link>
+            </div>
+          )}
           <div className="flex items-start gap-2">
             <div className="min-w-0">
               {!open && <StatusPill status={event.status} />}
