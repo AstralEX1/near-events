@@ -86,6 +86,8 @@ export const events = {
     ? Promise.resolve([] as (GuestStatus | null)[])
     : view<(GuestStatus | null)[]>("get_guest_statuses", { account_id: account, event_ids: ids.slice(0, RECENT_LIMIT) }),
   balance: (account: string) => view<string>("balance_of", { account_id: account }),
+  /** False while the whitelist mode is on and `host` is not on the list. */
+  canCreate: (host: string) => view<boolean>("can_create", { host }),
   /** yoctoNEAR the host must attach to create this event now; "0" on the free tier. */
   createCost: (host: string, capacity: number, endsAt?: number) =>
     view<string>("create_event_cost", { host, capacity, ends_at: endsAt ?? null }),
@@ -95,7 +97,8 @@ export const events = {
 
 /** Mirrors the escrow: free tier and the technical seat cap. */
 export const FREE_MAX_CAPACITY = 50;
-export const FREE_MAX_OPEN_EVENTS = 2;
+/** Free events per host in any 30 days; closing one early does not give it back. */
+export const FREE_MAX_EVENTS = 2;
 /** A free event must end within this many days. */
 export const FREE_MAX_DAYS = 60;
 export const MAX_CAPACITY = 300;

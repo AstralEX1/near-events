@@ -49,7 +49,7 @@ read-only checks; no mainnet transaction has been sent.
 
 **1. Accounts (Alex).**
 - Owner: a Ledger account. It can `upgrade` the code until `freeze` and run the
-  host whitelist; it cannot touch balances. Owner calls with a Ledger go through
+  host whitelist and the sponsored list; it cannot touch balances. Owner calls with a Ledger go through
   `near-cli-rs` (`… sign-with-ledger`); `scripts/escrow-owner.mjs` needs a key file.
 - Deployer: an account with a key in `~/.near-credentials/mainnet/`. The escrow is
   created as `<NEW_ACCOUNT>.<deployer>`, for example `escrow.nearvent.near`. The
@@ -107,8 +107,10 @@ money. Redeploy. For NEAR Auth, the Auth0 callback, origin and logout URL is
 - A rejected registration (event full) leaves the USDC in the guest's Intents balance.
 
 **7. After the checks.** Record the transaction hashes here, add the best ones to
-the `PROOF` list in `web/src/app/(site)/docs/contract/page.tsx`, decide on the
-whitelist, and `freeze` only once the code is final.
+the `PROOF` list in `web/src/app/(site)/docs/contract/page.tsx`. Before real users
+see the escrow, the owner turns the whitelist mode on and adds verified hosts:
+the host decides who came, so deposits and tickets only go to hosts we trust.
+Decide whether the sponsored mode is on too. `freeze` only once the code is final.
 
 **Rollback.** Put the testnet variables back in Vercel and redeploy. Funds stay in
 the mainnet escrow; guests can still `withdraw` with any NEAR tool, and the site
@@ -271,6 +273,41 @@ Smoke on faucet accounts `tp6host-nv1110`, `tp6guest1-nv1110`, `tp6guest2-nv1110
 
 Not covered: 1Click/Intents registration, relayer `payout_to_intents`, the
 3rd-open-event charge, UI wallet signing.
+
+## Audit fixes on tp7 (2026-11-10, Claude)
+
+An outside audit found: H-01, the host could `finalize` at any time, even before
+the start, and pay the pool to its own extra account; H-02, the free tier
+counted only open events, so create → cancel loops (free for EVM hosts through
+our relayer) left event records on our storage pool forever; M-01, registration
+stayed open after the end. Fixes, upgraded in place on
+`escrow-tp7.tp7-nv1110.testnet` (state migrated, the demo `/e/4` kept its six
+guests):
+- `finalize` only once `ends_at` has passed; `cancel` (full refund) any time.
+- Registration closes at `ends_at`; a late payment comes back in full.
+- The whitelist now decides who can create events at all (when its mode is on);
+  the free tier has its own sponsored list and mode. Both off by default; tp7's
+  old list became the host whitelist.
+- Free tier: 2 free events per host in any 30 days, counted at creation, so
+  closing one early gives nothing back. The open-event counter is gone; the event
+  record reserve dropped to 420 B (measured 331 B).
+- The app and relayer routes refuse the same calls before they cost gas; Manage
+  enables "Close event" only after the end.
+
+Checks: 138 unit tests (incl. a tp7-layout migration test), 3 sandbox scenarios
+(300-guest finalize 196 Tgas), web tests (43) and production build. Upgrade tx
+`DL82bpi8HLPLZ1WcSt7SiamfgLLWvRsNyqPuHuoUjsJA` with a local
+`cargo near build non-reproducible-wasm` (305,732 bytes, code hash
+`9bzLSqerBC3jV1BTGuivp1eqVkxua6vUAK2RTHKELEoa`; ~3.06 NEAR of code storage on
+mainnet). `smoke-tp7-testnet.mjs` (now with a fresh host per run) passed all
+steps: third free event in 30 days refused after a cancel, finalize before the
+end refused, paid seats refunded, a paying unlisted host refused while the
+whitelist was on, sponsored mode limits the free tier, the owner listed a host on
+both lists through one NEP-413 `auth_call`, an EVM host's late registration was
+refunded and its finalize passed after the end, an Intents duplicate came back,
+a relayed payout, and an owner upgrade (`DPgkvaGVeTRnL2zVvchyXQZeqM5x6og93ey7YtdsFakC`).
+Not done yet: the CI reproducible WASM on tp7 (needs the push), and the smoke
+through the app relayer (`APP_URL`) after merge.
 
 ## TP7 testnet deploy (2026-11-10, Claude)
 

@@ -5,7 +5,7 @@ import { view } from "@/lib/near";
 import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { relayer } from "@/lib/relayer";
 import { decodePayload, relayAllowed } from "@/lib/relayPolicy";
-import { CONTRACTS, unpaidBeyondFreeTier } from "@/lib/relayServer";
+import { CONTRACTS, FREE_TIER_ERROR, relayRefusal } from "@/lib/relayServer";
 
 const MAX_GAS = 300_000_000_000_000n;
 const USDC_STORAGE = 1_250_000_000_000_000_000_000n; // 0.00125 NEAR
@@ -38,9 +38,11 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid signature" }, { status: 401 });
   }
   try {
-    if (await unpaidBeyondFreeTier(p)) {
-      return Response.json({ error: "Google and email accounts can create free events only: up to 50 seats, 2 open events, ending within 60 days." }, { status: 400 });
+    const refusal = await relayRefusal(p);
+    if (refusal === FREE_TIER_ERROR) {
+      return Response.json({ error: "Google and email accounts can create free events only: up to 50 seats, 2 in 30 days, ending within 60 days." }, { status: 400 });
     }
+    if (refusal) return Response.json({ error: refusal }, { status: 400 });
   } catch {
     return Response.json({ error: "Could not check the event's storage cost" }, { status: 502 });
   }

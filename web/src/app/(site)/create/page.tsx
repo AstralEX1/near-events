@@ -4,7 +4,7 @@ import { SlAmount, SlCopy } from "@/components/SlUi";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { events, formatNear, FREE_MAX_CAPACITY, FREE_MAX_DAYS, FREE_MAX_OPEN_EVENTS, MAX_CAPACITY, toUnits, type EventMode, type EventView } from "@/lib/near";
+import { events, formatNear, FREE_MAX_CAPACITY, FREE_MAX_DAYS, FREE_MAX_EVENTS, MAX_CAPACITY, toUnits, type EventMode, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { Cover } from "@/components/ui";
@@ -204,7 +204,7 @@ function CreateEvent() {
   }, [free, accountId, seats, seatsOk, endsAt]);
   const costNote = storageCost !== "0" && (
     <p className="text-sm text-muted">
-      Created at your expense: ~{formatNear(storageCost)} NEAR (storage). Free events are up to {FREE_MAX_CAPACITY} seats and {FREE_MAX_OPEN_EVENTS} open events, ending within {FREE_MAX_DAYS} days.
+      Created at your expense: ~{formatNear(storageCost)} NEAR (storage). Free events are up to {FREE_MAX_CAPACITY} seats, {FREE_MAX_EVENTS} per 30 days, ending within {FREE_MAX_DAYS} days.
     </p>
   );
 
@@ -244,7 +244,10 @@ function CreateEvent() {
         router.push(`/f/${json.id}`);
         return;
       }
-      // Checked again right before signing: the host may have opened another event meanwhile.
+      if (!(await events.canCreate(accountId))) {
+        throw new Error("Deposit and ticket events are open to verified hosts only. Contact Nearvent to get verified, or pick Free.");
+      }
+      // Checked again right before signing: the host may have used a free event meanwhile.
       const deposit = BigInt(await events.createCost(accountId, capacity, when.end));
       const submittedAt = Date.now();
       // Theme, image, font and random-seed choices are presentation data; save them off-chain below.
@@ -519,7 +522,7 @@ function CreateEvent() {
                 value={form.capacity}
                 attention={!seatsOk}
                 title="Max capacity"
-                help={free ? `Up to ${maxSeats} guests. Registration closes when it's full.` : `Up to ${MAX_CAPACITY} guests. Free up to ${FREE_MAX_CAPACITY} seats and ${FREE_MAX_OPEN_EVENTS} open events; bigger events pay a little NEAR for storage. Registration closes when it's full.`}
+                help={free ? `Up to ${maxSeats} guests. Registration closes when it's full.` : `Up to ${MAX_CAPACITY} guests. Free up to ${FREE_MAX_CAPACITY} seats and ${FREE_MAX_EVENTS} events per 30 days; bigger events pay a little NEAR for storage. Registration closes when it's full.`}
               >
                 <input className="input" type="number" min="1" max={maxSeats} required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
               </OptionRow>
@@ -638,7 +641,7 @@ function SignInDialog({ onClose }: { onClose: () => void }) {
           <p className="text-sm text-muted">Your event stays filled in. A NEAR wallet or Google/email both work.</p>
         </div>
         <SignInOptions />
-        <p className="text-[11px] text-muted/80">Free up to {FREE_MAX_CAPACITY} seats and {FREE_MAX_OPEN_EVENTS} open events.</p>
+        <p className="text-[11px] text-muted/80">Free up to {FREE_MAX_CAPACITY} seats and {FREE_MAX_EVENTS} events per 30 days.</p>
       </div>
     </div>
   );

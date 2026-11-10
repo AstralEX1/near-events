@@ -240,6 +240,11 @@ export function RegistrationCard({
     );
   } else if (myStatus === "Registered") {
     body = <NextSteps event={event} accountId={accountId!} />;
+  } else if (Date.now() >= event.metadata.ends_at) {
+    // The escrow refuses registrations once the event has ended.
+    body = accountId
+      ? <p className="text-sm">Registration is closed: the event has ended.</p>
+      : <SignInFolded hint="Registration is closed. Registered? Sign in to see your pass." onDone={refreshAfterSignIn} />;
   } else if (!accountId) {
     body = choosing ? (
       <div className="space-y-2">
@@ -304,7 +309,7 @@ export function RegistrationCard({
     );
   }
 
-  const open = event.status === "Open" && !myStatus && event.guest_count < event.capacity;
+  const open = event.status === "Open" && !myStatus && event.guest_count < event.capacity && Date.now() < event.metadata.ends_at;
   return (
     <div className="space-y-3">
       {body}

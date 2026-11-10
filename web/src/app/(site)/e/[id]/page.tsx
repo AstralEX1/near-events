@@ -142,7 +142,7 @@ export default function EventPage() {
           ) : open ? (
             <RegisterBox
               head="Registration"
-              aside={spots ? `${spots} spot${spots === 1 ? "" : "s"} left` : "Full"}
+              aside={Date.now() >= event.metadata.ends_at ? "Closed" : spots ? `${spots} spot${spots === 1 ? "" : "s"} left` : "Full"}
               icon={ticket ? ICONS.ticket : ICONS.wallet}
               title={ticket ? "Ticket" : "Attendance deposit"}
               desc={ticket ? "Goes to the host, no refunds" : "Show up, get it back + a no-show share"}
