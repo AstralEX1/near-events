@@ -70,7 +70,12 @@ assert.ok(mine, "the event is not on chain");
 const cancelled = await relay(await delegate(EVENTS, "cancel", { event_id: mine.id }, 1n));
 assert.equal(cancelled.status, 200, JSON.stringify(cancelled.json));
 console.log("cancel event", mine.id, cancelled.json.hash);
-assert.equal((await view(EVENTS, "get_event", { event_id: mine.id })).status, "Cancelled");
+let status;
+for (let i = 0; i < 10 && status !== "Cancelled"; i++) {
+  status = (await view(EVENTS, "get_event", { event_id: mine.id })).status;
+  if (status !== "Cancelled") await sleep(1500);
+}
+assert.equal(status, "Cancelled");
 
 const after = await query({ request_type: "view_account", account_id: account });
 // Only the 1 yoctoNEAR deposit left the account: the relayer paid every gas unit.
