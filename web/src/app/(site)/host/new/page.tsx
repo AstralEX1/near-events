@@ -39,6 +39,7 @@ export default function ConfirmEvent() {
     setError(null);
     try {
       if (!bot) throw new Error("The bot isn’t set up on this server yet.");
+      if (!accountId) throw new Error("Sign in first.");
       await send([
         {
           receiverId: EVENTS_CONTRACT,
@@ -52,6 +53,7 @@ export default function ConfirmEvent() {
             deposit: toUnits(deposit),
             capacity,
           },
+          deposit: BigInt(await events.createCost(accountId, capacity)),
         },
       ]);
       const mine = (await events.list()).find((e) => e.host === accountId && e.metadata.title === title);
@@ -103,7 +105,7 @@ export default function ConfirmEvent() {
       )}
       {error && <p className="text-sm text-warn break-words">{error}</p>}
       <p className="text-xs text-muted">
-        Creating an event is free (up to 2 open events at a time). After the wallet step you sign
+        Creating an event is free up to 50 seats and 2 open events; beyond that you pay a little NEAR for storage. After the wallet step you sign
         one short message so the Near Me bot can check guests in for this event. Payouts and
         refunds always need your confirmation.
       </p>

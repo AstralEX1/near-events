@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { events, toUnits, type EventMode, type EventView } from "@/lib/near";
+import { events, formatNear, FREE_MAX_CAPACITY, FREE_MAX_OPEN_EVENTS, MAX_CAPACITY, toUnits, type EventMode, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { Cover } from "@/components/ui";
@@ -171,9 +171,27 @@ function CreateEvent() {
 
   const amountOk = validAmount(form.deposit);
   const seats = Number(form.capacity);
-  const seatsOk = Number.isInteger(seats) && seats >= 1 && seats <= 50;
+  const seatsOk = Number.isInteger(seats) && seats >= 1 && seats <= MAX_CAPACITY;
   const doorTeamProblem = cohostsProblem(form.cohosts);
-  const missing = !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? "Set the capacity: 1 to 50" : doorTeamProblem ?? undefined;
+  const missing = !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? `Set the capacity: 1 to ${MAX_CAPACITY}` : doorTeamProblem ?? undefined;
+  // yoctoNEAR the host pays for storage beyond the free tier; "0" when free.
+  const [storageCost, setStorageCost] = useState("0");
+  useEffect(() => {
+    if (!accountId || !seatsOk) return setStorageCost("0");
+    let live = true;
+    const timer = setTimeout(() => {
+      events.createCost(accountId, seats).then((c) => live && setStorageCost(c)).catch(() => {});
+    }, 300);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [accountId, seats, seatsOk]);
+  const costNote = storageCost !== "0" && (
+    <p className="text-sm text-muted">
+      Created at your expense: ~{formatNear(storageCost)} NEAR (storage). Free events are up to {FREE_MAX_CAPACITY} seats and {FREE_MAX_OPEN_EVENTS} open events.
+    </p>
+  );
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,6 +216,8 @@ function CreateEvent() {
       const coverUrl = rawCoverUrl ? safeImageUrl(rawCoverUrl) : null;
       if (rawCoverUrl && !coverUrl) throw new Error("Use a public HTTP or HTTPS image link for the cover image.");
       if (encoder.encode(description).length > 10_000) throw new Error("Event details are too long. Shorten them and try again.");
+      // Checked again right before signing: the host may have opened another event meanwhile.
+      const deposit = BigInt(await events.createCost(accountId, capacity));
       const submittedAt = Date.now();
       // Theme, image, font and random-seed choices are presentation data; save them off-chain below.
       await send([
@@ -214,6 +234,7 @@ function CreateEvent() {
             capacity,
             mode: form.mode,
           },
+          deposit,
         },
       ]);
       transactionSent = true;
@@ -341,6 +362,7 @@ function CreateEvent() {
           imported={imported}
           busy={busy}
           error={error}
+          note={costNote}
           onSubmit={submit}
           onEdit={() => setEditing(true)}
           backHref={startUrl({ mode: form.mode, amount: form.deposit, link: importOnArrival ?? undefined }, true)}
@@ -494,9 +516,9 @@ function CreateEvent() {
                 value={form.capacity}
                 attention={!seatsOk}
                 title="Max capacity"
-                help="Up to 50 guests. Registration closes when it's full."
+                help={`Up to ${MAX_CAPACITY} guests. Free up to ${FREE_MAX_CAPACITY} seats and ${FREE_MAX_OPEN_EVENTS} open events; bigger events pay a little NEAR for storage. Registration closes when it's full.`}
               >
-                <input className="input" type="number" min="1" max="50" required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
+                <input className="input" type="number" min="1" max={MAX_CAPACITY} required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
               </OptionRow>
               <OptionRow
                 icon="M9 11l2 2 4-4M4 4h16v16H4z"
@@ -511,6 +533,7 @@ function CreateEvent() {
             </div>
           </div>
 
+          {costNote}
           {error && <p className="text-sm text-warn break-words">{error}</p>}
           <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy || !!missing} title={missing}>
             {busy && <span className="gc-spinner" aria-hidden="true" />}
@@ -524,13 +547,14 @@ function CreateEvent() {
 }
 
 /** Integrate flow, right after Import: what will be created, one button, and a way to edit details first. */
-function ImportSummary({ form, when, visual, imported, busy, error, onSubmit, onEdit, backHref }: {
+function ImportSummary({ form, when, visual, imported, busy, error, note, onSubmit, onEdit, backHref }: {
   form: { title: string; location: string; cover_url: string; deposit: string; capacity: string; mode: EventMode };
   when: When;
   visual: EventVisualConfig;
   imported: string;
   busy: boolean;
   error: string | null;
+  note?: ReactNode;
   onSubmit: (e: React.FormEvent) => void;
   onEdit: () => void;
   backHref: string;
@@ -554,6 +578,7 @@ function ImportSummary({ form, when, visual, imported, busy, error, onSubmit, on
           {form.deposit} USDC · {form.capacity} seats
         </SummaryRow>
       </dl>
+      {note}
       {error && <p className="text-sm text-warn break-words">{error}</p>}
       <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy}>
         {busy ? "Confirm in your wallet…" : "Integrate"}
@@ -592,7 +617,7 @@ function SignInDialog({ onClose }: { onClose: () => void }) {
           <p className="text-sm text-muted">Your event stays filled in. A NEAR wallet or Google/email both work.</p>
         </div>
         <SignInOptions />
-        <p className="text-[11px] text-muted/80">A little NEAR is held for on-chain storage and comes back when the event closes.</p>
+        <p className="text-[11px] text-muted/80">Free up to {FREE_MAX_CAPACITY} seats and {FREE_MAX_OPEN_EVENTS} open events.</p>
       </div>
     </div>
   );

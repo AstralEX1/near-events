@@ -70,7 +70,7 @@ export const events = {
   /** The newest events first, up to 100. */
   list: () => view<EventView[]>("get_recent_events", { limit: RECENT_LIMIT }),
   get: (id: number) => view<EventView | null>("get_event", { event_id: id }),
-  guests: (id: number) => view<GuestView[]>("get_guests", { event_id: id, from_index: 0, limit: 50 }),
+  guests: (id: number) => view<GuestView[]>("get_guests", { event_id: id, from_index: 0, limit: MAX_CAPACITY }),
   guestStatus: (id: number, account: string) =>
     view<GuestStatus | null>("get_guest_status", { event_id: id, account_id: account }),
   /** One call for up to 100 events, in the order of `ids`. */
@@ -78,7 +78,23 @@ export const events = {
     ? Promise.resolve([] as (GuestStatus | null)[])
     : view<(GuestStatus | null)[]>("get_guest_statuses", { account_id: account, event_ids: ids.slice(0, RECENT_LIMIT) }),
   balance: (account: string) => view<string>("balance_of", { account_id: account }),
+  /** yoctoNEAR the host must attach to create this event now; "0" on the free tier. */
+  createCost: (host: string, capacity: number) => view<string>("create_event_cost", { host, capacity }),
+  /** Finalized events the account was checked in at. */
+  attendedCount: (account: string) => view<number>("get_attended_count", { account_id: account }),
 };
+
+/** Mirrors the escrow: free tier and the technical seat cap. */
+export const FREE_MAX_CAPACITY = 50;
+export const FREE_MAX_OPEN_EVENTS = 2;
+export const MAX_CAPACITY = 300;
+
+/** yoctoNEAR → "0.33" NEAR, rounded up so the hint never undersells. */
+export function formatNear(yocto: string | bigint, digits = 2): string {
+  const step = 10n ** BigInt(24 - digits);
+  const units = (BigInt(yocto) + step - 1n) / step;
+  return (Number(units) / 10 ** digits).toFixed(digits);
+}
 
 export const usdc = {
   balance: (account: string) => view<string>("ft_balance_of", { account_id: account }, USDC_CONTRACT),

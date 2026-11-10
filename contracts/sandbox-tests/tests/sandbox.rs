@@ -430,7 +430,7 @@ async fn measure_full_event_gas(
 ) -> anyhow::Result<()> {
     let mut guests = Vec::new();
     // MAX_CAPACITY in the escrow.
-    for _ in 0..50 {
+    for _ in 0..300 {
         guests.push(worker.dev_create_account().await?);
     }
     for batch in guests.chunks(16) {
@@ -464,15 +464,32 @@ async fn measure_full_event_gas(
         } else {
             now
         };
-        let event_id: u64 = host.call(target.id(), "create_event")
-            .args_json(json!({
-                "metadata": {
-                    "title": "Full event gas check",
-                    "starts_at": start, "ends_at": start + 60_000
-                },
-                "deposit": "1000000", "capacity": guests.len()
-            }))
-            .transact().await?.json()?;
+        let create = json!({
+            "metadata": {
+                "title": "Full event gas check",
+                "starts_at": start, "ends_at": start + 60_000
+            },
+            "deposit": "1000000", "capacity": guests.len()
+        });
+        // Beyond the free tier: the host pays for storage, the excess comes back.
+        let cost: String = target.view("create_event_cost")
+            .args_json(json!({ "host": host.id(), "capacity": guests.len() }))
+            .await?.json()?;
+        let cost: u128 = cost.parse()?;
+        assert!(cost > 0, "300 seats must not be free");
+        let unpaid = host.call(target.id(), "create_event").args_json(create.clone()).transact().await?;
+        expect_reject(&unpaid, "beyond the free tier");
+        let before = host.view_account().await?.balance.as_yoctonear();
+        let created = host.call(target.id(), "create_event")
+            .args_json(create)
+            .deposit(NearToken::from_yoctonear(cost + NearToken::from_near(1).as_yoctonear()))
+            .gas(Gas::from_tgas(50))
+            .transact().await?.into_result()?;
+        let spent = before - host.view_account().await?.balance.as_yoctonear();
+        let fees = created.total_gas_burnt.as_gas() as u128 * 1_000_000_000 * 10;
+        assert!(spent <= cost + fees, "the excess deposit was not returned: spent {spent}, cost {cost}");
+        eprintln!("300-seat create_event cost {cost} yoctoNEAR");
+        let event_id: u64 = created.json()?;
         for batch in guests.chunks(16) {
             let mut tasks = tokio::task::JoinSet::new();
             for guest in batch.iter().cloned() {
@@ -504,9 +521,13 @@ async fn measure_full_event_gas(
             .deposit(yocto(1)).gas(Gas::from_tgas(300))
             .transact().await?.into_result()?;
         let gas = result.total_gas_burnt.as_gas();
-        eprintln!("50-guest {operation} used {gas} gas");
-        assert!(gas < 250_000_000_000_000, "50-guest {operation} used {gas} gas");
+        eprintln!("300-guest {operation} used {gas} gas");
+        assert!(gas < 250_000_000_000_000, "300-guest {operation} used {gas} gas");
         assert_eq!(escrow_balance(&target, guests.last().unwrap().id()).await?, 1_000_000);
+        let attended: u32 = target.view("get_attended_count")
+            .args_json(json!({ "account_id": guests.last().unwrap().id() }))
+            .await?.json()?;
+        assert_eq!(attended, u32::from(operation == "finalize"));
     }
     Ok(())
 }

@@ -12,8 +12,11 @@ fee, and creating an event is free.
   Intents account.
 - Guests can sign in with Google or email through FastAuth, use a NEAR wallet, or
   use an EVM wallet. Mainnet EVM and FastAuth release checks are still pending.
-- Free for hosts: the escrow pays the storage for a new event, so a host needs
-  no NEAR to create one.
+- Free tier for hosts: the escrow pays the storage for events up to 50 seats
+  while the host has fewer than 2 open events. Bigger events (up to 300) or more
+  open events cost the host a little NEAR for storage (~0.33 NEAR for 50 seats,
+  ~1.95 NEAR for 300).
+- Each guest's profile shows how many events they attended (an on-chain counter).
 - The host is a person (any NEAR account) with an optional door team (co-hosts)
   kept on the Near Me server; only the host can close or cancel.
 - In Deposit mode the host records who showed up but cannot take the pool. In
@@ -135,7 +138,7 @@ checks it is only a Near Me registration and submits it to `intents.near`
 
 | Method | Who | What |
 |---|---|---|
-| `create_event(metadata, deposit, capacity, mode)` | anyone (caller = host) | `metadata` = `{title, starts_at, ends_at}`. Free: the contract pays storage from its own balance; max 2 open events per host, at most 1000 events per contract (then a new escrow is deployed), capacity ≤ 50, deposit ≥ 0.1 USDC. Title and times cannot be changed later |
+| `create_event(metadata, deposit, capacity, mode)` | anyone (caller = host) | `metadata` = `{title, starts_at, ends_at}`. Payable. Free tier (≤ 50 seats and < 2 open events): the contract pays storage, attached NEAR is returned. Otherwise attach ≥ `create_event_cost`, the excess is returned. Capacity ≤ 300 (finalize gas), deposit ≥ 0.1 USDC. Title and times cannot be changed later |
 | `ft_transfer_call` → `ft_on_transfer` | guest / verifier | `{"action":"register","event_id":N}`; `guest` only from the Intents verifier (from anyone else it must equal the sender, otherwise the whole amount is returned) |
 | `finalize(event_id, attended)` | host (+1 yocto) | `attended` = guests checked in at the door (kept off-chain on our server until now). Deposit: pool ÷ attendees, remainder to host, empty list → full refund. Ticket: only closes; the host was paid at registration |
 | `cancel(event_id)` | host any time while open; anyone after event end + 30 days (+1 yocto) | refund every deposit (Ticket: refunds nothing) |
@@ -143,7 +146,8 @@ checks it is only a Near Me registration and submits it to `intents.near`
 | `payout_to_intents(account_id)` | owner or configured relayer | moves that account's balance into *its own* Intents balance; how EVM-wallet guests get paid |
 
 Views: `get_event`, `get_recent_events(limit ≤ 100)`, `get_guests`,
-`get_guest_status`, `get_guest_statuses(account_id, event_ids ≤ 100)`, `balance_of`.
+`get_guest_status`, `get_guest_statuses(account_id, event_ids ≤ 100)`, `balance_of`,
+`create_event_cost(host, capacity)` (yoctoNEAR, 0 when free), `get_attended_count(account_id)`.
 There is no pause, owner, event editing or single-guest refund. The door team,
 location, description and cover live on the Near Me server, not in the escrow.
 

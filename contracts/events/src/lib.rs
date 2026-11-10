@@ -24,12 +24,14 @@
 //! A guest always pays for their own seat. Only the NEAR Intents verifier
 //! names a guest other than the sender.
 //!
-//! Creating an event is free for the host. The contract pays for storage from
-//! its own NEAR balance, which the operator keeps topped up. To keep that pool
-//! from being drained: a host can have at most `MAX_OPEN_EVENTS_PER_HOST` open
-//! events, capacity is capped, the deposit has a floor, and the contract holds
-//! at most `MAX_EVENTS_TOTAL` events in its lifetime. Records are never deleted;
-//! a new escrow account is deployed when the limit is reached.
+//! Free tier: an event of up to `FREE_MAX_CAPACITY` seats, while the host has
+//! fewer than `FREE_MAX_OPEN_EVENTS` open events, is free. The contract pays
+//! for storage from its own NEAR balance, which the operator keeps topped up.
+//! Anything bigger, or more open events, the host pays for: `create_event`
+//! takes the storage cost (`create_event_cost`) as attached NEAR and returns
+//! the excess. The deposit has a floor so seats always cost guests something.
+//!
+//! Each guest's finalized attendances are counted (`get_attended_count`).
 
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use near_sdk::json_types::U128;
@@ -40,25 +42,33 @@ use near_sdk::{
     Promise, PromiseOrValue,
 };
 
+// Sizes below are the measured worst case (64-char accounts, 120-char title)
+// plus ~25%: event 432 B, registration 261 B, balance entry 141 B,
+// attendance counter 113 B. `tests.rs` checks real storage stays under them.
 /// Storage for one registration and its indexes. Each seat also reserves
-/// a separate balance entry for settlement.
-pub const STORAGE_BYTES_PER_GUEST: u64 = 1_024;
-const BALANCE_BYTES: u64 = 256;
-const SEAT_BYTES: u64 = STORAGE_BYTES_PER_GUEST + BALANCE_BYTES;
+/// a separate balance entry and an attendance counter for settlement.
+pub const STORAGE_BYTES_PER_GUEST: u64 = 328;
+const BALANCE_BYTES: u64 = 176;
+/// One entry in `attended_events`.
+const ATTENDED_BYTES: u64 = 144;
+/// Written per guest at settlement: their balance and attendance counter.
+const SETTLE_BYTES: u64 = BALANCE_BYTES + ATTENDED_BYTES;
+const SEAT_BYTES: u64 = STORAGE_BYTES_PER_GUEST + SETTLE_BYTES;
 const MAX_VIEW_PAGE: u32 = 100;
 /// Upper bound for one event record: max-length title, the vector slot and the
-/// host's open-event counter (kept at the earlier, roomier size).
-const EVENT_RECORD_BYTES: u64 = 16_384;
-/// Open (not finalized or cancelled) events one host may have at a time.
-pub const MAX_OPEN_EVENTS_PER_HOST: u32 = 2;
+/// host's open-event counter.
+const EVENT_RECORD_BYTES: u64 = 540;
+/// Largest event the contract pays storage for.
+pub const FREE_MAX_CAPACITY: u32 = 50;
+/// The free tier applies while the host has fewer open events than this.
+pub const FREE_MAX_OPEN_EVENTS: u32 = 2;
 /// Smallest deposit: 0.1 USDC (6 decimals). Stops events with a dust deposit
 /// where seats cost us storage but cost guests nothing.
 pub const MIN_DEPOSIT: u128 = 100_000;
-/// Events this contract will ever hold. Nothing is deleted, so this caps the
-/// storage the operator has to fund.
-pub const MAX_EVENTS_TOTAL: u32 = 1000;
-/// Maximum settlement size. Sandbox exercises this exact capacity.
-pub const MAX_CAPACITY: u32 = 50;
+/// Technical cap, not a pricing limit: `finalize` walks every guest in one
+/// call and must stay well under the 300 Tgas block limit. Sandbox exercises
+/// this exact capacity.
+pub const MAX_CAPACITY: u32 = 300;
 /// After `ends_at` + this grace period, anyone can `cancel` an unfinalized event.
 pub const ABANDON_GRACE_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 
@@ -78,6 +88,7 @@ enum StorageKey {
     GuestIndex,
     Balances,
     OpenEvents,
+    AttendedEvents,
 }
 
 #[near(serializers = [borsh, json])]
@@ -202,6 +213,8 @@ pub struct Contract {
     reserved_bytes: u64,
     /// Open events per host (entry removed at 0).
     open_events: LookupMap<AccountId, u32>,
+    /// Finalized events each guest was checked in at.
+    attended_events: LookupMap<AccountId, u32>,
     /// Optional account allowed to call `payout_to_intents` for other users (web relayer).
     relayer: Option<AccountId>,
 }
@@ -219,6 +232,7 @@ impl Contract {
             guest_index: LookupMap::new(StorageKey::GuestIndex),
             balances: LookupMap::new(StorageKey::Balances),
             open_events: LookupMap::new(StorageKey::OpenEvents),
+            attended_events: LookupMap::new(StorageKey::AttendedEvents),
             relayer,
             reserved_bytes: 0,
         }
@@ -226,8 +240,11 @@ impl Contract {
 
     // ---------------------------------------------------------------- host
 
-    /// Creates an event hosted by the caller.
-    /// Free: the contract pays for storage from its own balance.
+    /// Creates an event hosted by the caller. Free tier (see the crate docs):
+    /// the contract pays for storage and any attached NEAR is returned.
+    /// Otherwise the caller attaches at least `create_event_cost` and gets
+    /// the excess back.
+    #[payable]
     pub fn create_event(
         &mut self,
         metadata: EventMetadata,
@@ -237,21 +254,28 @@ impl Contract {
     ) -> u64 {
         let host = env::predecessor_account_id();
         let mode = mode.unwrap_or_default();
-        require!(
-            self.events.len() < MAX_EVENTS_TOTAL,
-            format!("Near Events has reached its limit of {} events. No new events can be created here", MAX_EVENTS_TOTAL)
-        );
         validate_metadata(&metadata);
         require!(deposit.0 >= MIN_DEPOSIT, "Deposit must be at least 0.1 USDC");
         require!(capacity > 0 && capacity <= MAX_CAPACITY, "Capacity out of range");
         let open = self.open_events.get(&host).copied().unwrap_or(0);
-        require!(
-            open < MAX_OPEN_EVENTS_PER_HOST,
-            format!("A host can have at most {} open events. Finalize or cancel one first", MAX_OPEN_EVENTS_PER_HOST)
-        );
-        // The whole event, full house included, must fit in the storage pool.
+        // The whole event, full house included, must be paid for up front.
         let reserve = SEAT_BYTES * u64::from(capacity) + BALANCE_BYTES;
-        self.require_storage_pool(EVENT_RECORD_BYTES + reserve);
+        let cost = event_cost(open, capacity);
+        let attached = env::attached_deposit().as_yoctonear();
+        if cost == 0 {
+            self.require_storage_pool(EVENT_RECORD_BYTES + reserve);
+        } else {
+            require!(
+                attached >= cost,
+                format!(
+                    "This event is beyond the free tier ({} seats, {} open events). Attach {} yoctoNEAR for its storage",
+                    FREE_MAX_CAPACITY, FREE_MAX_OPEN_EVENTS, cost
+                )
+            );
+        }
+        if attached > cost {
+            Promise::new(host.clone()).transfer(NearToken::from_yoctonear(attached - cost)).detach();
+        }
         self.reserved_bytes += reserve;
 
         let id = self.events.len() as u64;
@@ -299,6 +323,7 @@ impl Contract {
             if record.status == GuestStatus::Registered {
                 record.status = GuestStatus::Attended;
                 came += 1;
+                *self.attended_events.entry(account.clone()).or_insert(0) += 1;
             }
         }
         self.event_mut(event_id).attended_count = came;
@@ -451,6 +476,17 @@ impl Contract {
     pub fn balance_of(&self, account_id: AccountId) -> U128 {
         U128(self.balance(&account_id))
     }
+
+    /// Finalized events the account was checked in at.
+    pub fn get_attended_count(&self, account_id: AccountId) -> u32 {
+        self.attended_events.get(&account_id).copied().unwrap_or(0)
+    }
+
+    /// NEAR (yocto) `host` must attach to create an event of `capacity` seats
+    /// now; 0 on the free tier.
+    pub fn create_event_cost(&self, host: AccountId, capacity: u32) -> U128 {
+        U128(event_cost(self.open_events.get(&host).copied().unwrap_or(0), capacity))
+    }
 }
 
 #[near]
@@ -521,7 +557,8 @@ impl Contract {
         event.closed_at = env::block_timestamp_ms();
         let host = event.host.clone();
         let release = SEAT_BYTES * u64::from(event.reserved_seats)
-            + BALANCE_BYTES * (u64::from(event.guest_count) + 1);
+            + SETTLE_BYTES * u64::from(event.guest_count)
+            + BALANCE_BYTES;
         event.reserved_seats = 0;
         self.reserved_bytes -= release;
         let open = self.open_events.get(&host).copied().unwrap_or(1);
@@ -602,7 +639,7 @@ impl Contract {
             self.reserved_bytes -= STORAGE_BYTES_PER_GUEST;
         } else {
             self.require_storage_pool(SEAT_BYTES);
-            self.reserved_bytes += BALANCE_BYTES;
+            self.reserved_bytes += SETTLE_BYTES;
         }
         self.guests.insert(
             (event_id, guest.clone()),
@@ -656,9 +693,22 @@ fn bytes_cost(bytes: u64) -> u128 {
     env::storage_byte_cost().as_yoctonear() * bytes as u128
 }
 
-/// Contract NEAR not locked for storage already in use.
+/// Storage cost of a new event for a host with `open` open events; 0 when free.
+fn event_cost(open: u32, capacity: u32) -> u128 {
+    if capacity <= FREE_MAX_CAPACITY && open < FREE_MAX_OPEN_EVENTS {
+        0
+    } else {
+        bytes_cost(EVENT_RECORD_BYTES + SEAT_BYTES * u64::from(capacity) + BALANCE_BYTES)
+    }
+}
+
+/// Contract NEAR not locked for storage already in use. NEAR attached to this
+/// call is the caller's until kept, so it never counts as the pool.
 fn free_storage_balance() -> u128 {
-    env::account_balance().as_yoctonear().saturating_sub(bytes_cost(env::storage_usage()))
+    env::account_balance()
+        .as_yoctonear()
+        .saturating_sub(env::attached_deposit().as_yoctonear())
+        .saturating_sub(bytes_cost(env::storage_usage()))
 }
 
 fn validate_metadata(m: &EventMetadata) {

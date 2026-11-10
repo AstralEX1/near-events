@@ -21,6 +21,12 @@ export default function Profile() {
   const account = decodeURIComponent(useParams<{ account: string }>().account);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [hosting, setHosting] = useState<EventView[]>([]);
+  // On-chain count of finalized events this account was checked in at.
+  const [attended, setAttended] = useState<number | null>(null);
+
+  useEffect(() => {
+    events.attendedCount(account).then(setAttended).catch(() => setAttended(null));
+  }, [account]);
 
   useEffect(() => {
     (async () => {
@@ -46,6 +52,7 @@ export default function Profile() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold break-all">{shortAccount(account)}</h1>
           <p className="text-sm text-muted break-all">{account}</p>
+          {attended !== null && <p className="text-sm font-medium mt-1">Attended {attended} event{attended === 1 ? "" : "s"}</p>}
         </div>
       </div>
 
