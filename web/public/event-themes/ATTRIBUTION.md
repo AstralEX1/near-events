@@ -10,13 +10,13 @@ image hosts. Unsplash photos are used under the [Unsplash License](https://unspl
 | `paradise/ubud-rice-fields.jpg` | Chema Photo | [Rice terraces](https://unsplash.com/photos/green-rice-terraces-DmEXjTOGkAY) |
 | `paradise/canggu-nomad.jpg` | Content Pixie | [Canggu digital nomad](https://unsplash.com/photos/woman-in-white-crew-neck-t-shirt-sitting-by-the-table-with-macbook-PSie8BkuB0w) |
 | `paradise/canggu-surf.jpg` | Matthew Stephenson | [Bali surf coast](https://unsplash.com/photos/a-surfer-walks-along-the-shore-Rd7EnqLYDTs) |
-| `paradise/canggu-coworking.png` | Generated for Near Me with OpenAI image generation | Original generated artwork; no external photo source. |
-| `ai/ai-brand-panels.png` (Codex, Grok, Hermes only) | Generated for Near Me with OpenAI image generation | Five original abstract panels inspired by each AI theme's palette; no copied logos or screenshots. |
+| `paradise/canggu-coworking.png` | Generated for Nearvent with OpenAI image generation | Original generated artwork; no external photo source. |
+| `ai/ai-brand-panels.png` (Codex, Grok, Hermes only) | Generated for Nearvent with OpenAI image generation | Five original abstract panels inspired by each AI theme's palette; no copied logos or screenshots. |
 
 ## Brand marks (2026-11-09)
 
 Marks are bundled in `marks/` and shown small in the poster header and as a faint
-watermark. They are trademarks of their owners; Near Me uses them only to label
+watermark. They are trademarks of their owners; Nearvent uses them only to label
 a theme the host chose, not to suggest endorsement. Check each owner's trademark
 terms before using a theme in public marketing.
 

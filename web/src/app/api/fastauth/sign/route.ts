@@ -73,7 +73,7 @@ export async function POST(req: Request) {
   const { guard_id, verify_payload, sign_payload } = request;
   const account = allowedSigner(sign_payload);
   if (typeof account !== "string") {
-    return Response.json({ error: "Only Near Me transactions are relayed" }, { status: 400 });
+    return Response.json({ error: "Only Nearvent transactions are relayed" }, { status: 400 });
   }
   try {
     if (!await matchesFastAuthToken(verify_payload, guard_id, sign_payload)) throw new Error();

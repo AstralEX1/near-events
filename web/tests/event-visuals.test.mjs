@@ -22,8 +22,8 @@ test("new events start with Studio and retain a fresh seed", (t) => {
   assert.deepEqual(createRandomEventVisual(), { themeId: "studio", seed: 901 });
 });
 
-test("Near Me is the first collection with six own themes", () => {
-  assert.deepEqual(EVENT_THEME_GROUPS[0], { id: "near-me", label: "Near Me" });
+test("Nearvent is the first collection with six own themes", () => {
+  assert.deepEqual(EVENT_THEME_GROUPS[0], { id: "near-me", label: "Nearvent" });
   assert.deepEqual(
     EVENT_THEMES.filter((theme) => theme.group === "near-me").map((theme) => theme.id),
     ["studio", "garden", "sunset", "afterhours", "paper", "photo"],
@@ -43,7 +43,7 @@ test("adding collections preserves fallback looks for existing events", () => {
   }
 });
 
-test("saved legacy themes resolve exactly as before the Near Me collection", () => {
+test("saved legacy themes resolve exactly as before the Nearvent collection", () => {
   // Ethereum, NEAR, Claude and Cursor were deliberately restyled with their official marks and palettes (2026-11-09),
   // so they are not pinned here; the next test pins how every theme maps a saved seed.
   // Recorded before adding the new collection. These cover each palette, layout,

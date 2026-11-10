@@ -58,7 +58,7 @@ async (page) => {
     check(!await tab.getByText("Withdrawn", { exact: false }).count(), "Zero balance was described as withdrawn");
     failBalance = true;
     await tab.reload();
-    await tab.getByText("Your Near Me balance is unavailable.", { exact: false }).waitFor();
+    await tab.getByText("Your Nearvent balance is unavailable.", { exact: false }).waitFor();
     check((await tab.locator("#funds .gc-price").innerText()).includes("—"), "Failed balance was displayed as zero");
 
     await tab.setViewportSize({ width: 320, height: 900 });

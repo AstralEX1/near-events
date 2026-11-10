@@ -1,4 +1,4 @@
-name: Verify Near Me
+name: Verify Nearvent
 on:
   pull_request:
   push:

@@ -24,7 +24,7 @@ function HeaderContent({ accountId, signOut, path, preview = false }: {
   return (
     <header className="gc-header">
       <div className="gc-header-inner">
-        <Link href="/" className="gc-brand" aria-label="Near Me home">near me</Link>
+        <Link href="/" className="gc-brand" aria-label="Nearvent home">near me</Link>
         {NETWORK === "testnet" && <span className="hidden min-[380px]:inline text-[10px] font-medium px-2 py-1 rounded-full bg-accent-soft text-accent">testnet</span>}
         <nav aria-label="Main navigation" className="hidden sm:flex items-center gap-1 ml-auto">
           {links.map(([href, label]) => <Link key={href} href={href} className="gc-nav-link" aria-current={path.startsWith(href) ? "page" : undefined}>{label}</Link>)}
