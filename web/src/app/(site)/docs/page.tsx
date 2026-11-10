@@ -49,7 +49,7 @@ export default function DocsHome() {
             },
             {
               title: "Pay from any chain",
-              text: "Have USDT on Arbitrum or ETH on Base? Pay with it. It is swapped to USDC on NEAR and lands in your Intents balance, then one click registers you.",
+              text: "Pay with ETH on Base or another supported token. It is swapped to USDC on NEAR and lands in your Intents balance, then one click registers you.",
               tech: "NEAR Intents · 1Click API → Intents balance → escrow",
             },
             {
