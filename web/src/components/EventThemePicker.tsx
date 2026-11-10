@@ -1,89 +1,177 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createRandomVisual, EVENT_THEME_GROUPS, EVENT_THEMES, resolveEventVisual, type EventThemeGroup, type EventVisualConfig } from "@/lib/event-visuals";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createRandomVisual, EVENT_FONTS, EVENT_LAYOUTS, EVENT_THEMES, eventPalettes, resolveEventVisual, shuffleEventVisual, withVisualOptions, type EventThemeId, type EventVisualConfig } from "@/lib/event-visuals";
 import { EventPoster, VisualBackdrop } from "@/components/EventVisual";
 
-export function EventThemePicker({ value, title, coverUrl, onChange }: {
+/** A small preview of a theme: its background with "Title" in its font, like Luma's tiles. */
+function ThemeTile({ visual, className = "" }: { visual: EventVisualConfig; className?: string }) {
+  const { theme, colors, fontFamily } = resolveEventVisual(visual);
+  const ink = theme.group === "near-me" && theme.id !== "photo" ? colors[0] : "#fff";
+  return (
+    <VisualBackdrop visual={visual} className={className}>
+      <span className="absolute inset-0 flex items-center justify-center text-[13px] font-semibold leading-none tracking-tight" style={{ fontFamily, color: ink }}>Title</span>
+    </VisualBackdrop>
+  );
+}
+
+/** Downscale and re-encode to JPEG so uploads stay small (server accepts up to 600 KB). */
+async function toJpeg(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  for (const [side, quality] of [[1600, 0.85], [1200, 0.8], [900, 0.75]] as const) {
+    const scale = Math.min(1, side / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const url = canvas.toDataURL("image/jpeg", quality);
+    if (url.length * 0.75 < 580_000) return url;
+  }
+  throw new Error("This photo is too large. Try a smaller one.");
+}
+
+/** The event poster with a photo button, one Theme field under it, and a Luma-style theme drawer. */
+export function EventThemePicker({ value, title, coverUrl, photo, onPhoto, onChange }: {
   value: EventVisualConfig;
   title: string;
   coverUrl?: string | null;
+  photo?: string | null;
+  onPhoto?: (photo: string | null) => void;
   onChange: (visual: EventVisualConfig) => void;
 }) {
-  const [group, setGroup] = useState<EventThemeGroup>("blockchain");
   const [open, setOpen] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const selected = resolveEventVisual(value);
-  useEffect(() => setGroup(selected.theme.group), [selected.theme.group]);
-  const options = EVENT_THEMES.filter((theme) => theme.group === group);
-  const heading = title.trim() || "Your event title";
+  const nearMe = selected.theme.group === "near-me";
+
+  useEffect(() => {
+    if (!open) return;
+    panel.current?.focus();
+    const down = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!panel.current?.contains(target) && !trigger.current?.contains(target)) setOpen(false);
+    };
+    const key = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      trigger.current?.focus();
+    };
+    document.addEventListener("pointerdown", down);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", down);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
+
+  const pickTheme = (themeId: EventThemeId) => onChange(themeId === value.themeId ? shuffleEventVisual(value) : createRandomVisual(themeId));
+  const pickPhoto = async (file: File | undefined) => {
+    if (!file || !onPhoto) return;
+    setPhotoError(null);
+    try {
+      onPhoto(await toJpeg(file));
+    } catch (error) {
+      setPhotoError(error instanceof Error && error.message.startsWith("This photo") ? error.message : "Could not read this image. Try a JPEG or PNG.");
+    }
+  };
 
   return (
-    <section className="space-y-3" aria-label="Event theme">
-      <div className="grid grid-cols-[minmax(0,1fr)_7rem] sm:grid-cols-[minmax(0,1fr)_8rem] gap-3 items-end">
-        <VisualBackdrop visual={value} className="h-24 sm:h-32 rounded-xl p-2 flex items-end text-white">
-          <div className="relative max-w-full truncate rounded-lg bg-black/30 backdrop-blur-sm px-2 py-1 text-[11px] font-medium">
-            {selected.theme.group === "paradise" ? "Paradise · Bali & islands" : `${selected.theme.name} background`}
-          </div>
-        </VisualBackdrop>
-        <div className="space-y-2">
-          <button
-            id="event-theme-toggle"
-            type="button"
-            className="btn btn-ghost w-full !py-1.5 text-sm"
-            aria-expanded={open}
-            aria-controls="event-theme-options"
-            aria-label={open ? "Close event theme settings" : `Change event theme, current theme ${selected.theme.name}`}
-            onClick={() => setOpen((value) => !value)}
-          >
-            {open ? "Done" : "Theme"}
-          </button>
-          <EventPoster title={heading} visual={value} coverUrl={coverUrl} className="aspect-square rounded-xl shadow-sm" />
-        </div>
-      </div>
-
-      <div id="event-theme-options" hidden={!open} className="space-y-3 rounded-xl border border-border bg-surface p-3">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <div className="text-sm font-medium">Event look</div>
-              <p className="text-xs text-muted mt-0.5">Background and cover · you can change this later</p>
-            </div>
-            <button type="button" className="btn btn-ghost !py-1.5 text-sm" onClick={() => onChange(createRandomVisual(value.themeId))}>
-              Shuffle
-            </button>
-          </div>
-
-          <div className="flex gap-1 overflow-x-auto pb-1" role="tablist" aria-label="Theme collection">
-            {EVENT_THEME_GROUPS.map((item) => (
-              <button key={item.id} type="button" role="tab" aria-selected={group === item.id} onClick={() => setGroup(item.id)}
-                className={`rounded-full px-3 py-1.5 text-sm whitespace-nowrap ${group === item.id ? "bg-text text-bg" : "bg-border/50 text-muted hover:text-text"}`}>
-                {item.label}
+    <div className="space-y-3">
+      <div className="relative">
+        <EventPoster key={photo ?? coverUrl ?? "theme"} title={title.trim() || "Your event title"} visual={value} coverUrl={photo ?? coverUrl} className="gc-poster aspect-square w-full rounded-3xl shadow-lg" />
+        {onPhoto && (
+          <div className="absolute bottom-3 right-3 flex gap-2">
+            {photo && (
+              <button type="button" className="gc-icon-button" aria-label="Remove cover photo" onClick={() => onPhoto(null)}>
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
               </button>
-            ))}
+            )}
+            <button type="button" className="gc-icon-button" aria-label={photo ? "Change cover photo" : "Upload cover photo"} title={photo ? "Change cover photo" : "Upload your own photo"} onClick={() => fileInput.current?.click()}>
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="M21 16l-5-5-9 9" /></svg>
+            </button>
+            <input ref={fileInput} type="file" accept="image/*" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(event) => { void pickPhoto(event.target.files?.[0]); event.target.value = ""; }} />
+          </div>
+        )}
+      </div>
+      {photoError && <p className="text-xs text-danger" role="alert">{photoError}</p>}
+
+      <button ref={trigger} type="button" className="lu-field lu-hover flex w-full items-center gap-3 p-2 text-left" aria-label={`Theme: ${selected.theme.name}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <ThemeTile visual={value} className="h-10 w-14 shrink-0 rounded-lg" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs text-muted">Theme</span>
+          <span className="block truncate text-sm font-medium">{selected.theme.name}</span>
+        </span>
+        <svg viewBox="0 0 24 24" className="mr-1 h-4 w-4 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 9l4-4 4 4M8 15l4 4 4-4" /></svg>
+      </button>
+
+      <div ref={panel} role="dialog" aria-label="Theme" aria-hidden={!open} inert={!open} tabIndex={-1} data-open={open} className="gc-theme-drawer outline-none">
+        <div className="mx-auto max-w-[920px] space-y-4 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:px-6">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold">Theme</span>
+            <button type="button" className="lu-pill rounded-full !h-8 text-sm" onClick={() => { setOpen(false); trigger.current?.focus(); }}>Done</button>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {options.map((theme) => {
+          <div className="-mx-4 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 pb-3 pt-1 sm:-mx-6 sm:px-6" role="listbox" aria-label="Themes">
+            {EVENT_THEMES.map((theme) => {
               const active = value.themeId === theme.id;
-              const colors = resolveEventVisual({ themeId: theme.id, seed: value.seed }).colors;
-              const icon = "icon" in theme ? theme.icon : undefined;
-              const iconClass = theme.id === "near" ? "brightness-0 invert" : "";
               return (
-                <button key={theme.id} type="button" aria-pressed={active} onClick={() => onChange(createRandomVisual(theme.id))}
-                  className={`rounded-xl border p-2.5 text-left transition ${active ? "border-accent ring-1 ring-accent" : "border-border hover:border-muted"}`}>
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white" style={{ background: `linear-gradient(140deg, ${colors[0]}, ${colors[1]})` }}>
-                      {icon ? <img src={icon} alt="" aria-hidden="true" className={`h-5 w-5 object-contain ${iconClass}`} /> : theme.mark}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium">{theme.name}</span>
-                      <span className="block truncate text-[11px] text-muted">{theme.note}</span>
-                    </span>
-                  </span>
+                <button key={theme.id} type="button" role="option" aria-selected={active} title={active ? "Click again for another variant" : theme.note} className="gc-theme-tile w-[76px] shrink-0 snap-start space-y-1.5 text-center" onClick={() => pickTheme(theme.id)}>
+                  <ThemeTile visual={active ? value : { themeId: theme.id, seed: 0 }} className={`h-[60px] w-full rounded-xl ring-offset-2 ring-offset-surface ${active ? "ring-2 ring-text" : ""}`} />
+                  <span className={`block truncate text-xs ${active ? "font-semibold" : "text-muted"}`}>{theme.name}</span>
                 </button>
               );
             })}
           </div>
+
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-border pt-3">
+            <Setting label="Color">
+              {eventPalettes(value.themeId).map((colors, index) => (
+                <button key={colors[1]} type="button" aria-label={`Color ${index + 1}`} aria-pressed={selected.variant === index} onClick={() => onChange(withVisualOptions(value, { variant: index }))}
+                  className={`h-6 w-6 rounded-full ring-offset-2 ring-offset-surface ${selected.variant === index ? "ring-2 ring-text" : ""}`}
+                  style={{ background: `linear-gradient(140deg, ${colors[0]}, ${colors[1]} 60%, ${colors[2]})` }} />
+              ))}
+            </Setting>
+            {!nearMe && (
+              <>
+                <Setting label="Font">
+                  {EVENT_FONTS.map((fontFamily, index) => (
+                    <Option key={fontFamily} label={`Font ${index + 1}`} active={selected.font === index} onClick={() => onChange(withVisualOptions(value, { font: index }))}>
+                      <span style={{ fontFamily }}>Aa</span>
+                    </Option>
+                  ))}
+                </Setting>
+                <Setting label="Display">
+                  {EVENT_LAYOUTS.map((layout, index) => (
+                    <Option key={layout} label={`Title ${layout}`} active={selected.layout === layout} onClick={() => onChange(withVisualOptions(value, { layout: index }))}>
+                      <span className="capitalize">{layout}</span>
+                    </Option>
+                  ))}
+                </Setting>
+              </>
+            )}
+          </div>
+        </div>
       </div>
-    </section>
+    </div>
+  );
+}
+
+function Setting({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2.5" role="group" aria-label={label}>
+      <span className="text-xs text-muted">{label}</span>
+      <div className="flex items-center gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+function Option({ label, active, onClick, children }: { label: string; active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" aria-label={label} aria-pressed={active} onClick={onClick} className={`h-8 rounded-full px-3 text-xs ${active ? "bg-text text-bg" : "lu-pill !h-8 text-muted"}`}>
+      {children}
+    </button>
   );
 }

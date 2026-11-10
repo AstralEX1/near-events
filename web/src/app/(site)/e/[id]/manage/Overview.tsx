@@ -45,6 +45,11 @@ export function Overview({ event, guests, origin, isHost, busy, onGuests, onChec
 
   return (
     <div className="space-y-8">
+      <div className="gc-host-stats" aria-label="Event overview">
+        <div className="gc-host-stat"><span>Registered</span><strong>{guests.length}<small className="text-sm text-muted font-normal"> / {event.capacity}</small></strong></div>
+        <div className="gc-host-stat"><span>Checked in</span><strong>{guests.filter((g) => g.status === "Attended").length}</strong></div>
+        <div className="gc-host-stat"><span>{isTicket(event) ? "Ticket sales" : "Deposit pool"}</span><strong>{formatUsdc(event.total_pool)}<small className="block text-xs text-muted font-normal tracking-normal">USDC</small></strong></div>
+      </div>
       <div className="-mx-4 px-4 sm:mx-0 sm:px-0 flex sm:grid sm:grid-cols-3 gap-3 overflow-x-auto [scrollbar-width:none]">
         <QuickAction tone="accent" icon={<ShareIcon />} label="Share Event" onClick={() => setSharing(true)} />
         {open ? (
@@ -113,7 +118,7 @@ function Divider() {
 const TONES = {
   accent: "bg-accent-soft text-accent",
   good: "bg-good/15 text-good",
-  amber: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  amber: "bg-accent-soft text-accent",
 };
 
 function QuickAction({
@@ -129,7 +134,7 @@ function QuickAction({
   onClick?: () => void;
   href?: string;
 }) {
-  const className = "card shrink-0 flex items-center gap-3 p-2.5 pr-4 font-semibold text-sm hover:border-accent/40 transition-colors text-left";
+  const className = "card shrink-0 flex items-center gap-3 p-3 pr-4 font-semibold text-sm hover:border-accent/40 transition-colors text-left";
   const body = (
     <>
       <span className={`inline-flex w-9 h-9 shrink-0 rounded-[10px] items-center justify-center ${TONES[tone]}`}>{icon}</span>

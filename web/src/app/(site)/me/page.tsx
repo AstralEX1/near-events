@@ -13,107 +13,103 @@ import { SignInOptions } from "@/components/SignIn";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 
 export default function Me() {
-  const { accountId, kind, signIn } = useWallet();
-  const [balance, setBalance] = useState<bigint>(0n);
-  const [wallet, setWallet] = useState<bigint>(0n);
+  const { accountId } = useWallet();
+  if (!accountId) return (
+    <div className="gc-checkout space-y-6 mt-6">
+      <div className="space-y-3"><p className="gc-eyebrow">Your corner of Nearvent</p><h1 className="gc-page-title">My events</h1><p className="text-muted">Your plans, passes and funds, all in one place. Sign in to pick up where you left off.</p></div>
+      <SignInOptions />
+    </div>
+  );
+  // Account changes get fresh state, so one guest never sees another guest's balances.
+  return <MyEvents key={accountId} accountId={accountId} />;
+}
+
+function MyEvents({ accountId }: { accountId: string }) {
+  const { kind } = useWallet();
+  const [balance, setBalance] = useState<bigint | null>(null);
+  const [wallet, setWallet] = useState<bigint | null>(null);
   const [inIntents, setInIntents] = useState<bigint | null>(null);
   const [cashOutStatus, setCashOutStatus] = useState("");
-  const [mine, setMine] = useState<EventView[]>([]);
+  const [checking, setChecking] = useState(false);
+  const [mine, setMine] = useState<EventView[] | null>(null);
   const [doorTeams, setDoorTeams] = useState<Record<number, string[]>>({});
+  const [loadErrors, setLoadErrors] = useState<string[]>([]);
 
   const load = useCallback(async () => {
-    if (!accountId) return;
-    const [b, w, all] = await Promise.all([
-      events.balance(accountId),
-      usdc.balance(accountId).catch(() => "0"),
-      events.list(),
+    const issues: string[] = [];
+    const results = await Promise.allSettled([
+      events.balance(accountId).then((value) => setBalance(BigInt(value))),
+      usdc.balance(accountId).then((value) => setWallet(BigInt(value))),
+      HAS_INTENTS ? intentsUsdcBalance(accountId).then(setInIntents) : Promise.resolve(),
+      (async () => {
+        const all = await events.list();
+        const ids = all.map((e) => e.id);
+        const [statuses, teams] = await Promise.all([
+          events.guestStatuses(accountId, ids),
+          cohostsApi.many(ids).catch((): Record<number, string[]> => {
+            issues.push("Door-team events could not be loaded.");
+            return {};
+          }),
+        ]);
+        setDoorTeams(teams);
+        setMine(all.filter((e, i) => statuses[i] || e.host === accountId || teams[e.id]?.includes(accountId)));
+      })(),
     ]);
-    setBalance(BigInt(b));
-    if (HAS_INTENTS) intentsUsdcBalance(accountId).then(setInIntents).catch(() => setInIntents(null));
-    setWallet(BigInt(w));
-    const ids = all.map((e) => e.id);
-    const [statuses, teams] = await Promise.all([
-      events.guestStatuses(accountId, ids),
-      cohostsApi.many(ids).catch((): Record<number, string[]> => ({})),
-    ]);
-    setDoorTeams(teams);
-    setMine(all.filter((e, i) => statuses[i] || e.host === accountId || teams[e.id]?.includes(accountId)));
+    if (results[0].status === "rejected") { setBalance(null); issues.push("Your Nearvent balance is unavailable."); }
+    if (results[1].status === "rejected") setWallet(null);
+    if (results[2].status === "rejected") { setInIntents(null); issues.push("Your payment balance is unavailable."); }
+    if (results[3].status === "rejected") { setMine(null); issues.push("Your events could not be loaded."); }
+    setLoadErrors(issues);
   }, [accountId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  if (!accountId) {
-    return (
-      <div className="text-center py-20">
-        <button className="btn btn-primary" onClick={signIn}>Connect a wallet to see your balance</button>
-      </div>
-    );
-  }
+  const upcoming = mine?.filter((e) => e.status === "Open" && e.metadata.ends_at > Date.now()).sort((a, b) => a.metadata.starts_at - b.metadata.starts_at)[0];
+  const hostOf = (e: EventView) => e.host === accountId || doorTeams[e.id]?.includes(accountId);
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center gap-4">
-        <Avatar account={accountId} size={56} />
-        <div>
-          <h1 className="text-2xl font-semibold break-all">{shortAccount(accountId)}</h1>
-          <p className="text-sm text-muted">
-            {kind !== "evm" && <>USDC in your NEAR wallet: {formatUsdc(wallet)}</>}
-            {inIntents !== null && <> · in NEAR Intents: {formatUsdc(inIntents)}</>}
-          </p>
-        </div>
+    <div className="max-w-4xl mx-auto space-y-10">
+      <div className="flex items-center justify-between gap-4">
+        <div className="space-y-2"><p className="gc-eyebrow">Your corner of Nearvent</p><h1 className="gc-page-title">My events</h1></div>
+        <Link className="btn btn-accent" href="/create">Create event</Link>
       </div>
-
-      {HAS_INTENTS && <button className="btn btn-ghost" onClick={async () => {
-        const address = sessionStorage.getItem(`near-me:cashout:${accountId}`);
-        if (!address) { setCashOutStatus("No pending withdrawal saved in this tab."); return; }
-        const status = await oneClickStatus(address);
-        setCashOutStatus(status ? `Withdrawal: ${status.toLowerCase().replaceAll("_", " ")}` : "Status unavailable. Check again shortly.");
-        await load().catch(() => {});
-      }}>Check last withdrawal</button>}
-      {cashOutStatus && <p role="status">{cashOutStatus}</p>}
-      <div className="card p-5 space-y-4">
-        <div>
-          <div className="label">Nearvent balance</div>
-          <div className="text-4xl font-semibold mt-1">{formatUsdc(balance)} <span className="text-lg text-muted">USDC</span></div>
-          <p className="text-sm text-muted mt-1">Payouts and refunds land here. Withdraw them through NEAR Intents to any chain or wallet.</p>
-        </div>
-        {balance > 0n && <CashOut accountId={accountId} kind={kind} balance={balance} onDone={load} />}
-        {inIntents !== null && inIntents > 0n && (
-          <CashOut accountId={accountId} kind={kind} balance={inIntents} onDone={load} fromIntents />
-        )}
-      </div>
-
-      {(
-        [
-          ["Going", mine.filter((e) => e.host !== accountId && !doorTeams[e.id]?.includes(accountId)), "Nothing yet."],
-          ["Hosting", mine.filter((e) => e.host === accountId || doorTeams[e.id]?.includes(accountId)), "You aren’t hosting anything."],
-        ] as [string, EventView[], string][]
-      ).map(([title, list, empty]) => (
-        <div key={title}>
-          <h2 className="text-xl font-semibold mb-3">{title}</h2>
-          {list.length === 0 && (
-            <p className="text-muted">
-              {empty} <Link href={title === "Going" ? "/events" : "/create"} className="text-accent">{title === "Going" ? "Find an event" : "Host one"}</Link>
-            </p>
-          )}
-          <div className="grid gap-3 sm:grid-cols-2">
-            {list.map((e) => (
-              <Link key={e.id} href={`/e/${e.id}`} className="flex gap-3 items-center rounded-xl p-2 -m-2 hover:bg-border/40">
-                <Cover event={e} className="w-16 h-16 rounded-lg shrink-0 [&>span]:hidden" />
-                <div className="min-w-0">
-                  <div className="font-medium truncate">{e.metadata.title}</div>
-                  <div className="text-sm text-muted">
-                    {new Date(e.metadata.starts_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    {e.status !== "Open" && ` · ${e.status === "Finalized" ? "paid out" : "cancelled"}`}
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
+      {loadErrors.length > 0 && <div role="status" className="card p-4 space-y-2 text-sm"><p>{loadErrors.join(" ")}</p><button className="text-accent underline" onClick={() => void load()}>Try again</button></div>}
+      {upcoming && <Link href={`/e/${upcoming.id}${hostOf(upcoming) ? "/manage" : ""}`} className="gc-next-event flex items-center gap-5 p-5 sm:p-7 rounded-3xl bg-accent-soft">
+        <Cover event={upcoming} className="w-20 h-20 sm:w-28 sm:h-28 rounded-2xl shrink-0" />
+        <div className="min-w-0 space-y-2"><p className="gc-eyebrow">Up next</p><h2 className="text-xl sm:text-2xl font-semibold break-words">{upcoming.metadata.title}</h2><p className="text-sm text-muted">{new Date(upcoming.metadata.starts_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p><p className="text-sm text-accent font-medium">{hostOf(upcoming) ? "Open host tools" : "View your pass"} ↗</p></div>
+      </Link>}
+      {mine === null && loadErrors.length === 0 && <p className="text-muted" role="status">Finding your events…</p>}
+      {mine !== null && ([
+        ["Going", mine.filter((e) => !hostOf(e)), "Your next plan is out there.", "/events", "Explore events"],
+        ["Hosting", mine.filter(hostOf), "Bring your people together.", "/create", "Create an event"],
+      ] as [string, EventView[], string, string, string][]).map(([title, list, empty, href, action]) => (
+        <section key={title} className="space-y-4"><h2 className="text-xl font-semibold">{title}</h2>
+          {list.length === 0 ? <div className="card p-6 space-y-3"><p className="text-muted">{empty}</p><Link href={href} className="text-accent font-medium text-sm">{action} ↗</Link></div> : <div className="grid gap-3 sm:grid-cols-2">{[...list].sort((a, b) => b.metadata.starts_at - a.metadata.starts_at).map((e) => (
+            <Link key={e.id} href={`/e/${e.id}${hostOf(e) ? "/manage" : ""}`} className="gc-list-card flex gap-4 items-center p-4">
+              <Cover event={e} className="w-16 h-16 rounded-xl shrink-0" />
+              <div className="min-w-0"><h3 className="font-semibold break-words">{e.metadata.title}</h3><p className="text-sm text-muted mt-1">{new Date(e.metadata.starts_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{e.status !== "Open" && ` · ${e.status === "Finalized" ? "Closed" : "Cancelled"}`}</p></div>
+            </Link>
+          ))}</div>}
+        </section>
       ))}
+      <section id="funds" className="card p-6 sm:p-8 space-y-5 scroll-mt-24">
+        <div className="space-y-2"><p className="gc-eyebrow">Your funds</p><h2 className="text-xl font-semibold">Nearvent balance</h2><p className="gc-price">{balance === null ? "—" : formatUsdc(balance)} <span className="text-base text-muted">USDC</span></p><p className="text-sm text-muted max-w-lg">Available payouts and refunds from all your events. Withdraw to a supported wallet and network.</p></div>
+        {balance !== null && balance > 0n && <CashOut accountId={accountId} kind={kind} balance={balance} onDone={load} />}
+        {inIntents !== null && inIntents > 0n && <div className="space-y-3 pt-4 border-t border-border"><p className="text-sm text-muted">Available in NEAR Intents: <b>{formatUsdc(inIntents)} USDC</b>. This balance is separate from event deposits.</p><CashOut accountId={accountId} kind={kind} balance={inIntents} onDone={load} fromIntents /></div>}
+        {HAS_INTENTS && <button className="btn btn-ghost text-sm" disabled={checking} onClick={async () => {
+          setChecking(true);
+          try {
+            const address = sessionStorage.getItem(`near-me:cashout:${accountId}`);
+            if (!address) { setCashOutStatus("No pending withdrawal saved in this tab."); return; }
+            const status = await oneClickStatus(address);
+            setCashOutStatus(status ? `Withdrawal: ${status.toLowerCase().replaceAll("_", " ")}` : "Status unavailable. Check again shortly.");
+            await load();
+          } catch { setCashOutStatus("Could not check the withdrawal. Please try again."); }
+          finally { setChecking(false); }
+        }}>{checking ? "Checking…" : "Check last withdrawal"}</button>}
+        {cashOutStatus && <p className="text-sm" role="status">{cashOutStatus}</p>}
+      </section>
+      <details className="card p-5"><summary className="cursor-pointer flex items-center gap-3"><Avatar account={accountId} size={32} /><span className="font-medium">{shortAccount(accountId)}</span><span className="ml-auto text-sm text-muted">Account</span></summary><div className="pt-4 space-y-2 text-sm text-muted"><p className="break-all">{accountId}</p>{kind !== "evm" && <p>USDC in your NEAR wallet: {wallet === null ? "Unavailable" : formatUsdc(wallet)}</p>}{inIntents !== null && <p>USDC in NEAR Intents: {formatUsdc(inIntents)}</p>}</div></details>
     </div>
   );
 }

@@ -145,7 +145,7 @@ export function RegistrationCard({
   if (event.status === "Cancelled") {
     body = (
       <div className="space-y-2">
-        <p className="text-sm">This event was cancelled. {ticket ? "Every ticket was refunded." : "Every deposit went back to its guest."}</p>
+        <p className="text-sm">This event was cancelled. Refunds were credited to guests’ Nearvent balances.</p>
         {!accountId ? (
           <div className="space-y-2">
             <p className="text-sm text-muted">Sign in to view your refund.</p>
@@ -187,13 +187,13 @@ export function RegistrationCard({
         ) : balance > 0n ? (
           <div className="space-y-2">
             <p className="text-sm">
-              You showed up. {event.attended_count} of {event.guest_count} came. You have <b>{formatUsdc(balance)} USDC</b>.
+              You’re checked in. Your event payout was <b>{formatUsdc(event.payout_per_attendee)} USDC</b>. Available across all your events: <b>{formatUsdc(balance)} USDC</b>.
             </p>
             <CashOut accountId={accountId} kind={kind} balance={balance} onDone={loadBalance} startOpen />
           </div>
         ) : (
           <p className="text-sm">
-            You showed up and got <b>{formatUsdc(event.payout_per_attendee)} USDC</b>. ✓ Withdrawn.
+            Your event payout was <b>{formatUsdc(event.payout_per_attendee)} USDC</b>. No funds are currently available in your Nearvent balance. <Link href="/me" className="text-accent underline">View funds</Link>
           </p>
         )
       ) : myStatus === "Registered" ? (
@@ -251,7 +251,7 @@ export function RegistrationCard({
           {busy ? stage ?? "Working…" : `${action} · ${price}`}
         </button>
         <p className="text-xs text-muted text-center">
-          {LIVE_EVENT_SWAPS ? "Paid through NEAR Intents. No USDC on NEAR? You can pay with any token from any chain." : "Testnet: free test USDC. Payouts go out through NEAR Intents."}
+          {LIVE_EVENT_SWAPS ? "Paid through NEAR Intents. No USDC on NEAR? You can use a supported token and network." : "Testnet: free test USDC. Payouts go out through NEAR Intents."}
         </p>
       </div>
     );
@@ -268,7 +268,7 @@ export function RegistrationCard({
         )}
       {open && (
         <div className="space-y-1.5 text-sm text-muted leading-relaxed">
-          <p>{ticket ? "Refunded if the host cancels." : "Come and get it back plus a share of the no-shows."}</p>
+          <p>{ticket ? "A paid ticket. Refunded to your Nearvent balance if the host cancels." : "Get checked in and receive your deposit plus a share of no-shows after the host closes the event. Miss it, and your deposit goes to the guests who came."}</p>
           <DepositRulesTooltip ticket={ticket} amount={price} />
         </div>
       )}

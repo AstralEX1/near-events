@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { WalletProvider } from "@/lib/wallet";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin", "cyrillic"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
-
 export const metadata: Metadata = {
-  title: "Nearvent: show up, split the pool",
+  title: "Nearvent — Events people actually show up to.",
   description: "Commit a small USDC deposit to an event. Everyone who shows up splits the pool.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+      <head>
+        <link rel="stylesheet" href="/brand/fonts.css" />
+        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('near-me:appearance');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}` }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <WalletProvider>{children}</WalletProvider>
       </body>

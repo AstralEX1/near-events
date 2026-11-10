@@ -25,8 +25,8 @@ export default function Events() {
   return (
     <div className="space-y-7 pt-4 max-w-4xl mx-auto">
       <div className="space-y-2">
-        <h1 className="text-4xl font-semibold tracking-tight">Events</h1>
-        <p className="text-lg text-muted">Put down a small deposit. Come, and get it back plus a share of the no-shows.</p>
+        <h1 className="gc-page-title">Events</h1>
+        <p className="text-lg text-muted">Find your next reason to get together.</p>
       </div>
       <div className="flex gap-6 border-b border-border" role="group" aria-label="Event lists">
         {tabs.map(([k, label]) => (

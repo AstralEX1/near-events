@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type CSSProperties, type ReactNode } from "react";
+import { type CSSProperties, type ReactNode } from "react";
 import { resolveEventVisual, type EventVisualConfig } from "@/lib/event-visuals";
 
 function layerCount(images: string): number {
@@ -17,6 +17,12 @@ function layerCount(images: string): number {
 export function VisualBackdrop({ visual, className = "", children }: { visual: EventVisualConfig; className?: string; children?: ReactNode }) {
   const resolved = resolveEventVisual(visual);
   const [dark, mid, light] = resolved.colors;
+  if (resolved.theme.group === "near-me") {
+    return <div className={`relative isolate overflow-hidden ${className}`} style={{ backgroundColor: mid }}>
+      {resolved.backgroundAsset && <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center opacity-20" style={{ backgroundImage: `url("${resolved.backgroundAsset}")` }} />}
+      <div className="relative z-10 flex h-full w-full flex-col justify-end">{children}</div>
+    </div>;
+  }
   const textureLayers = layerCount(resolved.texture);
   const overlay = resolved.backgroundAsset
     ? "linear-gradient(135deg, #08121a20, #08121a85)"
@@ -47,28 +53,11 @@ export function VisualBackdrop({ visual, className = "", children }: { visual: E
   );
 }
 
-/** Paints the whole page, header included, with an event theme while it is mounted. */
+/** Decoration stays behind the editor and never changes the application tokens. */
 export function EventPageBackground({ visual }: { visual: EventVisualConfig }) {
-  const resolved = resolveEventVisual(visual);
-  const mid = resolved.colors[1];
-  useEffect(() => {
-    const root = document.documentElement;
-    root.dataset.eventTheme = "";
-    return () => {
-      delete root.dataset.eventTheme;
-    };
-  }, []);
-  useEffect(() => {
-    document.documentElement.style.setProperty("--event-mid", mid);
-    return () => {
-      document.documentElement.style.removeProperty("--event-mid");
-    };
-  }, [mid]);
   return (
-    <div aria-hidden="true" className="fixed inset-0 -z-10" data-event-page-background={`${visual.themeId}:${visual.seed}`}>
+    <div aria-hidden="true" className="fixed inset-0 -z-10 opacity-[0.13] pointer-events-none" data-event-page-background={`${visual.themeId}:${visual.seed}`}>
       <VisualBackdrop visual={visual} className="h-full w-full" />
-      {/* Photos can be bright; the form on top has to stay readable. */}
-      <div className={`absolute inset-0 ${resolved.backgroundAsset ? "bg-black/45" : "bg-black/20"}`} />
     </div>
   );
 }
@@ -77,7 +66,9 @@ export function EventPoster({ title, visual, coverUrl = null, className = "" }: 
   const resolved = resolveEventVisual(visual);
   const [dark, mid, light] = resolved.colors;
   let safeCover = "";
-  try {
+  // A host's not-yet-uploaded photo is previewed as a JPEG data URL on /create.
+  if (coverUrl?.startsWith("data:image/jpeg;base64,")) safeCover = coverUrl;
+  else try {
     const url = new URL(coverUrl ?? "");
     if (["http:", "https:"].includes(url.protocol) && !url.username && !url.password) safeCover = url.href;
   } catch {}
@@ -92,10 +83,22 @@ export function EventPoster({ title, visual, coverUrl = null, className = "" }: 
   const theme = resolved.theme;
   const icon = "icon" in theme ? theme.icon : undefined;
   const mark = theme.mark;
-  const iconClass = theme.id === "near" ? "brightness-0 invert" : "";
   const imageAsset = safeCover || resolved.coverAsset;
   const imagePosition = safeCover ? "center" : resolved.coverPosition;
   const imageSize = safeCover ? "cover" : resolved.coverSize;
+  if (theme.group === "near-me") {
+    const ink = imageAsset ? "#ffffff" : dark;
+    return (
+      <div className={`relative isolate overflow-hidden ${className}`} style={{ containerType: "inline-size", backgroundColor: mid, color: ink }}>
+        {imageAsset && <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `linear-gradient(180deg, #0002, #0008), url("${imageAsset}")` }} />}
+        <div className="absolute inset-0 flex flex-col justify-between p-[9%]" style={{ fontFamily: "var(--font-display)" }}>
+          <span className="text-[clamp(.65rem,4cqw,1rem)] font-bold tracking-[-.05em]">near me</span>
+          <span style={{ fontSize: titleSize, lineHeight: 1.12, letterSpacing: "-.045em", fontWeight: 600, overflowWrap: "anywhere" }}>{title}</span>
+          <span className="text-[clamp(.5rem,2.6cqw,.75rem)] uppercase tracking-[.14em]">You’re invited</span>
+        </div>
+      </div>
+    );
+  }
   const textureLayers = layerCount(resolved.texture);
   const overlay = imageAsset
     ? `linear-gradient(160deg, ${dark}65, #0009)`
@@ -124,8 +127,9 @@ export function EventPoster({ title, visual, coverUrl = null, className = "" }: 
   };
   return (
     <div className={`relative isolate overflow-hidden text-white ${className}`} style={{ containerType: "inline-size", backgroundColor: dark, backgroundImage, backgroundSize, backgroundPosition, backgroundRepeat }}>
+      {icon && !safeCover && <img src={icon} alt="" aria-hidden="true" className="pointer-events-none absolute -bottom-[8%] -right-[8%] h-[62%] w-[62%] object-contain opacity-[0.16]" />}
       <div className="relative flex items-center gap-2 px-[7%] pt-[7%] text-[clamp(0.48rem,1.5vw,0.72rem)] font-semibold uppercase tracking-[0.18em] text-white/80">
-        {icon ? <img src={icon} alt="" aria-hidden="true" className={`h-5 w-5 object-contain opacity-90 ${iconClass}`} /> : <span className="leading-none">{mark}</span>}
+        {icon ? <img src={icon} alt="" aria-hidden="true" className="h-5 w-5 object-contain" /> : <span className="leading-none">{mark}</span>}
         <span className="leading-none">{theme.name}</span>
       </div>
       <span className="block text-white" style={{ ...titleStyle, overflowWrap: "anywhere", lineHeight: 1.08, fontWeight: 700, letterSpacing: "-0.035em" }}>
