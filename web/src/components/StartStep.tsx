@@ -12,7 +12,7 @@ const CARDS: { mode: JoinMode; title: string; line: string; icon: string[] }[] =
   { mode: "Free", title: "Free", line: "Just RSVP, no crypto", icon: ["M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"] },
 ];
 
-/** The first screen of /create: how guests pay and how much. "Integrate instead?" adds the event link. */
+/** The first screen of /create: how guests pay and how much. The small Integrate switch next to Continue adds the event link. */
 export function StartStep({ widget: initialWidget, initial }: { widget: boolean; initial: { mode?: string | null; amount?: string | null; link?: string | null } }) {
   const router = useRouter();
   const [widget, setWidget] = useState(initialWidget);
@@ -36,21 +36,6 @@ export function StartStep({ widget: initialWidget, initial }: { widget: boolean;
 
   return (
     <form onSubmit={submit} className="gc-start space-y-7 pb-12">
-      <label className="gc-switch-row">
-        <span>Integrate instead?</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={widget}
-          className="gc-switch"
-          onClick={() => {
-            setWidget(!widget);
-            if (!widget && mode === "Free") setMode(null);
-            // Refresh and Back keep the chosen flow.
-            window.history.replaceState(null, "", startUrl({ mode: !widget && mode === "Free" ? undefined : mode ?? undefined, amount: amount || undefined, link: !widget ? link.trim() || undefined : undefined }, !widget));
-          }}
-        ><span aria-hidden /></button>
-      </label>
 
       <div className="space-y-2"><p className="gc-eyebrow">{widget ? "Integrate" : "Create an event"}</p><h1 className="gc-page-title">How will guests join?</h1><p className="text-muted">{widget ? "Bring your event over. Keep your own website." : "A little commitment, a ticket, or free. You choose."}</p></div>
 
@@ -110,9 +95,27 @@ export function StartStep({ widget: initialWidget, initial }: { widget: boolean;
         </span>
       </label>}
 
-      <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={!ready}>
-        {widget ? "Import" : "Continue"}
-      </button>
+      {/* Like Linear's "Create more": a small switch beside the main button, not a banner above the form. */}
+      <div className="flex items-center gap-4">
+        <label className="gc-switch-inline">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={widget}
+            className="gc-switch gc-switch-sm"
+            onClick={() => {
+              setWidget(!widget);
+              if (!widget && mode === "Free") setMode(null);
+              // Refresh and Back keep the chosen flow.
+              window.history.replaceState(null, "", startUrl({ mode: !widget && mode === "Free" ? undefined : mode ?? undefined, amount: amount || undefined, link: !widget ? link.trim() || undefined : undefined }, !widget));
+            }}
+          ><span aria-hidden /></button>
+          <span>Integrate</span>
+        </label>
+        <button className="btn btn-accent flex-1 !py-3 text-base font-medium" disabled={!ready}>
+          {widget ? "Import" : "Continue"}
+        </button>
+      </div>
     </form>
   );
 }

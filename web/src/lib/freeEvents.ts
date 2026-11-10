@@ -128,3 +128,23 @@ export async function setFreeGuest(id: string, account: string, going: boolean):
     return null;
   });
 }
+
+/** Host-only: list the event in the public feed or keep it link-only. Returns an error message, or null. */
+export async function setFreeEventPublic(id: string, host: string, listed: boolean): Promise<string | null> {
+  if (usesRedis()) {
+    const raw = await redis<string | null>(["GET", key(id)]);
+    if (typeof raw !== "string") return "Event not found";
+    const event = JSON.parse(raw) as Stored;
+    if (event.host !== host) return "Only the host can change this";
+    // shortcut: read-modify-write; a host saving twice at the same moment keeps the last write, which is fine here.
+    await redis(["SET", key(id), JSON.stringify({ ...event, public: listed })]);
+    return null;
+  }
+  return updateFile((store) => {
+    const event = store[id];
+    if (!event) return "Event not found";
+    if (event.host !== host) return "Only the host can change this";
+    event.public = listed;
+    return null;
+  });
+}
