@@ -1,4 +1,4 @@
-# Near Me — Good company
+# Nearvent — Good company
 
 Shared brand tokens for the static landing and the application.
 

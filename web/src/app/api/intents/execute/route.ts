@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     const recovered = Buffer.from(keccak_256(key.subarray(1)).subarray(12)).toString("hex");
     if (`0x${recovered}` !== signer) throw new Error();
   } catch {
-    return Response.json({ error: "Invalid Near Me intent or signature" }, { status: 400 });
+    return Response.json({ error: "Invalid Nearvent intent or signature" }, { status: 400 });
   }
 
   try {

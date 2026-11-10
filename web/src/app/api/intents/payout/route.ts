@@ -30,8 +30,8 @@ export async function POST(req: Request) {
     const sent = value ? JSON.parse(Buffer.from(value, "base64").toString("utf8")) : null;
     if (sent !== amount) {
       return Response.json({ hash, sent, error: sent === "0"
-        ? "The payout was returned to your Near Me balance."
-        : "The full payout is not confirmed. Check your Near Me and Intents balances before retrying." }, { status: 409 });
+        ? "The payout was returned to your Nearvent balance."
+        : "The full payout is not confirmed. Check your Nearvent and Intents balances before retrying." }, { status: 409 });
     }
     return Response.json({ hash, sent });
   } catch {

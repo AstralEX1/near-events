@@ -16,7 +16,7 @@ export default function Me() {
   const { accountId } = useWallet();
   if (!accountId) return (
     <div className="gc-checkout space-y-6 mt-6">
-      <div className="space-y-3"><p className="gc-eyebrow">Your corner of Near Me</p><h1 className="gc-page-title">My events</h1><p className="text-muted">Your plans, passes and funds, all in one place. Sign in to pick up where you left off.</p></div>
+      <div className="space-y-3"><p className="gc-eyebrow">Your corner of Nearvent</p><h1 className="gc-page-title">My events</h1><p className="text-muted">Your plans, passes and funds, all in one place. Sign in to pick up where you left off.</p></div>
       <SignInOptions />
     </div>
   );
@@ -55,7 +55,7 @@ function MyEvents({ accountId }: { accountId: string }) {
         setMine(all.filter((e, i) => statuses[i] || e.host === accountId || teams[e.id]?.includes(accountId)));
       })(),
     ]);
-    if (results[0].status === "rejected") { setBalance(null); issues.push("Your Near Me balance is unavailable."); }
+    if (results[0].status === "rejected") { setBalance(null); issues.push("Your Nearvent balance is unavailable."); }
     if (results[1].status === "rejected") setWallet(null);
     if (results[2].status === "rejected") { setInIntents(null); issues.push("Your payment balance is unavailable."); }
     if (results[3].status === "rejected") { setMine(null); issues.push("Your events could not be loaded."); }
@@ -70,7 +70,7 @@ function MyEvents({ accountId }: { accountId: string }) {
   return (
     <div className="max-w-4xl mx-auto space-y-10">
       <div className="flex items-center justify-between gap-4">
-        <div className="space-y-2"><p className="gc-eyebrow">Your corner of Near Me</p><h1 className="gc-page-title">My events</h1></div>
+        <div className="space-y-2"><p className="gc-eyebrow">Your corner of Nearvent</p><h1 className="gc-page-title">My events</h1></div>
         <Link className="btn btn-accent" href="/create">Create event</Link>
       </div>
       {loadErrors.length > 0 && <div role="status" className="card p-4 space-y-2 text-sm"><p>{loadErrors.join(" ")}</p><button className="text-accent underline" onClick={() => void load()}>Try again</button></div>}
@@ -93,7 +93,7 @@ function MyEvents({ accountId }: { accountId: string }) {
         </section>
       ))}
       <section id="funds" className="card p-6 sm:p-8 space-y-5 scroll-mt-24">
-        <div className="space-y-2"><p className="gc-eyebrow">Your funds</p><h2 className="text-xl font-semibold">Near Me balance</h2><p className="gc-price">{balance === null ? "—" : formatUsdc(balance)} <span className="text-base text-muted">USDC</span></p><p className="text-sm text-muted max-w-lg">Available payouts and refunds from all your events. Withdraw to a supported wallet and network.</p></div>
+        <div className="space-y-2"><p className="gc-eyebrow">Your funds</p><h2 className="text-xl font-semibold">Nearvent balance</h2><p className="gc-price">{balance === null ? "—" : formatUsdc(balance)} <span className="text-base text-muted">USDC</span></p><p className="text-sm text-muted max-w-lg">Available payouts and refunds from all your events. Withdraw to a supported wallet and network.</p></div>
         {balance !== null && balance > 0n && <CashOut accountId={accountId} kind={kind} balance={balance} onDone={load} />}
         {inIntents !== null && inIntents > 0n && <div className="space-y-3 pt-4 border-t border-border"><p className="text-sm text-muted">Available in NEAR Intents: <b>{formatUsdc(inIntents)} USDC</b>. This balance is separate from event deposits.</p><CashOut accountId={accountId} kind={kind} balance={inIntents} onDone={load} fromIntents /></div>}
         {HAS_INTENTS && <button className="btn btn-ghost text-sm" disabled={checking} onClick={async () => {

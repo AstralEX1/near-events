@@ -145,7 +145,7 @@ export function RegistrationCard({
   if (event.status === "Cancelled") {
     body = (
       <div className="space-y-2">
-        <p className="text-sm">This event was cancelled. Refunds were credited to guests’ Near Me balances.</p>
+        <p className="text-sm">This event was cancelled. Refunds were credited to guests’ Nearvent balances.</p>
         {!accountId ? (
           <div className="space-y-2">
             <p className="text-sm text-muted">Sign in to view your refund.</p>
@@ -170,7 +170,7 @@ export function RegistrationCard({
       </div>
     ) : event.attended_count === 0 && myStatus ? (
       <div className="space-y-2">
-        <p className="text-sm">Nobody was checked in. Your deposit was credited to Near Me.</p>
+        <p className="text-sm">Nobody was checked in. Your deposit was credited to Nearvent.</p>
         {balanceLoading ? (
           <p className="text-sm text-muted">Checking your deposit balance…</p>
         ) : balanceError ? (
@@ -193,19 +193,19 @@ export function RegistrationCard({
           </div>
         ) : (
           <p className="text-sm">
-            Your event payout was <b>{formatUsdc(event.payout_per_attendee)} USDC</b>. No funds are currently available in your Near Me balance. <Link href="/me" className="text-accent underline">View funds</Link>
+            Your event payout was <b>{formatUsdc(event.payout_per_attendee)} USDC</b>. No funds are currently available in your Nearvent balance. <Link href="/me" className="text-accent underline">View funds</Link>
           </p>
         )
       ) : myStatus === "Registered" ? (
         <p className="text-sm">You weren’t checked in, so your deposit went to the people who came.</p>
       ) : balanceLoading ? (
-        <p className="text-sm text-muted">Checking your Near Me balance…</p>
+        <p className="text-sm text-muted">Checking your Nearvent balance…</p>
       ) : balanceError ? (
-        <p className="text-sm text-warn">Could not load your Near Me balance. Refresh and try again.</p>
+        <p className="text-sm text-warn">Could not load your Nearvent balance. Refresh and try again.</p>
       ) : balance > 0n ? (
         <div className="space-y-2">
           <p className="text-sm">
-            You have <b>{formatUsdc(balance)} USDC</b> in your Near Me balance. This is an account-level balance and may include funds from other events.
+            You have <b>{formatUsdc(balance)} USDC</b> in your Nearvent balance. This is an account-level balance and may include funds from other events.
           </p>
           <CashOut accountId={accountId} kind={kind} balance={balance} onDone={loadBalance} startOpen />
         </div>
@@ -268,7 +268,7 @@ export function RegistrationCard({
         )}
       {open && (
         <div className="space-y-1.5 text-sm text-muted leading-relaxed">
-          <p>{ticket ? "A paid ticket. Refunded to your Near Me balance if the host cancels." : "Get checked in and receive your deposit plus a share of no-shows after the host closes the event. Miss it, and your deposit goes to the guests who came."}</p>
+          <p>{ticket ? "A paid ticket. Refunded to your Nearvent balance if the host cancels." : "Get checked in and receive your deposit plus a share of no-shows after the host closes the event. Miss it, and your deposit goes to the guests who came."}</p>
           <DepositRulesTooltip ticket={ticket} amount={price} />
         </div>
       )}

@@ -1,5 +1,5 @@
 export const EVENT_THEME_GROUPS = [
-  { id: "near-me", label: "Near Me" },
+  { id: "near-me", label: "Nearvent" },
   { id: "blockchain", label: "Blockchain" },
   { id: "paradise", label: "Paradise" },
   { id: "ai", label: "AI" },

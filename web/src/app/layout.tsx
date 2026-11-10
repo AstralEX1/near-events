@@ -3,7 +3,7 @@ import "./globals.css";
 import { WalletProvider } from "@/lib/wallet";
 
 export const metadata: Metadata = {
-  title: "Near Me — Events people actually show up to.",
+  title: "Nearvent — Events people actually show up to.",
   description: "Commit a small USDC deposit to an event. Everyone who shows up splits the pool.",
 };
 
