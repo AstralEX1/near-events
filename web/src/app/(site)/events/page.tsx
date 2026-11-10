@@ -57,7 +57,7 @@ export default function Events() {
     const now = Date.now();
     // Either source may fail on its own; show what loaded.
     Promise.allSettled([
-      events.list(),
+      events.listPublic(),
       fetch("/api/free-events", { cache: "no-store" }).then((r) => r.ok ? r.json() : Promise.reject(new Error("Free events unavailable"))),
     ]).then(([chain, free]) => {
       const list = [

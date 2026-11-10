@@ -1,12 +1,21 @@
 import { rateLimited } from "@/lib/ratelimit";
-import { getEventDetails, saveEventDetails } from "@/lib/eventDetails";
+import { getEventDetails, getPrivateEventIds, saveEventDetails } from "@/lib/eventDetails";
 import { locationProblem, type EventDetails } from "@/lib/eventImport";
 import { events } from "@/lib/near";
 import { readStaffToken } from "@/lib/staff";
 
 export async function GET(req: Request) {
   if (rateLimited(req, 60)) return Response.json({ error: "Too many requests" }, { status: 429 });
-  const eventId = Number(new URL(req.url).searchParams.get("e"));
+  const params = new URL(req.url).searchParams;
+  // ?private=1 → ids of link-only events, for public listings to filter out.
+  if (params.has("private")) {
+    try {
+      return Response.json({ ids: await getPrivateEventIds() }, { headers: { "Cache-Control": "no-store" } });
+    } catch {
+      return Response.json({ error: "Event details are temporarily unavailable" }, { status: 503 });
+    }
+  }
+  const eventId = Number(params.get("e"));
   if (!Number.isInteger(eventId) || eventId < 0) return Response.json({ error: "Bad event id" }, { status: 400 });
   try {
     return Response.json({ details: await getEventDetails(eventId) }, { headers: { "Cache-Control": "no-store" } });
@@ -30,7 +39,8 @@ function validDetails(value: unknown): value is EventDetails {
   const details = value as Record<string, unknown>;
   return typeof details.location === "string" && new TextEncoder().encode(details.location).length <= 1000
     && typeof details.description === "string" && new TextEncoder().encode(details.description).length <= 10_000
-    && (details.cover_url === null || safeCoverUrl(details.cover_url));
+    && (details.cover_url === null || safeCoverUrl(details.cover_url))
+    && (details.public === undefined || typeof details.public === "boolean");
 }
 
 export async function POST(req: Request) {
@@ -59,6 +69,8 @@ export async function POST(req: Request) {
       location: details.location.trim(),
       description: details.description.trim(),
       cover_url: cover ? new URL(cover).href : null,
+      // The manage page saves without this field; keep what the host chose at creation.
+      ...((details.public ?? existing?.public) === false ? { public: false } : {}),
     });
     return Response.json({ ok: true });
   } catch {

@@ -64,7 +64,7 @@ function CreateEvent() {
     cohosts: "",
     mode: parseMode(params.get("mode")) ?? ("Deposit" as JoinMode),
   });
-  // Only free events can be private for now; on-chain events are always listed.
+  // Site-only: private events are reachable by link but left out of public listings.
   const [isPublic, setIsPublic] = useState(true);
   const [when, setWhen] = useState<When | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -110,7 +110,10 @@ function CreateEvent() {
         .then((response) => response.ok ? response.json() : null)
         .then((json) => {
           const details = json?.details as EventDetails | null | undefined;
-          if (details) setForm((f) => ({ ...f, ...details, cover_url: details.cover_url ?? "" }));
+          if (!details) return;
+          const { public: listed, ...rest } = details;
+          setForm((f) => ({ ...f, ...rest, cover_url: rest.cover_url ?? "" }));
+          setIsPublic(listed !== false);
         })
         .catch(() => {});
       fetch(`/api/event-visuals?ids=${encodeURIComponent(String(from))}`, { cache: "no-store" })
@@ -255,10 +258,11 @@ function CreateEvent() {
       setCreatedVisual(eventVisual);
       const details: EventDetails = { location, description, cover_url: coverUrl };
       if (photo) details.cover_url = photo;
+      if (!isPublic) details.public = false;
       // The door team lives on our server too (api/cohosts), saved with the details.
       const doorTeam = splitCohosts(form.cohosts).filter((a) => a !== accountId);
       setCreatedCohosts(doorTeam);
-      const hasDetails = Boolean(location || description || details.cover_url || doorTeam.length);
+      const hasDetails = Boolean(location || description || details.cover_url || doorTeam.length || !isPublic);
       if (hasDetails) setCreatedDetails(details);
       let token: string | null = null;
       try {
@@ -363,6 +367,7 @@ function CreateEvent() {
           error={error}
           onSubmit={submit}
           onEdit={() => setEditing(true)}
+          visibility={<PublicChip isPublic={isPublic} onToggle={() => setIsPublic(!isPublic)} />}
           backHref={startUrl({ mode: form.mode, amount: form.deposit, link: importOnArrival ?? undefined }, true)}
         />
         {askSignIn && <SignInDialog onClose={() => setAskSignIn(false)} />}
@@ -386,17 +391,7 @@ function CreateEvent() {
               <button type="button" className="lu-chip lu-hover" onClick={() => setImportOpen(!importOpen)}>
                 {imported ? `✓ Imported from ${imported}` : "Import event"}
               </button>
-              {free ? (
-                <button type="button" className="lu-chip lu-hover" aria-pressed={!isPublic} title={isPublic ? "Shown in Events. Click to make it link-only." : "Only people with the link see it. Click to list it in Events."} onClick={() => setIsPublic(!isPublic)}>
-                  <Icon d={isPublic ? "M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18" : "M6 11h12v9H6zM8 11V8a4 4 0 018 0v3"} size={14} />
-                  {isPublic ? "Public" : "Private"}
-                </button>
-              ) : (
-                <span className="lu-chip" title="Every event is public in v1">
-                  <Icon d="M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18" size={14} />
-                  Public
-                </span>
-              )}
+              <PublicChip isPublic={isPublic} onToggle={() => setIsPublic(!isPublic)} />
             </div>
           </div>
           {importOpen && (
@@ -562,7 +557,17 @@ function CreateEvent() {
 }
 
 /** Integrate flow, right after Import: what will be created, one button, and a way to edit details first. */
-function ImportSummary({ form, when, visual, imported, busy, error, onSubmit, onEdit, backHref }: {
+/** Public events show in Events; private ones only by link. Stored off-chain as `public`. */
+function PublicChip({ isPublic, onToggle }: { isPublic: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" className="lu-chip lu-hover" aria-pressed={!isPublic} title={isPublic ? "Shown in Events. Click to make it link-only." : "Only people with the link see it. Click to list it in Events."} onClick={onToggle}>
+      <Icon d={isPublic ? "M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18" : "M6 11h12v9H6zM8 11V8a4 4 0 018 0v3"} size={14} />
+      {isPublic ? "Public" : "Private"}
+    </button>
+  );
+}
+
+function ImportSummary({ form, when, visual, imported, busy, error, onSubmit, onEdit, backHref, visibility }: {
   form: { title: string; location: string; cover_url: string; deposit: string; capacity: string; mode: JoinMode };
   when: When;
   visual: EventVisualConfig;
@@ -572,6 +577,7 @@ function ImportSummary({ form, when, visual, imported, busy, error, onSubmit, on
   onSubmit: (e: React.FormEvent) => void;
   onEdit: () => void;
   backHref: string;
+  visibility: ReactNode;
 }) {
   const start = fromEpoch(when.start, when.tz);
   return (
@@ -579,7 +585,7 @@ function ImportSummary({ form, when, visual, imported, busy, error, onSubmit, on
       <div className="flex gap-4 items-center">
         <EventPoster title={form.title} visual={visual} coverUrl={safeImageUrl(form.cover_url)} className="w-24 h-24 rounded-xl shrink-0 [&>span]:hidden" />
         <div className="min-w-0">
-          <div className="text-sm text-good font-medium">✓ Imported from {imported}</div>
+          <div className="flex flex-wrap items-center gap-2"><span className="text-sm text-good font-medium">✓ Imported from {imported}</span>{visibility}</div>
           <h1 className="text-2xl font-semibold tracking-tight break-words">{form.title}</h1>
         </div>
       </div>
@@ -908,7 +914,7 @@ async function uploadCover(dataUrl: string, token: string): Promise<string> {
 
 async function saveDetails(eventId: number, details: EventDetails, doorTeam: string[], token: string) {
   if (doorTeam.length) await cohostsApi.save(token, eventId, doorTeam);
-  if (!details.location && !details.description && !details.cover_url) return;
+  if (!details.location && !details.description && !details.cover_url && details.public !== false) return;
   if (details.cover_url?.startsWith("data:")) details = { ...details, cover_url: await uploadCover(details.cover_url, token) };
   const response = await fetch("/api/event-details", {
     method: "POST",

@@ -20,7 +20,7 @@ export function HeaderPreview({ path = "/e/4", accountId = null }: { path?: stri
 function HeaderContent({ accountId, signOut, path, preview = false }: {
   accountId: string | null; signOut?: () => void; path: string; preview?: boolean;
 }) {
-  const links = [["/events", "Events"], ["/create", "Create event"], ["/widget", "Integrate"]];
+  const links = [["/events", "Events"], ["/create", "Create event"]];
   return (
     <header className="gc-header">
       <div className="gc-header-inner">
