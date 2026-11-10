@@ -12,15 +12,24 @@ import { nep141Contract, oneClickQuote, oneClickTokens, payDepositAddress, USDC_
 
 import { confirmRegistration, intentsUsdcBalance, registerFromIntents, withdrawIntentsCall } from "@/lib/intents";
 import { embedReturnPath } from "@/lib/embed";
+import { guestNamesApi } from "@/lib/guestNamesClient";
+
+function requireDisplayName(value: string): string {
+  const name = value.trim().replace(/\s+/g, " ");
+  if (!name) throw new Error("Enter your name so the host can find you at the door.");
+  if (new TextEncoder().encode(name).length > 80) throw new Error("Name is too long. Shorten it and try again.");
+  return name;
+}
 
 export default function PayFromAnyChain() {
   const id = Number(useParams<{ id: string }>().id);
   const router = useRouter();
-  const { accountId, kind, signIn, send } = useWallet();
+  const { accountId, kind, signIn, send, staffToken } = useWallet();
   const [event, setEvent] = useState<EventView | null | undefined>(undefined);
   const [tokens, setTokens] = useState<OneClickToken[]>([]);
   const [assetId, setAssetId] = useState("");
   const [refundTo, setRefundTo] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +107,7 @@ export default function PayFromAnyChain() {
     setBusy(true);
     setError(null);
     try {
+      const name = requireDisplayName(displayName);
       if (kind === "evm") {
         await registerFromIntents(accountId, event.id, event.deposit);
       } else {
@@ -105,6 +115,12 @@ export default function PayFromAnyChain() {
         await send([withdrawIntentsCall(EVENTS_CONTRACT, event.deposit, msg)]);
       }
       await confirmRegistration(event.id, accountId);
+      try {
+        const token = await staffToken();
+        await guestNamesApi.save(event.id, name, token);
+      } catch {
+        // Registration already landed on-chain; name is best-effort for the host list.
+      }
       setRegistered(true);
       try { sessionStorage.removeItem(paymentKey); } catch { /* Optional. */ }
       const returnPath = embedReturnPath(new URLSearchParams(window.location.search).get("returnTo"), event.id);
@@ -159,18 +175,26 @@ export default function PayFromAnyChain() {
         Send any supported token from any chain. NEAR Intents (1Click) swaps it to exactly{" "}
         <b className="text-text">{formatUsdc(event.deposit)} USDC</b> {isTicket(event) ? "for your ticket " : ""}and credits your NEAR Intents balance. Confirm registration once the USDC arrives.
       </p>
-      {!live && (
-        <div className="card p-3 text-sm border-accent/40 bg-accent-soft/40">
-          This is a <b>price preview</b> on testnet. Register with free test USDC from the event page.
-        </div>
-      )}
-
       {live && accountId && available !== null && (
         <div className="card p-4 space-y-2">
           <p>{formatUsdc(available)} USDC in NEAR Intents. <Link href="/me" className="underline">View or withdraw funds</Link></p>
           {registered && <p className="text-good">Your place is confirmed.</p>}
           {canRegister && available >= BigInt(event.deposit) && (
-            <button className="btn btn-primary" disabled={busy} onClick={finishRegistration}>Confirm registration</button>
+            <>
+              <label className="block space-y-1">
+                <span className="text-sm font-medium">Your name</span>
+                <input
+                  className="input w-full"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Name for the guest list"
+                  autoComplete="name"
+                  maxLength={80}
+                  disabled={busy}
+                />
+              </label>
+              <button className="btn btn-primary" disabled={busy} onClick={finishRegistration}>Confirm registration</button>
+            </>
           )}
           {!canRegister && !registered && <p>This event is no longer accepting registrations.</p>}
         </div>
@@ -193,7 +217,7 @@ export default function PayFromAnyChain() {
           </label>
         )}
         <button className="btn btn-primary w-full" disabled={busy || !assetId || !!quote?.depositAddress || (live && (!canRegister || (!!accountId && !fromWallet && !refundTo.trim())))} onClick={getQuote}>
-          {!accountId ? "Sign in first" : busy ? "Getting quote…" : live ? "Get deposit address" : "Preview price"}
+          {!accountId ? "Sign in first" : busy ? "Getting quote…" : live ? "Get deposit address" : "Get quote"}
         </button>
 
         {quote && (

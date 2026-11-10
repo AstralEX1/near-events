@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatUsdc, isTicket, priceLabel, type EventView, type GuestView } from "@/lib/near";
 import { Avatar, Cover, DateBadge, shortAccount } from "@/components/ui";
 import { cohostsProblem, splitCohosts } from "@/lib/cohostsShared";
+import type { GuestNames } from "@/lib/guestNamesClient";
 
 /** How many of the newest guests the Overview shows before "All Guests". */
 const RECENT_GUESTS = 5;
@@ -12,6 +13,7 @@ const RECENT_GUESTS = 5;
 type Props = {
   event: EventView;
   guests: GuestView[];
+  guestNames: GuestNames;
   origin: string;
   isHost: boolean;
   busy: boolean;
@@ -30,7 +32,7 @@ type Props = {
  * invitations: closing the event is the one thing a host must not miss, so it
  * jumps to the top as soon as the event is over.
  */
-export function Overview({ event, guests, origin, isHost, busy, onGuests, onCheckIn, onFinalize, onCancel, doorTeam, onSaveDoorTeam }: Props) {
+export function Overview({ event, guests, guestNames, origin, isHost, busy, onGuests, onCheckIn, onFinalize, onCancel, doorTeam, onSaveDoorTeam }: Props) {
   const [sharing, setSharing] = useState(false);
   const id = event.id;
   const open = event.status === "Open";
@@ -74,7 +76,7 @@ export function Overview({ event, guests, origin, isHost, busy, onGuests, onChec
         </div>
       </section>
 
-      <GuestsSection event={event} guests={guests} onGuests={onGuests} onShare={() => setSharing(true)} />
+      <GuestsSection event={event} guests={guests} guestNames={guestNames} onGuests={onGuests} onShare={() => setSharing(true)} />
 
       {!over && closeCard}
 
@@ -268,7 +270,7 @@ function timeAgo(ms: number): string {
   return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function GuestsSection({ event, guests, onGuests, onShare }: { event: EventView; guests: GuestView[]; onGuests: () => void; onShare: () => void }) {
+function GuestsSection({ event, guests, guestNames, onGuests, onShare }: { event: EventView; guests: GuestView[]; guestNames: GuestNames; onGuests: () => void; onShare: () => void }) {
   const going = event.guest_count;
   const attended = event.attended_count;
   const capacity = Math.max(event.capacity, 1);
@@ -333,14 +335,19 @@ function GuestsSection({ event, guests, onGuests, onShare }: { event: EventView;
         )}
         {recent.length > 0 ? (
           <ul className="card divide-y divide-border overflow-hidden">
-            {recent.map((g) => (
+            {recent.map((g) => {
+              const name = guestNames[g.account_id];
+              return (
               <li key={g.account_id}>
                 <button type="button" onClick={onGuests} className="w-full flex items-center gap-3 px-3 sm:px-4 py-2.5 text-left hover:bg-bg transition-colors">
                   <Avatar account={g.account_id} size={36} />
                   <span className="flex-1 min-w-0">
                     <span className="block font-medium truncate" title={g.account_id}>
-                      {shortAccount(g.account_id)}
+                      {name || shortAccount(g.account_id)}
                     </span>
+                    {name && (
+                      <span className="block text-xs text-muted truncate">{shortAccount(g.account_id)}</span>
+                    )}
                     {g.paid_by !== g.account_id && (
                       <span className="block text-xs text-muted truncate">paid by {shortAccount(g.paid_by)}</span>
                     )}
@@ -353,7 +360,8 @@ function GuestsSection({ event, guests, onGuests, onShare }: { event: EventView;
                   </span>
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         ) : going > 0 ? (
           <div className="card p-4 text-sm text-muted">The guest list was cleared from the chain after the event closed. The totals above stay.</div>

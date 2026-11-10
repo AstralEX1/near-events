@@ -4,7 +4,7 @@ import Link from "next/link";
 const GUEST = [
   ["Find an event", "Open the event link from the organizer, or browse events on the home page."],
   ["Sign in", "Google or email works, no crypto needed: we create a NEAR account for you. NEAR and EVM wallets work too."],
-  ["Put down the deposit", "Press Register. The deposit goes through NEAR Intents: pay with USDC from your NEAR wallet or with a supported token and network. On testnet the test USDC comes from a faucet."],
+  ["Put down the deposit", "Press Register. The deposit goes through NEAR Intents: pay with USDC from your NEAR wallet or with a supported token and network."],
   ["Come and get checked in", "Show the QR code from the event page at the door. The host marks you as here; your payout shows once they close the event."],
   ["Withdraw", "When the host closes the event, press Withdraw on the event page: your deposit plus your share of the no-shows, sent through NEAR Intents to a supported network and wallet."],
 ];

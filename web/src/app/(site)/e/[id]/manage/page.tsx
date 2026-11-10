@@ -13,6 +13,7 @@ import { IntegrationGuide } from "@/components/IntegrationGuide";
 import { Overview } from "./Overview";
 import { PublicDetailsEditor } from "./PublicDetailsEditor";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
+import { guestNamesApi, type GuestNames } from "@/lib/guestNamesClient";
 
 type Tab = "overview" | "event" | "guests" | "registration" | "integration";
 const TABS: { id: Tab; label: string }[] = [
@@ -42,6 +43,7 @@ function ManageEvent() {
   const { accountId, send, staffToken } = useWallet();
   const [event, setEvent] = useState<EventView | null>(null);
   const [guests, setGuests] = useState<GuestView[]>([]);
+  const [guestNames, setGuestNames] = useState<GuestNames>({});
   const [doorTeam, setDoorTeam] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -64,8 +66,13 @@ function ManageEvent() {
   const load = useCallback(async () => {
     const e = await events.get(id);
     if (!e) throw new Error("Event not found.");
-    const [g, team] = await Promise.all([events.guests(id), cohostsApi.get(id).catch(() => null)]);
+    const [g, team, names] = await Promise.all([
+      events.guests(id),
+      cohostsApi.get(id).catch(() => null),
+      guestNamesApi.list(id).catch(() => ({})),
+    ]);
     if (team) setDoorTeam(team);
+    setGuestNames(names);
     // Door check-ins live on our server until finalize puts them on-chain.
     if (e.status === "Open") {
       const marks = await checkIns.list(id);
@@ -89,12 +96,19 @@ function ManageEvent() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = q ? guests.filter((g) => g.account_id.toLowerCase().includes(q)) : guests;
+    const list = q
+      ? guests.filter((g) => {
+          const name = (guestNames[g.account_id] ?? "").toLowerCase();
+          return g.account_id.toLowerCase().includes(q) || name.includes(q);
+        })
+      : guests;
     return [...list].sort((a, b) => {
       if (a.status !== b.status) return a.status === "Attended" ? 1 : -1;
       return a.registered_at - b.registered_at;
     });
-  }, [guests, query]);
+  }, [guests, guestNames, query]);
+
+  const labelFor = (account: string) => guestNames[account] || shortAccount(account);
 
   if (!event) return <p className="text-muted px-1" role="status">{error ?? "Loading…"}</p>;
 
@@ -150,17 +164,17 @@ function ManageEvent() {
     const account = text.replace(/^near:/, "").trim().toLowerCase();
     const g = guests.find((x) => x.account_id === account);
     if (!g) setScanNote({ text: `${account.slice(0, 40)} is not on the guest list`, ok: false });
-    else if (g.status === "Attended") setScanNote({ text: `${shortAccount(account)} is already checked in`, ok: true });
+    else if (g.status === "Attended") setScanNote({ text: `${labelFor(account)} is already checked in`, ok: true });
     else {
       setSelected((prev) => new Set(prev).add(account));
-      setScanNote({ text: `✓ ${shortAccount(account)} queued. Confirm check-in when ready.`, ok: true });
+      setScanNote({ text: `✓ ${labelFor(account)} queued. Confirm check-in when ready.`, ok: true });
     }
   };
 
   const exportCsv = () => {
     const rows = [
-      ["account", "status", "registered_at", "paid_by"],
-      ...guests.map((g) => [g.account_id, g.status, new Date(g.registered_at).toISOString(), g.paid_by]),
+      ["name", "account", "status", "registered_at", "paid_by"],
+      ...guests.map((g) => [guestNames[g.account_id] ?? "", g.account_id, g.status, new Date(g.registered_at).toISOString(), g.paid_by]),
     ];
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
@@ -251,6 +265,7 @@ function ManageEvent() {
           <Overview
             event={event}
             guests={guests}
+            guestNames={guestNames}
             origin={origin}
             isHost={isHost}
             busy={busy}
@@ -283,6 +298,7 @@ function ManageEvent() {
           paid={paid}
           checkedIn={checkedIn}
           share={share}
+          guestNames={guestNames}
           query={query}
           onQuery={setQuery}
           scanning={scanning}
@@ -333,6 +349,7 @@ function GuestsTab({
   paid,
   checkedIn,
   share,
+  guestNames,
   query,
   onQuery,
   scanning,
@@ -356,6 +373,7 @@ function GuestsTab({
   paid: number;
   checkedIn: number;
   share: bigint;
+  guestNames: GuestNames;
   query: string;
   onQuery: (v: string) => void;
   scanning: boolean;
@@ -430,7 +448,7 @@ function GuestsTab({
 
         <input
           className="input"
-          placeholder="Find by account"
+          placeholder="Find by name or account"
           aria-label="Find guest"
           value={query}
           onChange={(e) => onQuery(e.target.value)}
@@ -452,14 +470,16 @@ function GuestsTab({
             {filtered.map((g) => {
               const attended = g.status === "Attended";
               const queued = selected.has(g.account_id);
+              const name = guestNames[g.account_id];
               return (
                 <li key={g.account_id} className="flex items-center gap-3 px-3 sm:px-4 min-h-14 py-2">
                   <Avatar account={g.account_id} size={36} />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate" title={g.account_id}>
-                      {shortAccount(g.account_id)}
+                      {name || shortAccount(g.account_id)}
                     </div>
                     <div className="text-xs text-muted">
+                      {name ? `${shortAccount(g.account_id)} · ` : ""}
                       {attended ? "Checked in" : "Paid · going"}
                       {g.paid_by !== g.account_id ? ` · paid by ${shortAccount(g.paid_by)}` : ""}
                     </div>

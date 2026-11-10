@@ -5,9 +5,10 @@ import { useEventVisual } from "@/lib/event-visual-client";
 import { meshGradient, type EventVisualConfig } from "@/lib/event-visuals";
 import { EventPoster } from "@/components/EventVisual";
 
-/** Implicit accounts (Google/email users) and EVM addresses (Intents accounts) are shortened for display. */
+/** Implicit accounts (Google/email users) and EVM addresses (Intents accounts) are shortened for display. Named accounts drop the `.testnet` suffix in the UI. */
 export function shortAccount(account: string): string {
-  return /^([0-9a-f]{64}|0x[0-9a-f]{40})$/.test(account) ? `${account.slice(0, 6)}…${account.slice(-4)}` : account;
+  if (/^([0-9a-f]{64}|0x[0-9a-f]{40})$/.test(account)) return `${account.slice(0, 6)}…${account.slice(-4)}`;
+  return account.endsWith(".testnet") ? account.slice(0, -".testnet".length) : account;
 }
 
 function hash(s: string): number {

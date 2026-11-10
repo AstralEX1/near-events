@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Nearvent">
+  <rect width="512" height="512" rx="96" fill="#0B1220"/>
+  <circle cx="256" cy="256" r="148" fill="none" stroke="#5B8CFF" stroke-width="28"/>
+  <circle cx="256" cy="256" r="64" fill="#5B8CFF"/>
+  <path d="M256 92v56M256 364v56M92 256h56M364 256h56" stroke="#9DB7FF" stroke-width="20" stroke-linecap="round"/>
+</svg>

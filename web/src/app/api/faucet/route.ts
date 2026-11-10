@@ -39,7 +39,7 @@ async function fundEvmIntents(address: string) {
 }
 export async function POST(req: Request) {
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
-  if (NETWORK !== "testnet") return Response.json({ error: "Testnet only" }, { status: 403 });
+  if (NETWORK !== "testnet") return Response.json({ error: "Faucet is not available here" }, { status: 403 });
   const { accountId } = await req.json();
   if (typeof accountId !== "string") return Response.json({ error: "Bad request" }, { status: 400 });
   try {

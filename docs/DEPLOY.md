@@ -1,23 +1,17 @@
 # Web app hosting and escrow release
 
-Current status (2026-11-08): Vercel project `near-me-testnet` is linked from
-`web/`; the hosted `/e/4` flow last passed on 2026-11-07 with faucet-USDC
-registration, host-only event-detail save to Upstash, and off-chain check-in.
-It uses the Upstash Redis database `NearMeTestnet`. After the latest
-`git-main` production deployment failed, a clean production deployment from
-remote `main` commit `5176910` reached READY. The project domain
-`www.nearvent.site` was attached and the production home page and `/e/4`
-both returned HTTP 200. Production still serves snapshot `5176910`; later main
-commit `c0c6b2a` and local uncommitted StageShow/demo edits are not deployed.
-PR #21 merged to `main` on 2026-11-08 as `e8329a6`; its TP5 contract was
-separately deployed and verified on a disposable testnet account. The follow-up
-main commit `0e25579` carries the remaining eight uncommitted StageShow/demo
-files. TP5 state layout is incompatible with TP4. The Vercel app still targets
-TP4. No contract upgrade, app-default switch, or mainnet release has happened.
-Upstash reported `NearMeTestnet` active on 2026-11-08. An earlier local request
-that day could not resolve the Vercel hostname; the production checks above
-confirmed the hostname was reachable after authentication. Hosted secret values
-are intentionally not documented here.
+Current status (2026-11-09): Vercel project `near-me-testnet` is linked from
+`web/` and serves `www.nearvent.site`. Alex approved switching the app to the
+verified TP5 disposable deploy `escrow-tp5.tp5-codex-qa-20261107-a.testnet`
+(code hash `9ggN7z1oTekunzEceJGv6ufRwaW6smrfiUGNSt2HeRRG`). Local default,
+`.env.example`, `.env.local`, and Vercel Production/Preview
+`NEXT_PUBLIC_EVENTS_CONTRACT` now point at TP5. Latest production deploy
+`dpl_6YoKPG64wgvuQz6GGsq4ik88Tcuo` (READY) includes guest display names,
+hidden testnet UI labels, and `.testnet` stripped from shortAccount. TP4
+events remain on chain outside the app flow. USDC remains
+`usdc.tidepool-sandbox.testnet`, verifier `verifier.tidepool-sandbox.testnet`.
+Upstash `NearMeTestnet` stores off-chain details keyed by contract id. Hosted
+secret values are intentionally not documented here.
 
 ## Vercel setup reference
 
