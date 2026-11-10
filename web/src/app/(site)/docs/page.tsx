@@ -32,10 +32,10 @@ export default function DocsHome() {
         </p>
         <Steps
           items={[
-            ["Create an event", <>Open <Link href="/create" className="text-accent underline">Create Event</Link>, pick Deposit, set 0.1 USDC and a time later today.</>],
+            ["Create an event", <>Open <Link href="/create" className="text-accent underline">Create Event</Link>, pick Stake to RSVP, set 0.1 USDC, press Create Event.</>],
             ["Register as a guest", "Open the event link in a private window, sign in with another demo account, press Register."],
             ["Check the guest in", "Back as the host: Manage → Guests → Check in."],
-            ["Close the event", "Manage → Close event. The pool is split on-chain."],
+            ["Close the event", "Manage → Close event & pay out. The pool is split on-chain."],
             ["Withdraw", "As the guest, open the event and press Withdraw."],
           ]}
         />

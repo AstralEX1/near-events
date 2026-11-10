@@ -36,10 +36,10 @@ demo account**. You get a fresh NEAR account with a little NEAR for gas and
 2 test USDC. Every action signs on its own (no wallet, no popups), and each one
 is a real NEAR transaction you can open in the explorer.
 
-1. **Create Event** → Deposit → 0.1 USDC, a start time later today. → The event page opens.
+1. **Create Event** → **Stake to RSVP** → 0.1 USDC → **Create Event**. → The event is on-chain.
 2. Open the event link in a private window, take another demo account, press **Register**. → You show up under “Going”.
 3. Back as the host: **Manage → Guests → Check in**. → No transaction: check-ins are kept off-chain.
-4. **Manage → Close event**. → One transaction sends the list of who came; the pool is split on-chain.
+4. **Manage → Close event & pay out**. → One transaction sends the list of who came; the pool is split on-chain.
 5. As the guest, press **Withdraw**. → The deposit plus the no-shows’ share lands in your account.
 
 User docs: [www.nearvent.site/docs](https://www.nearvent.site/docs) ·

@@ -48,7 +48,8 @@ export async function demoLogin(): Promise<string> {
   }
   const id = account(secret).accountId;
   await post("/api/fastauth/fund", id);
-  await post("/api/faucet", id);
+  // Test USDC arrives in the background so sign-in takes one transaction, not three.
+  post("/api/faucet", id).catch((e) => console.warn("Demo USDC top-up failed:", e));
   return id;
 }
 
