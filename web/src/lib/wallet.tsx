@@ -53,10 +53,46 @@ interface WalletState {
   /** Signs and sends calls, one transaction each, in order. */
   send: (calls: Call[]) => Promise<void>;
   /**
-   * A server token for door check-in (host / door team). Asks the wallet to sign
-   * a message once (Google/email: an unsent transaction), then reuses it.
+   * A server token for signed-in saves (free events, RSVPs, names, door check-in).
+   * NEAR wallets sign one message during sign-in; Google/email proves once with an
+   * unsent transaction. The token is reused for 11 hours.
    */
   staffToken: () => Promise<string>;
+}
+
+const tokenKey = (accountId: string) => `near-events:staff:${accountId}`;
+
+/** The server token from an earlier proof, kept for 11h so later actions never ask the wallet again. */
+function savedStaffToken(accountId: string): string | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(tokenKey(accountId)) ?? "null") as { token: string; until: number } | null;
+    if (saved && saved.until > Date.now()) return saved.token;
+  } catch {}
+  return null;
+}
+
+async function exchangeProof(proof: object, accountId: string): Promise<string> {
+  const res = await fetch("/api/checkin/session", { method: "POST", body: JSON.stringify(proof) });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? "Could not sign in");
+  if (json.accountId !== accountId) throw new Error(`The wallet signed as ${json.accountId}, not ${accountId}.`);
+  try {
+    localStorage.setItem(tokenKey(accountId), JSON.stringify({ token: json.token, until: Date.now() + 11 * 60 * 60 * 1000 }));
+  } catch {}
+  return json.token as string;
+}
+
+/** NEP-413 message signed by the wallet: proves the account to our server. No transaction. */
+async function proveWallet(c: NearConnector, accountId: string): Promise<string> {
+  const wallet = await c.wallet();
+  const nonce = new Uint8Array(32);
+  crypto.getRandomValues(nonce);
+  new DataView(nonce.buffer).setBigUint64(0, BigInt(Date.now()));
+  const signed = await wallet.signMessage({ message: STAFF_MESSAGE, recipient: EVENTS_CONTRACT, nonce });
+  if (!signed) throw new Error("The wallet did not sign the message.");
+  return exchangeProof({
+    wallet: { accountId: signed.accountId, publicKey: signed.publicKey, signature: signed.signature, nonce: btoa(String.fromCharCode(...nonce)) },
+  }, accountId);
 }
 
 const WalletContext = createContext<WalletState | null>(null);
@@ -99,9 +135,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           saved = localStorage.getItem(KIND_KEY);
         } catch {}
         if (saved === "email" && !connecting.current) return;
+        const userPicked = connecting.current;
         connecting.current = false;
         fastAuthLogout().catch(() => {});
-        remember("wallet", t.accounts[0]?.accountId ?? null);
+        const id = t.accounts[0]?.accountId ?? null;
+        remember("wallet", id);
+        // Prove the account as part of sign-in, so creating events, RSVPs and saves never open the wallet later.
+        if (userPicked && id && !savedStaffToken(id)) proveWallet(c, id).catch(() => {});
       });
       c.on("wallet:signOut", () => remember(null, null));
       let saved: string | null = null;
@@ -158,10 +198,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    try {
+      if (accountId) localStorage.removeItem(tokenKey(accountId));
+    } catch {}
     if (kind === "email") await fastAuthLogout();
     else await connector.current?.disconnect().catch(() => {});
     remember(null, null);
-  }, [kind]);
+  }, [kind, accountId]);
 
   const send = useCallback(
     async (calls: Call[]) => {
@@ -223,43 +266,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const staffToken = useCallback(async () => {
     if (!accountId) throw new Error("Sign in first.");
-    const key = `near-events:staff:${accountId}`;
-    try {
-      const saved = JSON.parse(sessionStorage.getItem(key) ?? "null") as { token: string; until: number } | null;
-      if (saved && saved.until > Date.now()) return saved.token;
-    } catch {}
+    const saved = savedStaffToken(accountId);
+    if (saved) return saved;
 
-    let proof: object;
     if (kind === "email" || (kind == null && isImplicit(accountId))) {
-      proof = { mpc: await fastAuthProve() };
-    } else if (kind === "wallet") {
+      return exchangeProof({ mpc: await fastAuthProve() }, accountId);
+    }
+    if (kind === "wallet") {
       const c = connector.current;
       if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");
-      const wallet = await c.wallet();
-      const nonce = new Uint8Array(32);
-      crypto.getRandomValues(nonce);
-      new DataView(nonce.buffer).setBigUint64(0, BigInt(Date.now()));
-      const signed = await wallet.signMessage({ message: STAFF_MESSAGE, recipient: EVENTS_CONTRACT, nonce });
-      if (!signed) throw new Error("The wallet did not sign the message.");
-      proof = {
-        wallet: {
-          accountId: signed.accountId,
-          publicKey: signed.publicKey,
-          signature: signed.signature,
-          nonce: btoa(String.fromCharCode(...nonce)),
-        },
-      };
-    } else {
-      throw new Error("Door check-in needs a NEAR wallet or a Google/email account.");
+      return proveWallet(c, accountId);
     }
-    const res = await fetch("/api/checkin/session", { method: "POST", body: JSON.stringify(proof) });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error ?? "Could not sign in");
-    if (json.accountId !== accountId) throw new Error(`The wallet signed as ${json.accountId}, not ${accountId}.`);
-    try {
-      sessionStorage.setItem(key, JSON.stringify({ token: json.token, until: Date.now() + 11 * 60 * 60 * 1000 }));
-    } catch {}
-    return json.token as string;
+    throw new Error("Door check-in needs a NEAR wallet or a Google/email account.");
   }, [kind, accountId]);
 
   return (

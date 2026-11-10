@@ -69,7 +69,7 @@ export async function POST(req: Request) {
       location: details.location.trim(),
       description: details.description.trim(),
       cover_url: cover ? new URL(cover).href : null,
-      // The manage page saves without this field; keep what the host chose at creation.
+      // Older clients save without this field; keep what the host chose before.
       ...((details.public ?? existing?.public) === false ? { public: false } : {}),
     });
     return Response.json({ ok: true });

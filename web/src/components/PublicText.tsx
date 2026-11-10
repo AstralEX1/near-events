@@ -1,27 +1,16 @@
 import { isGoogleMapsLink } from "@/lib/eventImport";
+import { mapPlaceName } from "@/lib/eventLines";
 
 /** A link shows as a short label; older events may hold a plain address, which stays as text. */
-export function LocationValue({ value }: { value: string }) {
+export function LocationValue({ value, short = false }: { value: string; short?: boolean }) {
   const link = value.trim();
   if (!/^https?:\/\/\S+$/i.test(link)) return <PublicText value={value} />;
-  const place = mapPlaceName(link);
+  const place = short ? null : mapPlaceName(link);
   return (
     <a href={link} target="_blank" rel="noopener noreferrer" className="text-sm text-muted underline underline-offset-2 hover:text-text">
       {place ? place + " · " + (isGoogleMapsLink(link) ? "Open in Google Maps ↗" : "Open map ↗") : isGoogleMapsLink(link) ? "Open in Google Maps ↗" : "Open map ↗"}
     </a>
   );
-}
-
-function mapPlaceName(value: string): string | null {
-  try {
-    const url = new URL(value);
-    const query = url.searchParams.get("query") ?? url.searchParams.get("q");
-    if (query && !/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(query) && !query.startsWith("place_id:")) return query.slice(0, 120);
-    const path = url.pathname.match(/\/maps\/place\/([^/]+)/i)?.[1];
-    return path ? decodeURIComponent(path.replace(/\+/g, " ")).slice(0, 120) : null;
-  } catch {
-    return null;
-  }
 }
 
 export function PublicText({ value }: { value: string }) {
@@ -48,3 +37,4 @@ export function PublicText({ value }: { value: string }) {
     </p>
   );
 }
+

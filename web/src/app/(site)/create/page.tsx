@@ -221,9 +221,8 @@ function CreateEvent() {
       }
       const location = form.location.trim();
       const description = form.description.trim();
-      const rawCoverUrl = form.cover_url.trim();
-      const coverUrl = rawCoverUrl ? safeImageUrl(rawCoverUrl) : null;
-      if (rawCoverUrl && !coverUrl) throw new Error("Use a public HTTP or HTTPS image link for the cover image.");
+      // Only an imported event fills cover_url; a bad link is dropped, the theme cover shows instead.
+      const coverUrl = safeImageUrl(form.cover_url.trim());
       if (encoder.encode(description).length > 10_000) throw new Error("Event details are too long. Shorten them and try again.");
       if (free) {
         // No chain: save on our server and open the event page.
@@ -468,17 +467,6 @@ function CreateEvent() {
                 onChange={(e) => set("description")(e.target.value)}
                 placeholder="Description, host contacts, and useful links"
               />
-            </label>
-            <label className="block space-y-1.5">
-              <span className="label">Custom cover image (optional)</span>
-              <input
-                className="lu-field w-full px-3 py-2 text-sm"
-                type="url"
-                value={form.cover_url}
-                onChange={(e) => set("cover_url")(e.target.value)}
-                placeholder="Public image link"
-              />
-              {safeImageUrl(form.cover_url) && <img src={safeImageUrl(form.cover_url)!} alt="Custom cover image preview" referrerPolicy="no-referrer" className="w-full max-h-56 rounded-xl object-cover" />}
             </label>
           </div>
 

@@ -1,13 +1,13 @@
 import { rateLimited } from "@/lib/ratelimit";
 import { readStaffToken } from "@/lib/staff";
-import { createFreeEvent, freeEventsOf, getFreeEvent, listPublicFreeEvents, setFreeGuest } from "@/lib/freeEvents";
+import { createFreeEvent, freeEventsOf, getFreeEvent, listPublicFreeEvents, setFreeEventPublic, setFreeGuest } from "@/lib/freeEvents";
 import { freeEventProblem, isFreeEventId, type FreeEventInput } from "@/lib/freeEventsShared";
 
 // GET            → public free events for the /events feed
 // GET ?id=<id>   → one free event with its guest list
 // GET ?attended=<account> → { count } of ended free events the account joined
 // GET ?mine=1    → free events the signed-in account hosts or joined (bearer token)
-// POST {action:"create", event} | {action:"join"|"leave", id}  (signed in)
+// POST {action:"create", event} | {action:"join"|"leave", id} | {action:"visibility", id, public}  (signed in)
 export async function GET(req: Request) {
   if (rateLimited(req, 60)) return Response.json({ error: "Too many requests" }, { status: 429 });
   const params = new URL(req.url).searchParams;
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     accountId = readStaffToken(req.headers.get("authorization")?.replace(/^Bearer\s+/i, ""));
   } catch {}
   if (!accountId) return Response.json({ error: "Sign in again" }, { status: 401 });
-  const body = await req.json().catch(() => ({})) as { action?: string; id?: string; event?: unknown };
+  const body = await req.json().catch(() => ({})) as { action?: string; id?: string; event?: unknown; public?: unknown };
   try {
     if (body.action === "create") {
       const problem = freeEventProblem(body.event);
@@ -64,6 +64,11 @@ export async function POST(req: Request) {
     if ((body.action === "join" || body.action === "leave") && typeof body.id === "string" && isFreeEventId(body.id)) {
       const problem = await setFreeGuest(body.id, accountId, body.action === "join");
       return problem ? Response.json({ error: problem }, { status: problem === "Event not found" ? 404 : 409 }) : Response.json({ ok: true });
+    }
+    if (body.action === "visibility" && typeof body.id === "string" && isFreeEventId(body.id) && typeof body.public === "boolean") {
+      const problem = await setFreeEventPublic(body.id, accountId, body.public);
+      if (!problem) return Response.json({ ok: true });
+      return Response.json({ error: problem }, { status: problem === "Event not found" ? 404 : 403 });
     }
     return Response.json({ error: "Bad request" }, { status: 400 });
   } catch {

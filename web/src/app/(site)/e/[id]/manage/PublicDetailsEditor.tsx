@@ -19,6 +19,7 @@ export function PublicDetailsEditor({ eventId, title }: { eventId: number; title
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [listed, setListed] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,6 +38,7 @@ export function PublicDetailsEditor({ eventId, title }: { eventId: number; title
         : EMPTY_DETAILS;
       const storedVisual = visualsBody?.visuals?.[String(eventId)] as unknown;
       setDetails(nextDetails);
+      setListed(stored?.public !== false);
       setOriginalLocation(nextDetails.location.trim());
       setVisual(validEventVisual(storedVisual) ? storedVisual : fallbackEventVisual(eventId, title));
       setLoaded(true);
@@ -67,7 +69,7 @@ export function PublicDetailsEditor({ eventId, title }: { eventId: number; title
     setError(null);
     try {
       const token = await staffToken();
-      const nextDetails = { location, description, cover_url: coverUrl };
+      const nextDetails = { location, description, cover_url: coverUrl, public: listed };
       await Promise.all([
         postJson("/api/event-details", { eventId, details: nextDetails }, token),
         postJson("/api/event-visuals", { eventId, visual }, token),
@@ -87,7 +89,7 @@ export function PublicDetailsEditor({ eventId, title }: { eventId: number; title
     <section className="card p-4 sm:p-5 space-y-5">
       <div>
         <h2 className="text-lg font-semibold">Event page</h2>
-        <p className="text-sm text-muted mt-1">Change the theme, location, description or cover here. The event name and time stay as created.</p>
+        <p className="text-sm text-muted mt-1">Change visibility, theme, location, description or cover here. The event name and time stay as created.</p>
       </div>
       {loading ? (
         <p className="text-sm text-muted" role="status">Loading event page settings…</p>
@@ -98,6 +100,10 @@ export function PublicDetailsEditor({ eventId, title }: { eventId: number; title
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-5">
+          <label className="gc-switch-inline !text-[var(--text)]">
+            <button type="button" role="switch" aria-checked={listed} className="gc-switch gc-switch-sm" onClick={() => { setListed(!listed); setSaved(false); }}><span aria-hidden /></button>
+            <span>{listed ? "Public: shown in Events" : "Private: only people with the link"}</span>
+          </label>
           <EventThemePicker value={visual} title={title} coverUrl={details.cover_url} onChange={(next) => { setVisual(next); setSaved(false); }} />
           <label className="block space-y-1.5">
             <span className="label">Location (optional)</span>
