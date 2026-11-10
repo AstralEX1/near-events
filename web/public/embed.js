@@ -70,7 +70,7 @@
 
   var BUTTON_CSS =
     ":host{display:inline-block}" +
-    "button{font:inherit;font-weight:600;cursor:pointer;border:0;color:#fff;background:var(--ne-accent,#5b4bff);" +
+    "button{font:inherit;font-weight:600;cursor:pointer;border:0;color:#fff;background:var(--ne-accent,#d61f69);" +
     "border-radius:var(--ne-radius,12px);padding:.7em 1.2em;line-height:1.2;transition:opacity .15s}" +
     "button:hover{opacity:.9}button:disabled{opacity:.55;cursor:default}" +
     "small{display:block;margin-top:.35em;font-size:.75em;opacity:.7}";

@@ -119,11 +119,9 @@ components:
     textColor: "{colors.accent}"
     rounded: "{rounded.full}"
     padding: 2px 8px
-  logo-pill:
-    backgroundColor: "{colors.logo-pink}"
-    textColor: "{colors.on-accent}"
+  logo:
+    textColor: "{colors.text}"
     typography: "{typography.logo}"
-    rounded: 0.3em
 ---
 
 # Nearvent brand book
@@ -177,11 +175,11 @@ In code always use the variable (`var(--accent)`) or the Tailwind alias
 | `--sage` (violet) | `#d2ccff` | same | Rare secondary block |
 | `--good` / `--warn` / `--danger` | `#237a57` / `#8c5a13` / `#b53e49` | `#86d0aa` / `#ebbf80` / `#f1a1aa` | Status only |
 
-- Logo pink `#ff3d8b` appears only in the logo files and the landing logo.
+- Logo pink `#ff3d8b` appears only in the square icon (favicon).
   For text and buttons use `--accent` (`#d61f69`): it passes contrast.
 - Checked contrast (WCAG): ink on blush 17.4:1, muted on blush 5.8:1,
   white on accent 4.9:1, accent on blush 4.7:1, dark accent on dark bg 7.1:1.
-  White on logo pink is 3.3:1, so it is only for the large logo.
+  White on logo pink is 3.3:1, so it is only for the icon.
 - Green, amber and red mean status (paid, waiting, error). Never decoration.
 - Dark mode is required: every new color needs a dark value, set in the
   three places `tokens.css` already uses (`prefers-color-scheme`,
@@ -238,7 +236,7 @@ Soft and round, like a party sticker.
 - 12px: app buttons and inputs (`.btn`, `.input`, `.lu-field`).
 - 16px: menus, mode icons. 20px: cards (`.card`). 24px: choice cards.
   28px: the create form. Landing photo frames use an arch: `180px 180px 28px 28px`.
-- The logo pill is tilted `-4deg`. Tilt is reserved for the logo; don't tilt UI.
+- Only the square icon is tilted (`-4deg`); don't tilt UI or the wordmark.
 
 ## Components
 
@@ -279,24 +277,26 @@ Don't:
 
 ## Logo & Assets
 
-The logo is the word **near** in ink plus **vent** in a pink pill tilted
-`-4deg`, Geist 800. In the app it is live text (`near<em>vent</em>` with class
-`.gc-brand`, see [`Header.tsx`](web/src/components/Header.tsx)); use the files
-below wherever text can't be used.
+The logo is one lowercase word, **nearvent**, in Geist 800 with -0.04em
+tracking, ink on light and blush on dark. No part of the word is highlighted:
+"vent" on its own reads like "ventilation", so never split, color or box it
+(Alex, 2026-11-10). In the app it is live text (class `.gc-brand`, see
+[`Header.tsx`](web/src/components/Header.tsx)); use the files below wherever
+text can't be used.
 
 | File | Use |
 |---|---|
 | [`nearvent-wordmark.svg`](web/public/brand/nearvent-wordmark.svg) | Logo on light backgrounds |
 | [`nearvent-wordmark-dark.svg`](web/public/brand/nearvent-wordmark-dark.svg) | Logo on dark backgrounds |
-| [`nearvent-icon.svg`](web/public/brand/nearvent-icon.svg) | Square mark: tilted pink pill with "n" (avatars, small spaces) |
+| [`nearvent-icon.svg`](web/public/brand/nearvent-icon.svg) | Square mark: tilted pink square with "n" (favicon, avatars, small spaces) |
 | [`favicon.ico`](web/src/app/favicon.ico), [`icon.svg`](web/src/app/icon.svg), [`apple-icon.png`](web/src/app/apple-icon.png) | Browser and home-screen icons (Next.js app icons) |
 
 Public URLs on the site: `/brand/nearvent-wordmark.svg`,
 `/brand/nearvent-wordmark-dark.svg`, `/brand/nearvent-icon.svg`, `/favicon.ico`.
 
 Letters in the SVG files are outlines (no font needed). Rules: keep clear
-space of at least the pill height around the logo; don't recolor, stretch,
-untilt or add effects; don't write "Nearvent" in another font as a logo. In
+space of at least the letter height around the logo; don't recolor, stretch,
+tilt or add effects; don't write "Nearvent" in another font as a logo. In
 text the name is written **Nearvent** (one word, capital N).
 
 ## Voice & Copy
@@ -346,6 +346,8 @@ inside the event area. The header, checkout, wallet steps and Manage pages
 always use the brand tokens. Theme choices are stored off-chain, never in
 the contract. Theme list and colors: [`web/src/lib/event-visuals.ts`](web/src/lib/event-visuals.ts).
 
-Known gap (2026-11-10): the default theme `studio` still uses the old
-lavender palette and the "near me" mark. It should move to the Party poster
-colors and the Nearvent name.
+Nearvent's own themes (group `near-me` in code; Studio is the default,
+then Violet, Sun, Afterhours, Paper, Photo) use only brand colors: blush,
+pink, violet, sun and ink. They keep the brand font, and their poster shows
+the `nearvent` wordmark. Theme ids (`garden`, `sunset`, ...) stay as they
+are because saved events point to them; only names and colors changed.
