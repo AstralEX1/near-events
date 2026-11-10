@@ -2,6 +2,7 @@
 <title>Nearvent Landing</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="/brand/fonts.css">
+<script>var t;try{t=localStorage.getItem('near-me:appearance')}catch(e){}if(t!=='system')document.documentElement.dataset.theme=t==='dark'?'dark':'light'</script>
 <style>
 /* Layout: Luma-style photo hero, Unlock-style problem cards, then a numbered 4-step scheme where each step shows our real interface, no-show bars, quote, Luma-style CTA. */
 :root {
@@ -528,4 +529,6 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 })();
 </script>
 
+<script>// Light is the default: match illustrations to the chosen theme instead of the OS setting.
+if(document.documentElement.dataset.theme)document.querySelectorAll('source[media*="prefers-color-scheme: dark"]').forEach(function(el){if(document.documentElement.dataset.theme==='dark')el.removeAttribute('media');else el.remove()})</script>
 </body></html>
