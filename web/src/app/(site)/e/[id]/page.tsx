@@ -24,6 +24,7 @@ export default function EventPage() {
   const id = Number(useParams<{ id: string }>().id);
   const { accountId } = useWallet();
   const [event, setEvent] = useState<EventView | null | undefined>(undefined);
+  const [loadError, setLoadError] = useState(false);
   const [guests, setGuests] = useState<GuestView[]>([]);
   const [details, setDetails] = useState<EventDetails | null>(null);
   const [detailsUnavailable, setDetailsUnavailable] = useState(false);
@@ -31,8 +32,9 @@ export default function EventPage() {
   const visual = useEventVisual(id, event?.metadata.title ?? "");
 
   const load = useCallback(async () => {
+    setLoadError(false);
     const [e, g] = await Promise.all([
-      events.get(id),
+      events.get(id).catch(() => { setLoadError(true); return undefined; }),
       events.guests(id).catch(() => []),
     ]);
     setEvent(e);
@@ -61,6 +63,7 @@ export default function EventPage() {
     load();
   }, [load]);
 
+  if (loadError) return <div className="card p-6 space-y-3"><h1 className="text-xl font-semibold">Couldn’t load this event</h1><p className="text-muted">Please try again in a moment.</p><button className="btn btn-accent" onClick={() => void load()}>Try again</button></div>;
   if (event === undefined) return <p className="text-muted">Loading…</p>;
   if (event === null) return <p>Event not found.</p>;
 
@@ -71,8 +74,9 @@ export default function EventPage() {
 
   // Cover, hosts and who's going on the left; title, time and registration on the right.
   return (
-    <VisualBackdrop visual={visual} className="max-w-[928px] mx-auto rounded-3xl p-3 sm:p-6 shadow-sm">
-      <div className="relative grid gap-8 md:grid-cols-[330px_1fr] items-start rounded-2xl bg-surface/70 p-3 sm:p-5 backdrop-blur-sm">
+    <>
+    <VisualBackdrop visual={visual} className="gc-event-shell">
+      <div className="gc-event-content">
         <aside className="space-y-6">
           <Cover event={event} visual={visual} coverUrl={details?.cover_url} className="aspect-square w-full rounded-2xl shadow-sm" />
           <div>
@@ -102,7 +106,7 @@ export default function EventPage() {
           <div className="flex items-start gap-2">
             <div className="min-w-0">
               {event.status !== "Open" && <StatusPill status={event.status} />}
-              <h1 className="text-3xl sm:text-[40px] sm:leading-[1.15] font-semibold tracking-tight mt-1">{event.metadata.title}</h1>
+              <h1 className="gc-event-title mt-1">{event.metadata.title}</h1>
             </div>
             <MoreMenu id={id} isStaff={isStaff} />
           </div>
@@ -118,10 +122,16 @@ export default function EventPage() {
               </div>
             </div>
             <div className="text-sm text-muted">
-              {isTicket(event)
-                ? `${formatUsdc(event.deposit)} USDC ticket`
-                : `${formatUsdc(event.deposit)} USDC deposit · pool ${formatUsdc(event.total_pool)} USDC`}
+              {event.guest_count} going{event.status === "Open" && ` · ${Math.max(0, event.capacity - event.guest_count)} spot${event.capacity - event.guest_count === 1 ? "" : "s"} left`}
             </div>
+          </div>
+
+          <div id="registration" className="gc-registration space-y-4">
+            <div>
+              <p className="gc-eyebrow">{me ? "Your place" : isTicket(event) ? "Paid ticket" : "Attendance deposit"}</p>
+              {!me && <p className="gc-price mt-1">{formatUsdc(event.deposit)} <span className="text-base text-muted">USDC</span></p>}
+            </div>
+            <RegistrationCard event={event} myStatus={me?.status ?? null} onChange={load} />
           </div>
 
           {(details?.location || details?.description) && (
@@ -146,17 +156,14 @@ export default function EventPage() {
             </p>
           )}
 
-          <div className="card overflow-hidden bg-surface/80 backdrop-blur">
-            <div className="px-4 py-2.5 text-sm font-medium text-muted border-b border-border">Registration</div>
-            <div className="p-4">
-              <RegistrationCard event={event} myStatus={me?.status ?? null} onChange={load} />
-            </div>
-          </div>
+
 
           {event.status !== "Open" && <GuestGrid event={event} guests={guests} me={accountId} />}
         </section>
       </div>
     </VisualBackdrop>
+    {event.status === "Open" && !me && event.guest_count < event.capacity && <div className="gc-mobile-register"><span><b>{formatUsdc(event.deposit)} USDC</b><small className="block text-muted">{isTicket(event) ? "Paid ticket" : "Attendance deposit"}</small></span><a href="#registration" className="btn btn-accent">{isTicket(event) ? "Get a ticket" : "Join event"}</a></div>}
+    </>
   );
 }
 

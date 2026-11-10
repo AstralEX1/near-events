@@ -152,9 +152,9 @@ export default function PayFromAnyChain() {
   };
 
   return (
-    <div className="max-w-lg mx-auto space-y-5">
+    <div className="max-w-lg mx-auto space-y-6">
       <Link href={`/e/${id}`} className="text-muted hover:text-text">← {event.metadata.title}</Link>
-      <h1 className="text-3xl font-semibold tracking-tight">Pay from any chain</h1>
+      <h1 className="gc-page-title">Save your place.</h1>
       <p className="text-muted">
         Send any supported token from any chain. NEAR Intents (1Click) swaps it to exactly{" "}
         <b className="text-text">{formatUsdc(event.deposit)} USDC</b> {isTicket(event) ? "for your ticket " : ""}and credits your NEAR Intents balance. Confirm registration once the USDC arrives.

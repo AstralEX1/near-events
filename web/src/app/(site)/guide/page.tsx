@@ -4,21 +4,21 @@ import Link from "next/link";
 const GUEST = [
   ["Find an event", "Open the event link from the organizer, or browse events on the home page."],
   ["Sign in", "Google or email works, no crypto needed: we create a NEAR account for you. NEAR and EVM wallets work too."],
-  ["Put down the deposit", "Press Register. The deposit goes through NEAR Intents: pay with USDC from your NEAR wallet or with almost any token from any chain. On testnet the test USDC comes from a faucet."],
+  ["Put down the deposit", "Press Register. The deposit goes through NEAR Intents: pay with USDC from your NEAR wallet or with a supported token and network. On testnet the test USDC comes from a faucet."],
   ["Come and get checked in", "Show the QR code from the event page at the door. The host marks you as here; your payout shows once they close the event."],
-  ["Withdraw", "When the host closes the event, press Withdraw on the event page: your deposit plus your share of the no-shows, sent through NEAR Intents to any chain or wallet."],
+  ["Withdraw", "When the host closes the event, press Withdraw on the event page: your deposit plus your share of the no-shows, sent through NEAR Intents to a supported network and wallet."],
 ];
 
 const HOST = [
   ["Create the event", "Title, time, place, deposit and capacity. Add the people who will check guests in as your door team; you can change it later."],
   ["Share it", "Send the link, or put a card or button on your own website from the “For your website” page."],
   ["Check people in", "On the event day open Manage, press “Scan QR codes” and scan guests, then press Check in. Search works too. Marks are saved on Near Me, no transaction per guest."],
-  ["Close the event", "Finalize shows who came and what each gets, then pays out. Nobody checked in? Everyone simply gets their deposit back."],
+  ["Close the event", "Review the final door list, then close the event. Deposits are credited to checked-in guests’ Near Me balances; if nobody was checked in, deposits are refunded there. For paid tickets, revenue is credited to the host."],
 ];
 
 const FAQ = [
-  ["Who holds the money?", "A NEAR smart contract holds it, so neither the organizer nor we can take it. Every deposit, the final list of who came and every payout are public on-chain."],
-  ["Is there a fee?", "No. The whole pool goes to the people who came."],
+  ["Who holds the money?", "A NEAR smart contract holds it, and releases it according to the event’s payment rules. Every deposit, the final list of who came and every payout are public on-chain."],
+  ["Is there a fee?", "Near Me has no platform fee. Deposit pools go to checked-in guests; ticket revenue goes to the host. Network and swap fees may still apply."],
   ["Can I cancel after registering?", "No. That is what makes people come. If the host cancels, everyone gets their deposit back."],
   ["What if the host forgets to close the event?", "30 days after it ends, anyone can trigger a full refund to every guest."],
   ["What if I came but wasn’t checked in?", "Tell the host before they close the event; they can still check you in. A photo from the event helps."],
@@ -30,8 +30,8 @@ export default function Guide() {
   return (
     <div className="max-w-3xl space-y-12">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Guide & FAQ</h1>
-        <p className="text-muted mt-2">Everything about going to and hosting a deposit-backed event.</p>
+        <h1 className="gc-page-title">How Near Me works</h1>
+        <p className="text-muted mt-2">A few things to know before your next get-together.</p>
       </div>
       <Steps id="guests" title="Going to an event" items={GUEST} />
       <Steps id="hosts" title="Hosting an event" items={HOST} />

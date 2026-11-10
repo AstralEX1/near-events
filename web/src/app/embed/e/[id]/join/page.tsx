@@ -51,8 +51,8 @@ export default function EmbedJoin() {
   }, [status, accountId, id]);
 
   return (
-    <div className="embed min-h-screen bg-bg p-4" style={embedVars(style)}>
-      <div className="max-w-md mx-auto space-y-4">
+    <div className="embed min-h-screen bg-bg p-4" data-theme={style.theme} style={embedVars(style)}>
+      <div className="gc-checkout space-y-5">
         {event === undefined && <p className="text-muted text-sm">{loadError ? "Could not load event. Check your connection and reload." : "Loading…"}</p>}
         {event === null && <p>Event not found.</p>}
         {event && (

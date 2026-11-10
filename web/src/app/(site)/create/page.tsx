@@ -47,6 +47,8 @@ function CreateRoute() {
 /** Create an event with its public details and escrow options. */
 function CreateEvent() {
   const { accountId, send, staffToken } = useWallet();
+  // Host's own cover photo as a JPEG data URL; uploaded after the event is created.
+  const [photo, setPhoto] = useState<string | null>(null);
   const router = useRouter();
   const params = useSearchParams();
   const integrate = params.get("flow") === "widget";
@@ -72,7 +74,7 @@ function CreateEvent() {
   const [created, setCreated] = useState<EventView | null>(null);
   const [createdDetails, setCreatedDetails] = useState<EventDetails | null>(null);
   const [createdCohosts, setCreatedCohosts] = useState<string[]>([]);
-  const [eventVisual, setEventVisual] = useState<EventVisualConfig>({ themeId: "near", seed: 0 });
+  const [eventVisual, setEventVisual] = useState<EventVisualConfig>({ themeId: "studio", seed: 0 });
   const [createdVisual, setCreatedVisual] = useState<EventVisualConfig | null>(null);
   const [detailsSaveError, setDetailsSaveError] = useState<string | null>(null);
   const [savingDetails, setSavingDetails] = useState(false);
@@ -232,10 +234,11 @@ function CreateEvent() {
       setCreated(latest);
       setCreatedVisual(eventVisual);
       const details: EventDetails = { location, description, cover_url: coverUrl };
+      if (photo) details.cover_url = photo;
       // The door team lives on our server too (api/cohosts), saved with the details.
       const doorTeam = splitCohosts(form.cohosts).filter((a) => a !== accountId);
       setCreatedCohosts(doorTeam);
-      const hasDetails = Boolean(location || description || coverUrl || doorTeam.length);
+      const hasDetails = Boolean(location || description || details.cover_url || doorTeam.length);
       if (hasDetails) setCreatedDetails(details);
       let token: string | null = null;
       try {
@@ -350,11 +353,11 @@ function CreateEvent() {
   return (
     <>
       <EventPageBackground visual={eventVisual} />
-      <form onSubmit={submit} className="max-w-[920px] mx-auto pb-40 grid gap-6 md:gap-8 md:grid-cols-[300px_minmax(0,1fr)] items-start">
-        <div className="relative z-20 md:sticky md:top-20">
-          <EventThemePicker value={eventVisual} title={form.title} coverUrl={safeImageUrl(form.cover_url)} onChange={setEventVisual} />
+      <form onSubmit={submit} className="max-w-[920px] mx-auto pb-40 grid grid-cols-1 gap-6 md:gap-8 md:grid-cols-[300px_minmax(0,1fr)] items-start">
+        <div className="relative min-w-0 z-20 md:sticky md:top-20">
+          <EventThemePicker value={eventVisual} title={form.title} coverUrl={safeImageUrl(form.cover_url)} photo={photo} onPhoto={setPhoto} onChange={setEventVisual} />
         </div>
-        <div className="min-w-0 space-y-4">
+        <div className="gc-create-form min-w-0 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="lu-chip">
               {accountId ? <span className="truncate max-w-44">{accountId}</span> : "Your events"}
@@ -510,6 +513,7 @@ function CreateEvent() {
 
           {error && <p className="text-sm text-warn break-words">{error}</p>}
           <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy || !!missing} title={missing}>
+            {busy && <span className="gc-spinner" aria-hidden="true" />}
             {busy ? "Confirm in your wallet…" : integrate ? "Integrate" : "Create Event"}
           </button>
         </div>
@@ -651,10 +655,10 @@ function DTRow({ label, dot, date, time, onChange, invalid }: { label: string; d
   const dateRef = useRef<HTMLInputElement>(null);
   const [slots, setSlots] = useState(false);
   return (
-    <div className="flex items-center gap-3 py-1">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1">
       <span className={`relative z-10 w-2.5 h-2.5 rounded-full shrink-0 ${dot === "fill" ? "bg-muted" : "border border-muted bg-[var(--bg)]"}`} />
       <span className="flex-1 text-muted">{label}</span>
-      <div className={`flex rounded-lg gap-px ${invalid ? "ring-1 ring-warn" : ""}`}>
+      <div className={`flex ml-auto rounded-lg gap-px ${invalid ? "ring-1 ring-warn" : ""}`}>
         <label className="lu-pill rounded-l-lg relative cursor-pointer w-[124px]">
           {dayLabel(date)}
           <input
@@ -795,11 +799,14 @@ function Created({ event, visual, coverUrl, detailsSaveError, savingDetails, onR
   const page = `${origin}/e/${event.id}`;
   const checkout = `${origin}/p/${event.id}`;
   return (
-    <div className="max-w-xl mx-auto space-y-6">
+    <div className="gc-created max-w-xl mx-auto space-y-6">
       <div className="flex gap-4 items-center">
-        <Cover event={event} visual={visual ?? undefined} coverUrl={coverUrl} className="w-20 h-20 rounded-xl shrink-0 [&>span]:hidden" />
+        <div className="gc-created-cover relative shrink-0">
+          <Cover event={event} visual={visual ?? undefined} coverUrl={coverUrl} className="w-20 h-20 rounded-xl [&>span]:hidden" />
+          <svg viewBox="0 0 24 24" className="gc-created-check" aria-hidden="true"><circle cx="12" cy="12" r="11" /><path d="M7 12.5l3.2 3.2L17 9" /></svg>
+        </div>
         <div>
-          <div className="text-sm text-good font-medium">✓ Event created</div>
+          <div className="text-sm text-good font-medium">Event created</div>
           <h1 className="text-2xl font-semibold tracking-tight">{event.metadata.title}</h1>
         </div>
       </div>
@@ -853,9 +860,18 @@ function safeImageUrl(value: string): string | null {
   }
 }
 
+async function uploadCover(dataUrl: string, token: string): Promise<string> {
+  const bytes = await (await fetch(dataUrl)).blob();
+  const response = await fetch("/api/covers", { method: "POST", headers: { "Content-Type": "image/jpeg", Authorization: `Bearer ${token}` }, body: bytes });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok || typeof json.url !== "string") throw new Error(json.error ?? "Could not upload the cover photo");
+  return json.url;
+}
+
 async function saveDetails(eventId: number, details: EventDetails, doorTeam: string[], token: string) {
   if (doorTeam.length) await cohostsApi.save(token, eventId, doorTeam);
   if (!details.location && !details.description && !details.cover_url) return;
+  if (details.cover_url?.startsWith("data:")) details = { ...details, cover_url: await uploadCover(details.cover_url, token) };
   const response = await fetch("/api/event-details", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },

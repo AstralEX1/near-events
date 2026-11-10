@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { NearMeJourneyDemo } from "@/components/stageshow/NearMeJourneyDemo";
 
 export const metadata: Metadata = {
   title: "Fill every slot · Near Me",
@@ -16,7 +15,6 @@ export default function TryPage() {
       <p className="text-lg text-muted">
         Same small deposit for every guest. Who comes gets it back — plus a share of the no-shows.
       </p>
-      <NearMeJourneyDemo />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full text-left">
         <Link href="/create" className="rounded-2xl border border-border bg-surface p-4 hover:border-accent/40 transition-colors">
           <div className="font-semibold">Create event</div>
