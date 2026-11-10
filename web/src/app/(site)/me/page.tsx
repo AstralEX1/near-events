@@ -79,19 +79,7 @@ function MyEvents({ accountId }: { accountId: string }) {
         <div className="min-w-0 space-y-2"><p className="gc-eyebrow">Up next</p><h2 className="text-xl sm:text-2xl font-semibold break-words">{upcoming.metadata.title}</h2><p className="text-sm text-muted">{new Date(upcoming.metadata.starts_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p><p className="text-sm text-accent font-medium">{hostOf(upcoming) ? "Open host tools" : "View your pass"} ↗</p></div>
       </Link>}
       {mine === null && loadErrors.length === 0 && <p className="text-muted" role="status">Finding your events…</p>}
-      {mine !== null && ([
-        ["Going", mine.filter((e) => !hostOf(e)), "Your next plan is out there.", "/events", "Explore events"],
-        ["Hosting", mine.filter(hostOf), "Bring your people together.", "/create", "Create an event"],
-      ] as [string, EventView[], string, string, string][]).map(([title, list, empty, href, action]) => (
-        <section key={title} className="space-y-4"><h2 className="text-xl font-semibold">{title}</h2>
-          {list.length === 0 ? <div className="card p-6 space-y-3"><p className="text-muted">{empty}</p><Link href={href} className="text-accent font-medium text-sm">{action} ↗</Link></div> : <div className="grid gap-3 sm:grid-cols-2">{[...list].sort((a, b) => b.metadata.starts_at - a.metadata.starts_at).map((e) => (
-            <Link key={e.id} href={`/e/${e.id}${hostOf(e) ? "/manage" : ""}`} className="gc-list-card flex gap-4 items-center p-4">
-              <Cover event={e} className="w-16 h-16 rounded-xl shrink-0" />
-              <div className="min-w-0"><h3 className="font-semibold break-words">{e.metadata.title}</h3><p className="text-sm text-muted mt-1">{new Date(e.metadata.starts_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{e.status !== "Open" && ` · ${e.status === "Finalized" ? "Closed" : "Cancelled"}`}</p></div>
-            </Link>
-          ))}</div>}
-        </section>
-      ))}
+      {mine !== null && <MyEventTabs going={mine.filter((e) => !hostOf(e))} hosted={mine.filter(hostOf)} />}
       <section id="funds" className="card p-6 sm:p-8 space-y-5 scroll-mt-24">
         <div className="space-y-2"><p className="gc-eyebrow">Your funds</p><h2 className="text-xl font-semibold">Nearvent balance</h2><p className="gc-price">{balance === null ? "—" : formatUsdc(balance)} <span className="text-base text-muted">USDC</span></p><p className="text-sm text-muted max-w-lg">Available payouts and refunds from all your events. Withdraw to a supported wallet and network.</p></div>
         {balance !== null && balance > 0n && <CashOut accountId={accountId} kind={kind} balance={balance} onDone={load} />}
@@ -111,5 +99,27 @@ function MyEvents({ accountId }: { accountId: string }) {
       </section>
       <details className="card p-5"><summary className="cursor-pointer flex items-center gap-3"><Avatar account={accountId} size={32} /><span className="font-medium">{shortAccount(accountId)}</span><span className="ml-auto text-sm text-muted">Account</span></summary><div className="pt-4 space-y-2 text-sm text-muted"><p className="break-all">{accountId}</p>{kind !== "evm" && <p>USDC in your NEAR wallet: {wallet === null ? "Unavailable" : formatUsdc(wallet)}</p>}{inIntents !== null && <p>USDC in NEAR Intents: {formatUsdc(inIntents)}</p>}</div></details>
     </div>
+  );
+}
+
+/** "My Events" are events you joined; "Hosted Events" appears once you host one, and opens it directly when it is the only one. */
+function MyEventTabs({ going, hosted }: { going: EventView[]; hosted: EventView[] }) {
+  const [tab, setTab] = useState<"going" | "hosted">("going");
+  const list = tab === "hosted" ? hosted : going;
+  const tabClass = (on: boolean) => `h-11 -mb-px border-b-2 ${on ? "border-text font-semibold" : "border-transparent text-muted"}`;
+  return (
+    <section className="space-y-4">
+      <div className="flex gap-6 border-b border-border" role="group" aria-label="Your events">
+        <button className={tabClass(tab === "going")} aria-pressed={tab === "going"} onClick={() => setTab("going")}>My Events</button>
+        {hosted.length === 1 ? <Link className={tabClass(false)} href={`/e/${hosted[0].id}/manage`}>Hosted Events</Link>
+          : hosted.length > 1 && <button className={tabClass(tab === "hosted")} aria-pressed={tab === "hosted"} onClick={() => setTab("hosted")}>Hosted Events</button>}
+      </div>
+      {list.length === 0 ? <div className="card p-6 space-y-3"><p className="text-muted">Your next plan is out there.</p><Link href="/events" className="text-accent font-medium text-sm">Explore events ↗</Link></div> : <div className="grid gap-3 sm:grid-cols-2">{[...list].sort((a, b) => b.metadata.starts_at - a.metadata.starts_at).map((e) => (
+        <Link key={e.id} href={`/e/${e.id}${tab === "hosted" ? "/manage" : ""}`} className="gc-list-card flex gap-4 items-center p-4">
+          <Cover event={e} className="w-16 h-16 rounded-xl shrink-0" />
+          <div className="min-w-0"><h3 className="font-semibold break-words">{e.metadata.title}</h3><p className="text-sm text-muted mt-1">{new Date(e.metadata.starts_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{e.status !== "Open" && ` · ${e.status === "Finalized" ? "Closed" : "Cancelled"}`}</p></div>
+        </Link>
+      ))}</div>}
+    </section>
   );
 }

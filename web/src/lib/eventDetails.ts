@@ -8,6 +8,7 @@ import { EVENTS_CONTRACT } from "./config";
 import type { EventDetails } from "./eventImport";
 
 const key = (eventId: number) => `event-details:${EVENTS_CONTRACT}:${eventId}`;
+const PRIVATE_SET = `event-private:${EVENTS_CONTRACT}`;
 const redisUrl = () => process.env.UPSTASH_REDIS_REST_URL?.replace(/\/$/, "");
 const redisToken = () => process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -70,7 +71,15 @@ export async function saveEventDetails(eventId: number, details: EventDetails): 
   const id = key(eventId);
   if (usesRedis()) {
     await redis(["SET", id, JSON.stringify(details)]);
+    await redis([details.public === false ? "SADD" : "SREM", PRIVATE_SET, eventId]);
     return;
   }
   await updateFile((store) => void (store[id] = details));
+}
+
+/** On-chain event ids whose host chose Private; public listings must leave these out. */
+export async function getPrivateEventIds(): Promise<number[]> {
+  if (usesRedis()) return (await redis<string[]>(["SMEMBERS", PRIVATE_SET])).map(Number);
+  const prefix = key(0).slice(0, -1);
+  return Object.entries(await loadFile()).flatMap(([id, d]) => id.startsWith(prefix) && d.public === false ? [Number(id.slice(prefix.length))] : []);
 }

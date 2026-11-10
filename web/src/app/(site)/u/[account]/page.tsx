@@ -30,7 +30,7 @@ export default function Profile() {
 
   useEffect(() => {
     (async () => {
-      const all = await events.list();
+      const all = await events.listPublic();
       const ids = all.map((e) => e.id);
       const [statuses, teams] = await Promise.all([
         events.guestStatuses(account, ids),

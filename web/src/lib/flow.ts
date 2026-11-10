@@ -34,7 +34,7 @@ export function createStep(params: Params): "form" | "start-create" | "start-wid
   const chosen = mode === "Free" || (!!mode && validAmount(params.get("amount")));
   if (params.get("flow") === "widget") {
     // The site button takes payment, so Integrate never opens a free event.
-    return chosen && mode !== "Free" && detectEventSource(params.get("import") ?? "") ? "form" : "start-widget";
+    return chosen && mode !== "Free" && params.get("step") !== "start" && detectEventSource(params.get("import") ?? "") ? "form" : "start-widget";
   }
   return chosen && params.get("step") !== "start" ? "form" : "start-create";
 }
@@ -50,8 +50,8 @@ export function formUrl({ mode, amount, link }: Choice): string {
 /** The start step with this choice filled in, for Back and for fixing a link that failed to import. */
 export function startUrl({ mode, amount, link }: Partial<Choice>, widget: boolean): string {
   const filled = query({ mode, amount, import: link });
-  if (widget) return filled ? `/widget?${filled}` : "/widget";
-  return filled ? `/create?step=start&${filled}` : "/create?step=start";
+  const base = widget ? "/create?flow=widget&step=start" : "/create?step=start";
+  return filled ? `${base}&${filled}` : base;
 }
 
 export const integrationUrl = (eventId: number | string) => `/e/${eventId}/manage?tab=integration`;

@@ -69,6 +69,15 @@ export const RECENT_LIMIT = 100;
 export const events = {
   /** The newest events first, up to 100. */
   list: () => view<EventView[]>("get_recent_events", { limit: RECENT_LIMIT }),
+  /** Browser only: recent events without the ones their hosts made Private (link only). */
+  listPublic: async () => {
+    const [all, hidden] = await Promise.all([
+      events.list(),
+      // shortcut: if the private list is unavailable, listings show every event; fine while Private means unlisted, not secret.
+      fetch("/api/event-details?private=1", { cache: "no-store" }).then((r) => r.json()).then((j) => new Set<number>(j.ids ?? [])).catch(() => new Set<number>()),
+    ]);
+    return all.filter((e) => !hidden.has(e.id));
+  },
   get: (id: number) => view<EventView | null>("get_event", { event_id: id }),
   guests: (id: number) => view<GuestView[]>("get_guests", { event_id: id, from_index: 0, limit: MAX_CAPACITY }),
   guestStatus: (id: number, account: string) =>

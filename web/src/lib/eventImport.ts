@@ -12,6 +12,8 @@ export interface EventDetails {
   location: string;
   description: string;
   cover_url: string | null;
+  /** Same field as free events: false = link only, left out of public listings. Missing means public. */
+  public?: boolean;
 }
 
 export type EventSource = "Luma" | "BaliSquad";
