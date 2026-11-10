@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 import { detectEventSource } from "@/lib/eventImport";
-import { formUrl, parseMode, startUrl, validAmount, type JoinMode } from "@/lib/flow";
+import { MODE_HINTS, formUrl, parseMode, startUrl, validAmount, type JoinMode } from "@/lib/flow";
 
 // Icon paths from Lucide (ISC license): wallet, ticket and heart.
 const CARDS: { mode: JoinMode; title: string; line: string; icon: string[] }[] = [
@@ -46,6 +46,7 @@ export function StartStep({ widget: initialWidget, initial }: { widget: boolean;
             key={card.mode}
             className="gc-mode-card cursor-pointer p-2 sm:p-3"
             data-selected={mode === card.mode}
+            data-tooltip={MODE_HINTS[card.mode]}
           >
             <input type="radio" name="guests-pay" className="sr-only" checked={mode === card.mode} onChange={() => setMode(card.mode)} />
             <span aria-hidden className="gc-mode-icon">

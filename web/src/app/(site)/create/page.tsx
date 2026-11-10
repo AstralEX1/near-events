@@ -14,7 +14,7 @@ import { rememberEventVisual } from "@/lib/event-visual-client";
 import { SignInOptions } from "@/components/SignIn";
 import { LOCAL_TZ, city, dayLabel, fromEpoch, gmtLabel, toEpoch } from "@/lib/time";
 import { detectEventSource, IMPORT_ENDPOINT, locationProblem, type EventDetails, type ImportedEvent } from "@/lib/eventImport";
-import { createStep, integrationUrl, parseMode, startUrl, validAmount, type JoinMode } from "@/lib/flow";
+import { MODE_HINTS, createStep, integrationUrl, parseMode, startUrl, validAmount, type JoinMode } from "@/lib/flow";
 import { MAX_FREE_CAPACITY } from "@/lib/freeEventsShared";
 import { ApprovalToggle } from "@/components/ApprovalToggle";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
@@ -489,6 +489,7 @@ function CreateEvent() {
                       role="radio"
                       aria-checked={form.mode === m}
                       onClick={() => setForm((f) => ({ ...f, mode: m }))}
+                      data-tooltip={MODE_HINTS[m]}
                       className={`px-3 py-1 rounded-full text-sm ${form.mode === m ? "bg-accent text-white" : "text-muted"}`}
                     >
                       {m}
@@ -510,25 +511,6 @@ function CreateEvent() {
               >
                 <input className="input" type="number" min="0.1" step="0.01" required value={form.deposit} onChange={(e) => set("deposit")(e.target.value)} />
               </OptionRow>}
-              <div className="lu-row">
-                <Icon d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" className="text-muted" />
-                {free ? (
-                  <>
-                    <span className="flex-1">Guests just RSVP</span>
-                    <span className="text-muted text-sm">No crypto needed</span>
-                  </>
-                ) : form.mode === "Ticket" ? (
-                  <>
-                    <span className="flex-1">You get paid at registration</span>
-                    <span className="text-muted text-sm">No refunds</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex-1">Show-ups split no-shows</span>
-                    <span className="text-muted text-sm">Always on</span>
-                  </>
-                )}
-              </div>
               <OptionRow
                 icon="M16 19v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9.5 10a3 3 0 100-6 3 3 0 000 6zM21 19v-1a4 4 0 00-3-3.9M16 4.1a3 3 0 010 5.8"
                 label="Capacity"
