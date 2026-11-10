@@ -16,7 +16,7 @@ import { PublicText } from "@/components/PublicText";
 import { GoingList, ICONS, LocationRow, LocationSection, RegisterBox, Section } from "@/components/EventSections";
 import { guestNamesApi, type GuestNames } from "@/lib/guestNamesClient";
 import { useEventVisual } from "@/lib/event-visual-client";
-import { VisualBackdrop } from "@/components/EventVisual";
+import { EventPageBackground } from "@/components/EventVisual";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 
 /**
@@ -85,7 +85,7 @@ export default function EventPage() {
   // Cover, hosts and who's going on the left; title, time and registration on the right.
   return (
     <>
-    <VisualBackdrop visual={visual} className="gc-event-shell" themeFont>
+    <EventPageBackground visual={visual} />
       <div className="gc-event-content">
         <aside className="space-y-6">
           <Cover event={event} visual={visual} coverUrl={details?.cover_url} className="aspect-square w-full rounded-2xl shadow-sm" />
@@ -169,7 +169,6 @@ export default function EventPage() {
           {!open && <GuestGrid event={event} guests={guests} me={accountId} />}
         </section>
       </div>
-    </VisualBackdrop>
     {open && !me && spots > 0 && <div className="gc-mobile-register"><span><b>{price}</b><small className="block text-muted">{ticket ? "Ticket" : "Attendance deposit"}</small></span><a href="#registration" className="btn btn-accent">{ticket ? "Get ticket" : "Register"}</a></div>}
     </>
   );

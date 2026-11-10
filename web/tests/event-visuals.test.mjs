@@ -46,22 +46,23 @@ test("adding collections preserves fallback looks for existing events", () => {
 test("saved legacy themes resolve exactly as before the Nearvent collection", () => {
   // Ethereum, NEAR, Claude and Cursor were deliberately restyled with their official marks and palettes (2026-11-09),
   // so they are not pinned here; the next test pins how every theme maps a saved seed.
+  // Re-recorded without the font on 2026-11-10 (themes no longer change it); everything else matched the old pins.
   // Recorded before adding the new collection. These cover each palette, layout,
   // font and Paradise photo, plus a large seed and the maximum stored seed.
   const seeds = [0, 1, 2, 16, 32, 256, 512, 768, 1024, 1280, 4096, 8192, 12288, 123456789, 0xffff_ffff];
   const expected = {
-    bitcoin: "6c75d2802d6e792ab35f96beca689350ec04b055fd95977e1b652ab8eccb4ba9",
-    base: "fcb69b98017de604b0b4b56770e2f55a93dfc0587003c7a5fa98b6825d9bfd33",
-    solana: "307791ba9d626cdf9cd2f2cc21021d0c7921d0d21c54550868f9395837b0986d",
-    paradise: "a747c0089defede262970a1c152ef610658af6a40458a92588fa099179383a0c",
-    codex: "06519b192c3be71aa9ef8310165ffdd66b1627c9c8b660ad427877375b7d8fa4",
-    grok: "e49fe376f11896532bdc344b9caa3964c0b660abd5c9ba3d0eb6906824309a49",
-    hermes: "053521e1a06ee9441eb3a5f942085e942bdd2eb6d76c75a1b14c5fea5e34024d",
+    bitcoin: "56ad08c1012d2e972dcd59632a653c3c221ba0dd23f246d33fa2b5007e0526cf",
+    base: "bc24c1721d2b1ee6f6399def0b34af91cef2cb203d5e24c107968bca03f5d936",
+    solana: "a2006665845a13bd833c5f317fd8e2781155daca94dffbdf4331087d692ab6ba",
+    paradise: "63a1d42d6b40a3ce615bb4e8cbb23d4c0febc4bf575927141d84f7f57400c5f3",
+    codex: "003aea0dcd11f85ac0f1c0039f6f3dbdb8df03e65f3c5a82000eaaf02d3192cb",
+    grok: "ca5da53a974e826b0e86e1414eff691612141321ff99db38767de8b76326171a",
+    hermes: "1eb670b77779d4adc31c9e0599af5d50ce3f60184ec907fe368354a5c7c0e105",
   };
 
   for (const [themeId, digest] of Object.entries(expected)) {
-    // `font` is the index behind fontFamily and `theme` is the catalog entry (name, note, mark); neither changes how a saved look is drawn.
-    const visuals = seeds.map((seed) => { const { font: _font, theme: _theme, ...visual } = resolveEventVisual({ themeId, seed }); return visual; });
+    // `theme` is the catalog entry (name, note, mark); the font is now always the site font (checked below), so neither is pinned.
+    const visuals = seeds.map((seed) => { const { font: _font, fontFamily, theme: _theme, ...visual } = resolveEventVisual({ themeId, seed }); assert.equal(fontFamily, "var(--font-display)"); return visual; });
     assert.equal(createHash("sha256").update(JSON.stringify(visuals)).digest("hex"), digest, themeId);
   }
 });

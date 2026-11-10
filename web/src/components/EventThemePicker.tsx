@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { createRandomVisual, EVENT_FONTS, EVENT_LAYOUTS, EVENT_THEMES, eventPalettes, regenerateEventVisual, resolveEventVisual, shuffleEventVisual, withVisualOptions, type EventThemeId, type EventVisualConfig } from "@/lib/event-visuals";
+import { createRandomVisual, EVENT_LAYOUTS, EVENT_THEMES, eventPalettes, regenerateEventVisual, resolveEventVisual, shuffleEventVisual, withVisualOptions, type EventThemeId, type EventVisualConfig } from "@/lib/event-visuals";
 import { EventPoster, VisualBackdrop } from "@/components/EventVisual";
 
-/** A small preview of a theme: its background with "Title" in its font, like Luma's tiles. */
+/** A small preview of a theme: its background with "Title", like Luma's tiles. */
 function ThemeTile({ visual, className = "" }: { visual: EventVisualConfig; className?: string }) {
   const { theme, colors, fontFamily } = resolveEventVisual(visual);
   const ink = theme.group === "near-me" && theme.id !== "photo" ? colors[0] : "#fff";
@@ -98,7 +98,7 @@ export function EventThemePicker({ value, title, coverUrl, photo, onPhoto, onCha
       </div>
       {photoError && <p className="text-xs text-danger" role="alert">{photoError}</p>}
 
-      <button ref={trigger} type="button" className="lu-field lu-hover flex w-full items-center gap-3 p-2 text-left" aria-label={`Theme: ${selected.theme.name}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button ref={trigger} type="button" className="flex w-full items-center gap-3 rounded-xl border border-border bg-surface p-2 text-left shadow-sm" aria-label={`Theme: ${selected.theme.name}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
         <ThemeTile visual={value} className="h-10 w-14 shrink-0 rounded-lg" />
         <span className="min-w-0 flex-1">
           <span className="block text-xs text-muted">Theme</span>
@@ -139,20 +139,13 @@ export function EventThemePicker({ value, title, coverUrl, photo, onPhoto, onCha
             )}
             <Setting label="Color">
               {eventPalettes(value.themeId).map((colors, index) => (
-                <button key={colors[1]} type="button" aria-label={`Color ${index + 1}`} aria-pressed={selected.variant === index} onClick={() => onChange(withVisualOptions(value, { variant: index }))}
+                <button key={index} type="button" aria-label={`Color ${index + 1}`} aria-pressed={selected.variant === index} onClick={() => onChange(withVisualOptions(value, { variant: index }))}
                   className={`h-6 w-6 rounded-full ring-offset-2 ring-offset-surface ${selected.variant === index ? "ring-2 ring-text" : ""}`}
                   style={{ background: `linear-gradient(140deg, ${colors[0]}, ${colors[1]} 60%, ${colors[2]})` }} />
               ))}
             </Setting>
             {!nearMe && (
               <>
-                <Setting label="Font">
-                  {EVENT_FONTS.map((fontFamily, index) => (
-                    <Option key={fontFamily} label={`Font ${index + 1}`} active={selected.font === index} onClick={() => onChange(withVisualOptions(value, { font: index }))}>
-                      <span style={{ fontFamily }}>Aa</span>
-                    </Option>
-                  ))}
-                </Setting>
                 <Setting label="Display">
                   {EVENT_LAYOUTS.map((layout, index) => (
                     <Option key={layout} label={`Title ${layout}`} active={selected.layout === layout} onClick={() => onChange(withVisualOptions(value, { layout: index }))}>
