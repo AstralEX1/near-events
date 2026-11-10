@@ -72,7 +72,7 @@ export default function FreeEventPage() {
           {guests.length > 0 && (
             <div>
               <div className="label pb-2 mb-3 border-b border-border">{event.guest_count} {ended ? "went" : "going"}</div>
-              <AvatarStack accounts={guests} max={9} />
+              <AvatarStack accounts={guests} max={9} linked />
             </div>
           )}
         </aside>

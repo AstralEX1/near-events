@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
 import { ProfileCard } from "@/components/ProfileCard";
-import { attendedCount, getProfiles, saveProfile, uploadAvatar } from "@/lib/profilesClient";
+import { getProfiles, saveProfile, uploadAvatar } from "@/lib/profilesClient";
+import { useReputation } from "@/lib/reputation";
 import { EMPTY_PROFILE, cleanProfile, type LinkKind, type Profile } from "@/lib/profilesShared";
 
 export default function MyProfile() {
@@ -30,13 +31,12 @@ function Editor({ accountId }: { accountId: string }) {
   const { staffToken } = useWallet();
   const [saved, setSaved] = useState<Profile | null>(null);
   const [form, setForm] = useState<Profile | null>(null);
-  const [attended, setAttended] = useState<number | null>(null);
+  const reputation = useReputation(accountId);
   const [busy, setBusy] = useState<"photo" | "save" | null>(null);
   const [status, setStatus] = useState("");
   const file = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    attendedCount(accountId).then(setAttended).catch(() => setAttended(null));
     getProfiles([accountId])
       // A new profile gets a random generated avatar, like a new event gets a random theme; it is kept on first save.
       .then((p) => { setSaved(p[accountId] ?? null); setForm(p[accountId] ?? { ...EMPTY_PROFILE, avatar_seed: crypto.getRandomValues(new Uint32Array(1))[0] }); })
@@ -84,7 +84,7 @@ function Editor({ accountId }: { accountId: string }) {
         <h1 className="gc-page-title">My profile</h1>
         <Link href={`/u/${encodeURIComponent(accountId)}`} className="text-sm text-accent font-medium shrink-0">Public page ↗</Link>
       </div>
-      <ProfileCard account={accountId} profile={{ ...(saved ?? EMPTY_PROFILE), avatar_url: form.avatar_url, avatar_seed: form.avatar_seed }} attended={attended} />
+      <ProfileCard account={accountId} profile={{ ...(saved ?? EMPTY_PROFILE), avatar_url: form.avatar_url, avatar_seed: form.avatar_seed }} reputation={reputation} />
 
       <form onSubmit={onSave} className="card p-6 space-y-5">
         <div className="flex flex-wrap gap-3">

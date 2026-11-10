@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { events, formatUsdc, isTicket, type EventView, type GuestStatus } from "@/lib/near";
+import { events, type EventView, type GuestStatus } from "@/lib/near";
 import { Cover, StatusPill, shortAccount } from "@/components/ui";
 import { ProfileCard } from "@/components/ProfileCard";
-import { attendedCount, getProfiles } from "@/lib/profilesClient";
+import { getProfiles } from "@/lib/profilesClient";
+import { useReputation } from "@/lib/reputation";
 import type { Profile as UserProfile } from "@/lib/profilesShared";
 import { Timeline } from "@/components/Timeline";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
@@ -24,12 +25,10 @@ export default function Profile() {
   const account = decodeURIComponent(useParams<{ account: string }>().account);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [hosting, setHosting] = useState<EventView[]>([]);
-  // Paid events checked in at (on-chain, after close) plus ended free events joined.
-  const [attended, setAttended] = useState<number | null>(null);
+  const reputation = useReputation(account);
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
-    attendedCount(account).then(setAttended).catch(() => setAttended(null));
     getProfiles([account]).then((p) => setProfile(p[account] ?? null)).catch(() => setProfile(null));
   }, [account]);
 
@@ -48,11 +47,10 @@ export default function Profile() {
 
   const closed = rows?.filter((r) => r.event.status === "Finalized") ?? [];
   const came = closed.filter((r) => r.status === "Attended");
-  const earned = came.filter((r) => !isTicket(r.event)).reduce((sum, r) => sum + BigInt(r.event.payout_per_attendee) - BigInt(r.event.deposit), 0n);
 
   return (
     <div className="space-y-8">
-      <ProfileCard account={account} profile={profile} attended={attended} />
+      <ProfileCard account={account} profile={profile} reputation={reputation} showUp={{ came: came.length, of: closed.length }} />
 
       {hosting.length > 0 && (
         <section className="space-y-4">
@@ -65,20 +63,6 @@ export default function Profile() {
           />
         </section>
       )}
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border rounded-2xl overflow-hidden border border-border">
-        {[
-          ["Registered", rows ? String(rows.length) : "…"],
-          ["Showed up", closed.length ? `${came.length} of ${closed.length}` : "—"],
-          ["Show-up rate", closed.length ? `${Math.round((came.length / closed.length) * 100)}%` : "—"],
-          ["Earned from no-shows", `${formatUsdc(earned)} USDC`],
-        ].map(([l, v]) => (
-          <div key={l} className="bg-surface p-4">
-            <div className="text-xs text-muted">{l}</div>
-            <div className="font-semibold mt-1">{v}</div>
-          </div>
-        ))}
-      </div>
 
       <List title="Events" rows={rows ?? []} empty={rows ? "No events yet." : "Loading…"} />
 

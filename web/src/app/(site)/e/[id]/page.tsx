@@ -95,7 +95,7 @@ export default function EventPage() {
           {going.length > 0 && (
             <div>
               <div className="label pb-2 mb-3 border-b border-border">{event.guest_count} going</div>
-              <AvatarStack accounts={going} max={9} />
+              <AvatarStack accounts={going} max={9} linked />
             </div>
           )}
           {isStaff && event.status === "Open" && (

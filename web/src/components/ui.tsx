@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { EventStatus, EventView } from "@/lib/near";
 import { useEventVisual } from "@/lib/event-visual-client";
 import { meshGradient, seededRandom, type EventVisualConfig } from "@/lib/event-visuals";
@@ -84,13 +85,20 @@ export function formatWhen(start: number, end: number): string {
   return `${day} · ${t(s)} – ${t(e)}`;
 }
 
-export function AvatarStack({ accounts, max = 6 }: { accounts: string[]; max?: number }) {
+/** Overlapping guest avatars; with `linked`, each opens that person's profile. */
+export function AvatarStack({ accounts, max = 6, linked = false }: { accounts: string[]; max?: number; linked?: boolean }) {
   return (
     <div className="flex items-center">
       <div className="flex -space-x-2">
-        {accounts.slice(0, max).map((a) => (
-          <Avatar key={a} account={a} size={28} />
-        ))}
+        {accounts.slice(0, max).map((a) =>
+          linked ? (
+            <Link key={a} href={`/u/${encodeURIComponent(a)}`} aria-label={`${shortAccount(a)}'s profile`} className="rounded-full transition-transform duration-150 ease-out hover:-translate-y-0.5 hover:z-10 focus-visible:z-10">
+              <Avatar account={a} size={28} />
+            </Link>
+          ) : (
+            <Avatar key={a} account={a} size={28} />
+          ),
+        )}
       </div>
       {accounts.length > max && <span className="ml-2 text-sm text-muted">+{accounts.length - max}</span>}
     </div>

@@ -1,4 +1,3 @@
-import { events } from "./near";
 import type { Profile } from "./profilesShared";
 
 /** Profiles for up to 100 accounts in one request; accounts without a profile are left out. */
@@ -20,23 +19,6 @@ export async function saveProfile(profile: Profile, token: string): Promise<Prof
   const json = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(json.error ?? "Could not save your profile");
   return json.profile as Profile;
-}
-
-/** Paid events the account was checked in at (escrow, after close) plus ended free events it joined. */
-export async function attendedCount(account: string): Promise<number> {
-  const [paid, free] = await Promise.all([
-    // The deployed escrow has no get_attended_count, so count closed events where the guest is Attended.
-    // shortcut: only the 100 most recent events are checked; switch to get_attended_count once the escrow has it.
-    events.list().then(async (all) => {
-      const statuses = await events.guestStatuses(account, all.map((e) => e.id));
-      return all.filter((e, i) => e.status === "Finalized" && statuses[i] === "Attended").length;
-    }),
-    fetch(`/api/free-events?attended=${encodeURIComponent(account)}`, { cache: "no-store" }).then(async (r) => {
-      if (!r.ok) throw new Error("Free events unavailable");
-      return (await r.json()).count as number;
-    }),
-  ]);
-  return paid + free;
 }
 
 /** Downscale and re-encode a photo to a square-ish JPEG, then upload it; returns the `/api/covers/<id>` path. */
