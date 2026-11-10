@@ -93,17 +93,10 @@ export default function FreeEventPage() {
         </aside>
 
         <section className="space-y-6 min-w-0">
-          {isHost && (
-            <div className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm">
-              <span className="min-w-0 flex-1 text-muted">
-                You have manage access for this event.{event.approval && event.requests?.length ? ` ${event.requests.length} waiting for approval.` : ""}
-              </span>
-              <Link href={`/f/${id}/manage`} className="btn btn-accent shrink-0">Manage</Link>
-            </div>
-          )}
           <div className="flex items-start gap-2">
             <h1 className="gc-event-title mt-1 min-w-0">{event.title}</h1>
             <div className="ml-auto shrink-0 flex items-center gap-1.5">
+              {isHost && <Link href={`/f/${id}/manage`} className="btn btn-accent !py-2 text-sm">Manage</Link>}
               {!event.public && <span className="lu-chip">Private</span>}
               <SlShare url={`${typeof window === "undefined" ? "" : window.location.origin}/f/${id}`} />
             </div>

@@ -90,8 +90,7 @@ button:not(:disabled), summary { cursor: pointer; }
 }
 ::selection { background: var(--brand); color: #1e0b2b; }
 .bg-accent.text-white { color: var(--on-accent); }
-.gc-brand { font-family: var(--font-display); font-weight: 800; font-size: 27px; letter-spacing: -.04em; line-height: 1; white-space: nowrap; display: inline-flex; align-items: center; gap: .2em; }
-.gc-brand em { font-style: normal; background: var(--accent); color: var(--on-accent); padding: .06em .28em .12em; border-radius: .3em; display: inline-block; transform: rotate(-4deg); }
+.gc-brand { font-family: var(--font-display); font-weight: 800; font-size: 27px; letter-spacing: -.04em; line-height: 1; white-space: nowrap; }
 .gc-eyebrow { font-size: .75rem; letter-spacing: .12em; font-weight: 600; text-transform: uppercase; color: var(--accent); }
 .gc-page-title { font-size: clamp(1.85rem, 4vw, 2.75rem); font-weight: 600; letter-spacing: -.045em; line-height: 1.15; }
 .gc-header { position: sticky; top: 0; z-index: 30; background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }

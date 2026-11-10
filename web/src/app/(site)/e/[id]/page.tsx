@@ -104,18 +104,13 @@ export default function EventPage() {
         </aside>
 
         <section className="space-y-6 min-w-0">
-          {isStaff && (
-            <div className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm">
-              <span className="min-w-0 flex-1 text-muted">You have manage access for this event.</span>
-              <Link href={`/e/${id}/manage`} className="btn btn-accent shrink-0">Manage</Link>
-            </div>
-          )}
           <div className="flex items-start gap-2">
             <div className="min-w-0">
               {!open && <StatusPill status={event.status} />}
               <h1 className="gc-event-title mt-1">{event.metadata.title}</h1>
             </div>
             <div className="ml-auto shrink-0 flex items-center gap-1.5">
+              {isStaff && <Link href={`/e/${id}/manage`} className="btn btn-accent !py-2 text-sm">Manage</Link>}
               <SlShare url={`${typeof window === "undefined" ? "" : window.location.origin}/e/${id}`} />
               <MoreMenu id={id} isStaff={isStaff} />
             </div>

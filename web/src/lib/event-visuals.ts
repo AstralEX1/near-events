@@ -8,12 +8,12 @@ export const EVENT_THEME_GROUPS = [
 export type EventThemeGroup = (typeof EVENT_THEME_GROUPS)[number]["id"];
 
 export const EVENT_THEMES = [
-  { id: "studio", name: "Studio", group: "near-me", note: "Soft lavender", mark: "near me" },
-  { id: "garden", name: "Garden", group: "near-me", note: "Fresh sage", mark: "near me" },
-  { id: "sunset", name: "Sunset", group: "near-me", note: "Warm apricot", mark: "near me" },
-  { id: "afterhours", name: "Afterhours", group: "near-me", note: "Deep aubergine", mark: "near me" },
-  { id: "paper", name: "Paper", group: "near-me", note: "Quiet and simple", mark: "near me" },
-  { id: "photo", name: "Photo", group: "near-me", note: "A place to meet", mark: "near me" },
+  { id: "studio", name: "Studio", group: "near-me", note: "Blush and hot pink", mark: "nearvent" },
+  { id: "garden", name: "Violet", group: "near-me", note: "Soft violet", mark: "nearvent" },
+  { id: "sunset", name: "Sun", group: "near-me", note: "Sun yellow", mark: "nearvent" },
+  { id: "afterhours", name: "Afterhours", group: "near-me", note: "Ink and hot pink", mark: "nearvent" },
+  { id: "paper", name: "Paper", group: "near-me", note: "Quiet blush", mark: "nearvent" },
+  { id: "photo", name: "Photo", group: "near-me", note: "A place to meet", mark: "nearvent" },
   { id: "ethereum", name: "Ethereum", group: "blockchain", note: "Diamond and rainbow", mark: "Ξ", icon: "/event-themes/marks/ethereum.svg" },
   { id: "bitcoin", name: "Bitcoin", group: "blockchain", note: "Warm copper grain", mark: "₿", icon: "/event-themes/marks/bitcoin.svg" },
   { id: "base", name: "Base", group: "blockchain", note: "Electric blue layers", mark: "BASE" },
@@ -69,12 +69,12 @@ const AI_PANEL_POSITION: Partial<Record<EventThemeId, string>> = {
 };
 
 const PALETTES: Record<EventThemeId, [string, string, string][]> = {
-  studio: [["#24212e", "#c3b6f2", "#e8dff7"], ["#24212e", "#d3c7f4", "#eee8fa"], ["#24212e", "#b9c4ed", "#e3e7f6"]],
-  garden: [["#253b30", "#cedfcb", "#e7eee0"], ["#253b30", "#bbd5c5", "#deeadc"], ["#253b30", "#d8dfbb", "#edf0da"]],
-  sunset: [["#4a292c", "#f3b99f", "#f8dfc9"], ["#4a292c", "#efc4af", "#fae8d4"], ["#4a292c", "#edb5b7", "#f6d9d5"]],
-  afterhours: [["#f7f5f0", "#24212e", "#c3b6f2"], ["#f7f5f0", "#30243a", "#d3b4dd"], ["#f7f5f0", "#202c32", "#b6cfcd"]],
-  paper: [["#24212e", "#f0e9de", "#c3b6f2"], ["#24212e", "#ebe7e0", "#cedfcb"], ["#24212e", "#f4e8dd", "#f3b99f"]],
-  photo: [["#24212e", "#cedfcb", "#f7f5f0"], ["#24212e", "#c3b6f2", "#f7f5f0"], ["#24212e", "#f3b99f", "#f7f5f0"]],
+  studio: [["#1e0b2b", "#ffb3d2", "#ffe4f0"], ["#1e0b2b", "#ffb3d2", "#d2ccff"], ["#1e0b2b", "#ffc4dc", "#ffe9a3"]],
+  garden: [["#1e0b2b", "#d2ccff", "#ece9ff"], ["#1e0b2b", "#c9c0ff", "#ffe4f0"], ["#1e0b2b", "#dcd7ff", "#fff6fb"]],
+  sunset: [["#1e0b2b", "#ffd23f", "#fff0b8"], ["#1e0b2b", "#ffdf73", "#ffe4f0"], ["#1e0b2b", "#ffd23f", "#ffb3d2"]],
+  afterhours: [["#fff6fb", "#1e0b2b", "#d61f69"], ["#fff6fb", "#28132f", "#ff6aa8"], ["#fff6fb", "#1a0b22", "#d2ccff"]],
+  paper: [["#1e0b2b", "#fff6fb", "#ffb3d2"], ["#1e0b2b", "#ffffff", "#d2ccff"], ["#1e0b2b", "#fff6fb", "#ffd23f"]],
+  photo: [["#1e0b2b", "#ffb3d2", "#fff6fb"], ["#1e0b2b", "#d2ccff", "#fff6fb"], ["#1e0b2b", "#ffd23f", "#fff6fb"]],
   ethereum: [["#15123d", "#627eea", "#53d3e0"], ["#1b2a4e", "#5a9ded", "#8c8dfc"], ["#2a1b52", "#8c8dfc", "#53d3e0"]],
   bitcoin: [["#2b190c", "#f7931a", "#ffd783"], ["#381b10", "#d36a16", "#ffe5ad"], ["#271d18", "#b66d3a", "#f4b158"]],
   base: [["#061e47", "#165dff", "#8cc8ff"], ["#102b70", "#3875ff", "#b5dbff"], ["#071936", "#2861dd", "#74e4ff"]],
