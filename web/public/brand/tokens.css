@@ -16,9 +16,9 @@
   --good: #237a57;
   --warn: #8c5a13;
   --danger: #b53e49;
-  --font-body: 'DM Sans', system-ui, sans-serif;
-  --font-display: 'Bricolage Grotesque', 'DM Sans', system-ui, sans-serif;
-  --font-geist-sans: 'DM Sans', system-ui, sans-serif;
+  --font-body: 'Geist', system-ui, sans-serif;
+  --font-display: 'Geist', system-ui, sans-serif;
+  --font-geist-sans: 'Geist', system-ui, sans-serif;
   --font-geist-mono: 'Geist Mono', ui-monospace, monospace;
   --ease-out: cubic-bezier(.23, 1, .32, 1);
   --ease-drawer: cubic-bezier(.32, .72, 0, 1);

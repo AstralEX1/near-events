@@ -2,6 +2,6 @@
 
 Shared brand tokens for the static landing and the application. Hot pink accent, ink, blush background; sun yellow and violet as secondary colors.
 
-Bricolage Grotesque (headings, logo), DM Sans (text) and Geist Mono (numbers). Font files are self-hosted, sourced from Google Fonts; their SIL Open Font Licenses are included alongside the files.
+Geist (headings, logo and text) and Geist Mono (numbers). Font files are self-hosted, sourced from Google Fonts; the SIL Open Font License for the Geist family is in LICENSE-geist.txt.
 
-fonts.css contains the selected weights (Bricolage Grotesque 600–800, DM Sans 400–700, Geist Mono 400–500), fetched from fonts.googleapis.com on 2026-11-10. Builds require no external font service.
+fonts.css contains Geist 400–800 (variable, latin, latin-ext and cyrillic) and Geist Mono 400–500, fetched from fonts.googleapis.com on 2026-11-10. Builds require no external font service.
