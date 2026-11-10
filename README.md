@@ -11,34 +11,42 @@ tickets or run free RSVP events. No platform fee, and creating an event is free.
 **How NEAR fits in.**
 - A Rust escrow contract on NEAR holds the deposits. The host records who came
   but cannot take the pool; the contract splits it.
-- Payments and payouts go through NEAR Intents: a guest can pay from another
-  chain through 1Click and withdraw to any chain or to an Intents account.
-  NEAR Intents has no testnet, so the testnet build uses the
-  [Tidepool](https://www.usetidepool.tech/docs) sandbox (official Intents
-  verifier `verifier.tidepool-sandbox.testnet` + its own test USDC).
-- An EVM wallet (MetaMask etc.) registers by signing one intent; our relayer
-  pays the NEAR gas. Hosts need no NEAR to create a small event.
+- Payments and payouts go through NEAR Intents (`intents.near`): a guest can pay
+  from another chain through 1Click and withdraw to any chain or to an Intents
+  account.
+- Nobody needs NEAR for gas. An EVM wallet (MetaMask etc.) registers by signing
+  one intent; Google/email accounts (NEAR Auth) sign NEP-366 meta-transactions;
+  our relayer pays the gas in both cases. Hosts need no NEAR to create a small event.
 
 Hackathon track: Real-World Money (USDC deposits, NEAR Intents, gasless onboarding).
 
-## Status (2026-11-10)
+## Networks (2026-11-10)
 
-| Works on testnet, hosted | Not ready |
-|---|---|
-| NEAR-wallet and EVM-wallet sign-in, deposit or ticket registration with test USDC, free RSVP events, door check-in, close & pay out, withdraw, cancel & refund | Google/email sign-in on the hosted site (waiting for NEAR Auth credentials; works on `localhost:3000` only) |
-| Event feed, Luma/BaliSquad import, themes, cover upload, embed button, guest profiles | Mainnet: payment, payout and EVM flows are implemented but not release-checked; nothing runs on mainnet |
+Nearvent is released on **NEAR mainnet** with real USDC. Testnet stays for the
+demo and for development.
 
-- Hosted demo: [www.nearvent.site](https://www.nearvent.site) (Vercel + Upstash
-  Redis), open demo event: [www.nearvent.site/e/4](https://www.nearvent.site/e/4).
-- Escrow used by the app: [`escrow-tp7.tp7-nv1110.testnet`](https://testnet.nearblocks.io/address/escrow-tp7.tp7-nv1110.testnet),
-  running the CI reproducible WASM (code hash
+| | Mainnet (release) | Testnet (demo, development) |
+|---|---|---|
+| Escrow | deploy pending: steps and checks in [docs/DEPLOY.md](docs/DEPLOY.md#mainnet-release) | [`escrow-tp7.tp7-nv1110.testnet`](https://testnet.nearblocks.io/address/escrow-tp7.tp7-nv1110.testnet) |
+| USDC | native Circle USDC [`17208628…36133a1`](https://nearblocks.io/address/17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1) | test USDC `usdc.tidepool-sandbox.testnet` |
+| NEAR Intents, 1Click | `intents.near`, `1click.chaindefuser.com` | the [Tidepool](https://www.usetidepool.tech/docs) sandbox (official verifier code), since Intents has no testnet |
+| Google/email (NEAR Auth) | `fast-auth.near`; needs our own Auth0 client (application sent 2026-11-09) | shared client, `localhost:3000` only |
+| Gas for Google/email users | relayer pays (meta-transactions) | relayer gives 0.5 NEAR once |
+| Demo account, test USDC faucet | no | yes |
+
+- Hosted site: [www.nearvent.site](https://www.nearvent.site) (Vercel + Upstash
+  Redis), still on testnet until the mainnet escrow is deployed; demo event:
+  [www.nearvent.site/e/4](https://www.nearvent.site/e/4).
+- The testnet escrow runs the CI reproducible WASM (code hash
   `D3VY2iUDYKtuYvWBAYQQ6UAudNCZqWQqwxV2HiXH7WAx`). The account has no keys; the
   owner can upgrade the code until `freeze` (`get_config` shows the owner and
   whether it is frozen). Evidence in [docs/DEPLOY.md](docs/DEPLOY.md).
-- Test USDC: [`usdc.tidepool-sandbox.testnet`](https://testnet.nearblocks.io/address/usdc.tidepool-sandbox.testnet).
-  Older escrows (`tp3`–`tp6`) keep their test data on chain but the app does not read them.
+- Mainnet pieces checked read-only on 2026-11-10 with `web/scripts/check-release.mjs`:
+  protocol 88, USDC, `intents.near`, `fast-auth.near` + MPC signer, NEAR Auth
+  JWT keys, 1Click token list and a dry quote. No mainnet transaction was sent.
+- Older testnet escrows (`tp3`–`tp6`) keep their test data on chain but the app does not read them.
 
-## Try it in two minutes (no wallet)
+## Try it in two minutes (testnet, no wallet)
 
 Open **[www.nearvent.site](https://www.nearvent.site)** → **Sign In** → **Try with a
 demo account**. You get a fresh NEAR account with a little NEAR for gas and
@@ -69,7 +77,8 @@ npm install
 npm run dev                     # http://localhost:3000
 ```
 
-`.env.example` already points at the testnet escrow. Set `APP_SECRET` to any
+`.env.example` already points at the testnet escrow; `.env.mainnet.example`
+lists the mainnet settings. Set `APP_SECRET` to any
 long random string (it signs host and door-team sessions). Without Upstash
 settings the server keeps check-ins, names and event details in `web/.data/`. The test
 USDC top-up and EVM registration need a relayer account (`RELAYER_ACCOUNT_ID`,
@@ -94,8 +103,8 @@ creation, deposit, ticket, finalize, withdraw; see docs/DEPLOY.md).
 
 ## Rules the escrow enforces
 
-- Free tier for hosts: the escrow pays storage for events up to 50 seats while
-  the host has fewer than 2 open events. Bigger events (up to 300 seats) or more
+- Free tier for hosts: the escrow pays storage for events up to 50 seats that
+  end within 60 days, while the host has fewer than 2 open events. Bigger events (up to 300 seats) or more
   open events cost the host a little NEAR for storage (~0.33 NEAR for 50 seats,
   ~1.95 NEAR for 300).
 - Deposit mode: the host records who showed up but cannot take the pool. Ticket
@@ -142,24 +151,33 @@ host ──────────── create_event / finalize(attended) ─�
 
 Contract: `contracts/events/src/lib.rs` (unit tests in `tests.rs`).
 
-**EVM wallet flow (mainnet; release smoke pending):** the guest signs an ERC-191 intent
+**EVM wallet flow:** the guest signs an ERC-191 intent
 `ft_withdraw {token: USDC, receiver_id: escrow, msg: register}`; `/api/intents/execute`
 checks it is only a Nearvent registration and submits it to `intents.near`
 (`execute_intents`), which calls `ft_transfer_call` on the escrow.
 
+**Google/email flow on mainnet:** NEAR Auth gives the guest an implicit NEAR
+account whose key sits in the MPC network. The relayer creates the account with
+0.003 NEAR (its storage only). Each action is a NEP-366 delegate action the guest
+approves in the Auth0 popup; `/api/fastauth/sign` asks `fast-auth.near` to sign it
+and `/api/fastauth/relay` sends it, paying the gas. Both routes relay only calls to
+the escrow, USDC, and USDC leaving NEAR Intents.
+
 | Method | Who | What |
 |---|---|---|
-| `create_event(metadata, deposit, capacity, mode)` | anyone (caller = host) | `metadata` = `{title, starts_at, ends_at}`. Payable. Free tier (≤ 50 seats and < 2 open events): the contract pays storage, attached NEAR is returned. Otherwise attach ≥ `create_event_cost`, the excess is returned. Capacity ≤ 300 (finalize gas), deposit ≥ 0.1 USDC. Title and times cannot be changed later |
+| `create_event(metadata, deposit, capacity, mode)` | anyone (caller = host) | `metadata` = `{title, starts_at, ends_at}`. Payable. Free tier (≤ 50 seats, < 2 open events, ending within 60 days): the contract pays storage, attached NEAR is returned. Otherwise attach ≥ `create_event_cost`, the excess is returned. Capacity ≤ 300 (finalize gas), deposit ≥ 0.1 USDC. Title and times cannot be changed later |
 | `ft_transfer_call` → `ft_on_transfer` | guest / verifier | `{"action":"register","event_id":N}`; `guest` only from the Intents verifier (from anyone else it must equal the sender, otherwise the whole amount is returned) |
 | `finalize(event_id, attended)` | host (+1 yocto) | `attended` = guests checked in at the door (kept off-chain on our server until now). Deposit: pool ÷ attendees, remainder to host, empty list → full refund. Ticket: only closes; the host was paid at registration |
 | `cancel(event_id)` | host any time while open; anyone after event end + 30 days (+1 yocto) | refund every deposit (Ticket: refunds nothing) |
 | `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to a NEAR account (e.g. a 1Click deposit address) or into NEAR Intents |
 | `payout_to_intents(account_id)` | owner or configured relayer | moves that account's balance into *its own* Intents balance; how EVM-wallet guests get paid |
+| `on_auth` | NEAR Intents wallets via an `auth_call` intent | create (free tier), finalize or cancel an event as an EVM/Solana/passkey host |
+| `upgrade`, `freeze`, `set_whitelist_mode`, `add_to_whitelist`, `remove_from_whitelist` | owner (+1 yocto) | new code until the one-way `freeze`; optional host whitelist for the free tier (off by default) |
 
 Views: `get_event`, `get_recent_events(limit ≤ 100)`, `get_guests`,
 `get_guest_status`, `get_guest_statuses(account_id, event_ids ≤ 100)`, `balance_of`,
-`create_event_cost(host, capacity)` (yoctoNEAR, 0 when free), `get_attended_count(account_id)`.
-There is no pause, owner, event editing or single-guest refund. The door team,
+`create_event_cost(host, capacity, ends_at)` (yoctoNEAR, 0 when free), `get_attended_count(account_id)`, `get_config`.
+There is no pause, event editing or single-guest refund, and the owner cannot touch balances. The door team,
 location, description and cover live on the Nearvent server, not in the escrow.
 
 Init is private and runs atomically with deploy. Set `relayer` at initialization

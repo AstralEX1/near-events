@@ -1,13 +1,115 @@
 # Web app hosting and escrow release
 
-Current status (2026-11-10): Vercel project `near-me-testnet` is linked from
-`web/` and serves `www.nearvent.site`. The app default, `.env.example` and the
-local `.env.local` point at `escrow-tp7.tp7-nv1110.testnet` (see "TP7 testnet
-deploy" below); Vercel `NEXT_PUBLIC_EVENTS_CONTRACT` follows once the site is
-redeployed. TP6/TP5/TP4 events remain on chain outside the app flow. USDC remains
-`usdc.tidepool-sandbox.testnet`, verifier `verifier.tidepool-sandbox.testnet`.
-Upstash `NearMeTestnet` stores off-chain details keyed by contract id. Hosted
-secret values are intentionally not documented here.
+Current status (2026-11-10): the code is ready for mainnet; nothing is deployed
+there yet (see "Mainnet release" below). The Vercel project linked from `web/`
+serves `www.nearvent.site` on testnet: the app default, `.env.example`, the local
+`.env.local` and Vercel point at `escrow-tp7.tp7-nv1110.testnet` (see "TP7
+testnet deploy" below). TP6/TP5/TP4 events remain on chain outside the app flow.
+Testnet USDC is `usdc.tidepool-sandbox.testnet`, verifier
+`verifier.tidepool-sandbox.testnet`. Upstash `NearMeTestnet` stores off-chain
+details keyed by contract id. Hosted secret values are intentionally not
+documented here.
+
+## Mainnet release
+
+Everything below that spends real NEAR or USDC is Alex's to run: the deploy,
+funding the accounts and the paid checks. Claude prepared the code, scripts and
+read-only checks; no mainnet transaction has been sent.
+
+**What is ready (2026-11-10).**
+- `web/src/lib/config.ts`: with `NEXT_PUBLIC_NETWORK=mainnet` the app uses native
+  USDC `17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1`,
+  `intents.near`, `rpc.mainnet.fastnear.com`, `nearblocks.io` and live 1Click
+  swaps. `NEXT_PUBLIC_EVENTS_CONTRACT` is required: the build stops without it, so
+  a mainnet site can never fall back to the testnet escrow.
+- NEAR Auth (Google/email): `fast-auth.near`, MPC `v1.signer`, issuer
+  `login.auth.near.org`. Mainnet accounts hold no NEAR: the relayer creates each
+  new account with 0.003 NEAR (its storage) and pays all gas through NEP-366
+  meta-transactions (`/api/fastauth/relay`), and pays USDC storage for 1Click
+  cash-out addresses. Without `NEXT_PUBLIC_FASTAUTH_CLIENT_ID` the Google button
+  is hidden (the shared testnet client does not work on mainnet).
+- 1Click: `https://1click.chaindefuser.com`; `ONECLICK_API_KEY` is sent as
+  `Authorization: Bearer` (without a key 1Click adds 0.25% per quote).
+- Demo account and test USDC faucet are testnet-only and switch off by themselves.
+- Off-chain data (event details, free events, check-ins, door team, guest names,
+  visuals) is keyed by escrow id, so it never mixes with testnet; profile keys get
+  a `mainnet:` prefix. Still use a separate Upstash database for mainnet.
+- Read-only check of the mainnet pieces passed on 2026-11-10
+  (`NETWORK=mainnet node scripts/check-release.mjs`): protocol 88 (the escrow's
+  `near-sdk` 5.29.1 needs 84), USDC with 6 decimals, `intents.near`,
+  `fast-auth.near`, `v1.signer`, NEAR Auth JWT keys, 1Click token list with USDC
+  and a dry quote (ETH on Base → 1 USDC in Intents).
+- The Google meta-transaction path was checked on testnet through the app's
+  routes with `scripts/smoke-meta-tx.mjs` (see "Meta-transaction testnet check").
+  The Auth0 popup signing a delegate action was not tested: it needs a real Google
+  login.
+
+**1. Accounts (Alex).**
+- Owner: a Ledger account. It can `upgrade` the code until `freeze` and run the
+  host whitelist; it cannot touch balances. Owner calls with a Ledger go through
+  `near-cli-rs` (`… sign-with-ledger`); `scripts/escrow-owner.mjs` needs a key file.
+- Deployer: an account with a key in `~/.near-credentials/mainnet/`. The escrow is
+  created as `<NEW_ACCOUNT>.<deployer>`, for example `escrow.nearvent.near`. The
+  older plan's key for `near-events.near` is in that folder, but the account was
+  never created (checked 2026-11-10).
+- Relayer: its own account; the key lives only in Vercel and the local
+  `.env.local`. Start with at least 5 NEAR. Costs: about 0.001–0.003 NEAR per
+  relayed call, 0.003 NEAR per new Google account, 0.00125 NEAR per USDC storage
+  registration; quotas cap the relayer at 300 paid requests a day.
+
+**2. Build.** Use the `escrow-wasm` artifact of the release commit's green CI run
+(`cargo near build reproducible-wasm --manifest-path contracts/events/Cargo.toml`).
+Record the commit, the artifact SHA-256 and the NEAR code hash here.
+
+**3. Deploy** (one transaction creates, deploys, initialises and deletes the key):
+
+```bash
+cd web
+NETWORK=mainnet CONFIRM_MAINNET=yes DEPLOYER=<deployer>.near NEW_ACCOUNT=escrow \
+  OWNER=<ledger>.near RELAYER_ACCOUNT=<relayer>.near WASM=<path>/near_events.wasm NEAR_AMOUNT=8 \
+  node scripts/deploy-escrow.mjs
+```
+
+`NEAR_AMOUNT`: the code (285,919 bytes) locks about 2.9 NEAR; the rest is the
+free-tier pool (a free 50-seat event reserves 0.287 NEAR while open, so 5 NEAR
+covers about 17 open free events). The script then checks the code hash,
+`get_config` and the empty key list, and registers the escrow's USDC storage
+(0.0125 NEAR from the deployer).
+
+**4. Check** (read-only):
+
+```bash
+NETWORK=mainnet EVENTS_CONTRACT=escrow.<deployer>.near RELAYER_ACCOUNT=<relayer>.near \
+  OWNER=<ledger>.near WASM=<path>/near_events.wasm node scripts/check-release.mjs
+```
+
+**5. Switch the site** (on Alex's deploy command). Set the Vercel Production
+variables from `web/.env.mainnet.example`: the mainnet escrow, NEAR Auth client id,
+mainnet relayer account and key, a new `APP_SECRET`, a separate Upstash database,
+`RATE_LIMIT_REDIS_*` (mainnet refuses relayer and 1Click requests without them) and
+`ONECLICK_API_KEY`. Keep Preview on testnet so preview deployments never move real
+money. Redeploy. For NEAR Auth, the Auth0 callback, origin and logout URL is
+`https://www.nearvent.site`.
+
+**6. Release checks with small real amounts (Alex, about 2 USDC).**
+- `NETWORK=mainnet APP_URL=https://www.nearvent.site EVENTS_CONTRACT=… node scripts/smoke-meta-tx.mjs`:
+  a new implicit account creates and cancels a free event, paying no gas
+  (≈0.01 NEAR from the relayer).
+- NEAR wallet: create a free event, pay 0.1 USDC from another chain on the pay page
+  (1Click → Intents → Confirm registration), check in, close, withdraw to Intents
+  and to another chain.
+- EVM wallet: register from the Intents balance, close, payout to Intents, cash out.
+- Google/email: sign in, register, then host cancels and the refund is withdrawn.
+- Ticket: buy a ticket, host withdraws after the event starts.
+- A rejected registration (event full) leaves the USDC in the guest's Intents balance.
+
+**7. After the checks.** Record the transaction hashes here, add the best ones to
+the `PROOF` list in `web/src/app/(site)/docs/contract/page.tsx`, decide on the
+whitelist, and `freeze` only once the code is final.
+
+**Rollback.** Put the testnet variables back in Vercel and redeploy. Funds stay in
+the mainnet escrow; guests can still `withdraw` with any NEAR tool, and the site
+can point at the same escrow again later.
 
 ## Vercel setup reference
 
@@ -20,28 +122,26 @@ steps when setting up or relinking a Vercel project:
 | Name | Testnet value | Secret? |
 |---|---|---|
 | `NEXT_PUBLIC_NETWORK` | `testnet` | no |
-| `NEXT_PUBLIC_EVENTS_CONTRACT` | `escrow-tp4.nearevents-11022103.testnet` | no |
+| `NEXT_PUBLIC_EVENTS_CONTRACT` | `escrow-tp7.tp7-nv1110.testnet` | no |
 | `NEXT_PUBLIC_USDC_CONTRACT` | `usdc.tidepool-sandbox.testnet` | no |
 | `RELAYER_ACCOUNT_ID` | `relayer-nearevents-11022103.testnet` | no |
 | `RELAYER_PRIVATE_KEY` | from `web/.env.local` (paste in Vercel only) | **yes** |
-| `ONECLICK_API_KEY` | optional | **yes** |
+| `ONECLICK_API_KEY` | optional (1Click JWT, sent as `Authorization: Bearer`) | **yes** |
 | `APP_SECRET` | any long random string (signs staff-session tokens for check-ins and event-detail saves) | **yes** |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | an Upstash Redis database (door check-ins and public event details; Vercel's disk is wiped) | **yes** |
 | `RATE_LIMIT_REDIS_URL` | shared Redis REST URL | no |
 | `RATE_LIMIT_REDIS_TOKEN` | Redis REST token | **yes** |
 
 3. FastAuth (Google/email): the shared testnet Auth0 client only accepts
-   approved callback URLs. Localhost works; a Vercel domain may need its own
-   client (docs.auth.near.org → apply). Wallet and EVM login work
-   anywhere.
+   approved callback URLs. Localhost works; a Vercel domain needs its own
+   client (docs.auth.near.org → apply), set as `NEXT_PUBLIC_FASTAUTH_CLIENT_ID`.
+   Wallet and EVM login work anywhere.
 
 Telegram bot work is outside the current project scope. Existing code and
 historical data remain parked; do not configure a bot token or webhook. Web
 check-ins, co-hosts and public event details use Upstash separately.
 
-For mainnet, switch the three `NEXT_PUBLIC_*` values to the mainnet escrow,
-`17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1` (USDC), and a
-mainnet relayer.
+For mainnet, use `web/.env.mainnet.example` and the "Mainnet release" steps above.
 
 Hosted relayer and 1Click endpoints require shared Redis REST quotas. Use the
 same Redis instance across replicas of the same environment. The endpoints reject

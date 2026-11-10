@@ -5,7 +5,7 @@ import { view } from "@/lib/near";
 import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { relayer } from "@/lib/relayer";
 import { decodePayload, relayAllowed } from "@/lib/relayPolicy";
-import { CONTRACTS, FREE_TIER_ERROR, unpaidBeyondFreeTier } from "@/lib/relayServer";
+import { CONTRACTS, unpaidBeyondFreeTier } from "@/lib/relayServer";
 
 const MAX_GAS = 300_000_000_000_000n;
 const USDC_STORAGE = 1_250_000_000_000_000_000_000n; // 0.00125 NEAR
@@ -14,7 +14,9 @@ const IMPLICIT = /^[0-9a-f]{64}$/;
 const ED25519_SPKI = Buffer.from("302a300506032b6570032100", "hex");
 
 // Mainnet meta-transactions (NEP-366) for Google/email accounts, which hold no NEAR:
-// the account signs a delegate action and the relayer sends it, paying the gas.
+// the account signs a delegate action and the relayer sends it. The relayer pays the gas
+// and also every deposit inside it, so only 1 yoctoNEAR deposits pass: a bigger one would
+// let anyone move the relayer's NEAR (e.g. an overpaid create_event refunds the host).
 // Only calls to our own contracts pass; the chain checks the nonce and access key again.
 export async function POST(req: Request) {
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
@@ -27,7 +29,7 @@ export async function POST(req: Request) {
   if (!bytes || !p?.delegate || signature?.length !== 64 || !relayAllowed(p, CONTRACTS)
     // Google/email accounts are implicit: the account id is its own public key in hex.
     || !IMPLICIT.test(p.signerId) || Buffer.from(p.delegate.publicKey).toString("hex") !== p.signerId
-    || p.calls.reduce((gas, call) => gas + call.gas, 0n) > MAX_GAS) {
+    || p.calls.some((call) => call.deposit > 1n) || p.calls.reduce((gas, call) => gas + call.gas, 0n) > MAX_GAS) {
     return Response.json({ error: "Only Nearvent transactions are relayed" }, { status: 400 });
   }
   // Checked here too, so a bad signature never costs the relayer gas.
@@ -36,7 +38,9 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid signature" }, { status: 401 });
   }
   try {
-    if (await unpaidBeyondFreeTier(p)) return Response.json({ error: FREE_TIER_ERROR }, { status: 400 });
+    if (await unpaidBeyondFreeTier(p)) {
+      return Response.json({ error: "Google and email accounts can create free events only: up to 50 seats, 2 open events, ending within 60 days." }, { status: 400 });
+    }
   } catch {
     return Response.json({ error: "Could not check the event's storage cost" }, { status: 502 });
   }

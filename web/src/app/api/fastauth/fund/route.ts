@@ -5,8 +5,8 @@ import { accountExists, relayer } from "@/lib/relayer";
 // Creates a new Google/email or demo implicit account by sending it NEAR.
 // Testnet: enough for gas on the biggest call (closing an event: 300 Tgas ≈ 0.3 NEAR,
 // mostly refunded; 0.05 NEAR could not even send a 100 Tgas call).
-// Mainnet: only the account's own storage (182 bytes) plus the 1 yoctoNEAR deposits;
-// the relayer pays every transaction's gas (meta-transactions, /api/fastauth/relay).
+// Mainnet: only the account's own storage (182 bytes); the relayer pays every
+// transaction's gas and 1 yoctoNEAR deposit (meta-transactions, /api/fastauth/relay).
 const STARTER_NEAR = NETWORK === "mainnet"
   ? 3_000_000_000_000_000_000_000n // 0.003 NEAR
   : 500_000_000_000_000_000_000_000n; // 0.5 NEAR

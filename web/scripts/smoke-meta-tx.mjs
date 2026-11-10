@@ -51,11 +51,13 @@ async function delegate(receiverId, methodName, args, deposit = 0n) {
 }
 const relay = ({ bytes, signature }) => post("/api/fastauth/relay", { delegate: b64(bytes), signature: b64(signature) });
 
-// Refused before any gas is spent.
+// Refused before any gas is spent: a bad signature, another contract, a deposit the relayer would pay.
 const forged = await delegate(EVENTS, "cancel", { event_id: 0 }, 1n);
 forged.signature = new Uint8Array(64);
 assert.equal((await relay(forged)).status, 401, "a bad signature must be refused");
 assert.equal((await relay(await delegate("wrap.near", "near_deposit", {}, 1n))).status, 400, "other contracts must be refused");
+const overpaid = { metadata: { title: "overpaid", starts_at: Date.now(), ends_at: Date.now() + 3600_000 }, deposit: "100000", capacity: 10 };
+assert.equal((await relay(await delegate(EVENTS, "create_event", overpaid, 10n ** 24n))).status, 400, "deposits above 1 yocto must be refused");
 
 const now = Date.now();
 const created = await relay(await delegate(EVENTS, "create_event", { metadata: { title: "meta-tx smoke", starts_at: now, ends_at: now + 3600_000 }, deposit: "100000", capacity: 10 }));
@@ -78,9 +80,9 @@ for (let i = 0; i < 10 && status !== "Cancelled"; i++) {
 assert.equal(status, "Cancelled");
 
 const after = await query({ request_type: "view_account", account_id: account });
-// Only the 1 yoctoNEAR deposit left the account: the relayer paid every gas unit.
-assert.equal(BigInt(before.amount) - BigInt(after.amount), 1n, `balance moved by ${BigInt(before.amount) - BigInt(after.amount)}`);
-console.log("account paid no gas");
+// NEP-366: the relayer pays the gas and the 1 yoctoNEAR deposit, so the account's balance never moves.
+assert.equal(after.amount, before.amount, `balance moved by ${BigInt(before.amount) - BigInt(after.amount)}`);
+console.log("account paid nothing: gas and deposits came from the relayer");
 
 const stranger = Buffer.from(KeyPair.fromRandom("ed25519").getPublicKey().data).toString("hex");
 const storage = await post("/api/fastauth/relay", { storageFor: stranger });
