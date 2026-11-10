@@ -133,6 +133,7 @@ test("flow URLs round-trip into the right step", () => {
   assert.equal(params.get("import"), LINK);
   assert.equal(formUrl({ mode: "Deposit", amount: "10" }), "/create?mode=Deposit&amount=10");
   assert.equal(step(new URL(startUrl({ mode: "Deposit", amount: "10" }, false), "https://x.example").search), "start-create");
-  assert.equal(startUrl({}, true), "/widget");
+  assert.equal(startUrl({}, true), "/create?flow=widget&step=start");
+  assert.equal(step(new URL(startUrl({ mode: "Deposit", amount: "10", link: LINK }, true), "https://x.example").search), "start-widget");
   assert.equal(integrationUrl(7), "/e/7/manage?tab=integration");
 });
