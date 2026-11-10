@@ -20,7 +20,7 @@ export function GoingList({ accounts, names = {}, total, verb = "Going" }: { acc
   const shown = accounts.slice(0, 2).map((a) => names[a] || shortAccount(a));
   return (
     <Section label={`${total} ${verb}`}>
-      <AvatarStack accounts={accounts} max={8} />
+      <AvatarStack accounts={accounts} max={8} linked />
       <p className="mt-2 text-sm text-muted break-words">{goingLine(shown, total)}</p>
     </Section>
   );

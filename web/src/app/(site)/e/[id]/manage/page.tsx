@@ -14,6 +14,9 @@ import { Overview } from "./Overview";
 import { PublicDetailsEditor } from "./PublicDetailsEditor";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 import { guestNamesApi, type GuestNames } from "@/lib/guestNamesClient";
+import { attendedCounts } from "@/lib/reputation";
+import { hostedStats, type Reputation } from "@/lib/reputationShared";
+import { ReputationBadges } from "@/components/ReputationBadges";
 
 type Tab = "overview" | "event" | "guests" | "registration" | "integration";
 const TABS: { id: Tab; label: string }[] = [
@@ -53,6 +56,7 @@ function ManageEvent() {
   const [scanNote, setScanNote] = useState<{ text: string; ok: boolean } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
+  const [reps, setReps] = useState<Record<string, Reputation>>({});
 
   const tabParam = search.get("tab");
   const tab: Tab = tabParam === "event" || tabParam === "guests" || tabParam === "registration" || tabParam === "integration" ? tabParam : "overview";
@@ -93,6 +97,20 @@ function ManageEvent() {
   }, [load]);
 
   useEffect(() => setOrigin(window.location.origin), []);
+
+  // Guests' attended/hosted numbers, loaded only on the Guests tab (one RPC view per guest).
+  const guestIds = guests.map((g) => g.account_id).join(",");
+  useEffect(() => {
+    if (tab !== "guests" || !guestIds) return;
+    let live = true;
+    const ids = guestIds.split(",");
+    Promise.all([attendedCounts(ids), events.list()])
+      .then(([counts, all]) => live && setReps(Object.fromEntries(Object.entries(counts).map(([a, n]) => [a, { attended: n, ...hostedStats(all, a) }]))))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [tab, guestIds]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -299,6 +317,7 @@ function ManageEvent() {
           checkedIn={checkedIn}
           share={share}
           guestNames={guestNames}
+          reps={reps}
           query={query}
           onQuery={setQuery}
           scanning={scanning}
@@ -350,6 +369,7 @@ function GuestsTab({
   checkedIn,
   share,
   guestNames,
+  reps,
   query,
   onQuery,
   scanning,
@@ -374,6 +394,7 @@ function GuestsTab({
   checkedIn: number;
   share: bigint;
   guestNames: GuestNames;
+  reps: Record<string, Reputation>;
   query: string;
   onQuery: (v: string) => void;
   scanning: boolean;
@@ -466,17 +487,22 @@ function GuestsTab({
             </button>
           </div>
         ) : (
-          <ul className="card divide-y divide-border overflow-hidden">
+          <ul className="card divide-y divide-border">
             {filtered.map((g) => {
               const attended = g.status === "Attended";
               const queued = selected.has(g.account_id);
               const name = guestNames[g.account_id];
               return (
                 <li key={g.account_id} className="flex items-center gap-3 px-3 sm:px-4 min-h-14 py-2">
-                  <Avatar account={g.account_id} size={36} />
+                  <Link href={`/u/${encodeURIComponent(g.account_id)}`} aria-label={`${name || shortAccount(g.account_id)}'s profile`} className="shrink-0 rounded-full">
+                    <Avatar account={g.account_id} size={36} />
+                  </Link>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate" title={g.account_id}>
-                      {name || shortAccount(g.account_id)}
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-medium truncate" title={g.account_id}>{name || shortAccount(g.account_id)}</span>
+                      {reps[g.account_id] && (reps[g.account_id].attended || reps[g.account_id].hosted
+                        ? <ReputationBadges small {...reps[g.account_id]} />
+                        : <span className="text-xs text-muted shrink-0">First event</span>)}
                     </div>
                     <div className="text-xs text-muted">
                       {name ? `${shortAccount(g.account_id)} · ` : ""}
