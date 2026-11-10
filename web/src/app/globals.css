@@ -229,3 +229,14 @@ button:not(:disabled), summary { cursor: pointer; }
   .gc-spinner { animation-duration:1.5s !important; animation-iteration-count:infinite !important; }
 }
 @keyframes gc-fade { from { opacity:0; } }
+
+/* One tooltip for the app, matching MUI's (see components/Tooltips.tsx). */
+.nv-tooltip {
+  position:fixed; left:0; top:0; z-index:1500; pointer-events:none;
+  max-width:300px; padding:4px 8px; border-radius:4px;
+  background:rgba(97,97,97,.92); color:#fff;
+  font-size:0.6875rem; font-weight:500; line-height:1.4em; overflow-wrap:break-word; white-space:pre-line;
+  opacity:0; transform:scale(.75); transition:opacity 150ms cubic-bezier(.4,0,.2,1), transform 100ms cubic-bezier(.4,0,.2,1);
+}
+.nv-tooltip.is-open { opacity:1; transform:none; transition-duration:200ms; }
+@media (prefers-reduced-motion: reduce) { .nv-tooltip { transform:none; } }

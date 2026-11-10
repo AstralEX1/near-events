@@ -137,7 +137,7 @@ export default function FreeEventPage() {
                   type="button"
                   className="lu-chip lu-hover"
                   disabled={busy}
-                  title={event.public ? "Shown in Events. Click to make it link-only." : "Only people with the link see it. Click to list it in Events."}
+                  data-tooltip={event.public ? "Shown in Events. Click to make it link-only." : "Only people with the link see it. Click to list it in Events."}
                   onClick={() => void post({ action: "visibility", public: !event.public })}
                 >
                   {event.public ? "Public" : "Private"}
@@ -174,9 +174,9 @@ export default function FreeEventPage() {
                   {requests.map((guest) => (
                     <li key={guest} className="flex items-center gap-2 text-sm">
                       <Avatar account={guest} size={24} />
-                      <span className="min-w-0 flex-1 truncate font-medium" title={guest}>{shortAccount(guest)}</span>
+                      <span className="min-w-0 flex-1 truncate font-medium" data-tooltip={guest}>{shortAccount(guest)}</span>
                       <button type="button" className="lu-chip lu-hover" disabled={busy} onClick={() => void post({ action: "decline", guest })}>Decline</button>
-                      <button type="button" className="lu-chip lu-hover !text-accent" disabled={busy || spots === 0} title={spots === 0 ? "The event is full" : undefined} onClick={() => void post({ action: "approve", guest })}>Approve</button>
+                      <button type="button" className="lu-chip lu-hover !text-accent" disabled={busy || spots === 0} data-tooltip={spots === 0 ? "The event is full" : undefined} onClick={() => void post({ action: "approve", guest })}>Approve</button>
                     </li>
                   ))}
                 </ul>

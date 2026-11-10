@@ -342,7 +342,7 @@ function GuestsSection({ event, guests, guestNames, onGuests, onShare }: { event
                 <button type="button" onClick={onGuests} className="w-full flex items-center gap-3 px-3 sm:px-4 py-2.5 text-left hover:bg-bg transition-colors">
                   <Avatar account={g.account_id} size={36} />
                   <span className="flex-1 min-w-0">
-                    <span className="block font-medium truncate" title={g.account_id}>
+                    <span className="block font-medium truncate" data-tooltip={g.account_id}>
                       {name || shortAccount(g.account_id)}
                     </span>
                     {name && (
@@ -562,7 +562,7 @@ function HostRow({ account, badge }: { account: string; badge: string }) {
   return (
     <li className="flex items-center gap-3 px-3 sm:px-4 py-2.5">
       <Avatar account={account} size={28} />
-      <span className="font-medium truncate min-w-0" title={account}>
+      <span className="font-medium truncate min-w-0" data-tooltip={account}>
         {shortAccount(account)}
       </span>
       <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-accent-soft text-accent shrink-0">{badge}</span>

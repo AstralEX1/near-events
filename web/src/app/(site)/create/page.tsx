@@ -543,7 +543,7 @@ function CreateEvent() {
             </p>
           )}
           {error && <p className="text-sm text-warn break-words">{error}</p>}
-          <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy || !!missing} title={missing}>
+          <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy || !!missing} data-tooltip={missing}>
             {busy && <span className="gc-spinner" aria-hidden="true" />}
             {busy ? (free ? "Creating…" : "Confirm in your wallet…") : integrate ? "Integrate" : "Create Event"}
           </button>
@@ -558,7 +558,7 @@ function CreateEvent() {
 /** Public events show in Events; private ones only by link. Stored off-chain as `public`. */
 function PublicChip({ isPublic, onToggle }: { isPublic: boolean; onToggle: () => void }) {
   return (
-    <button type="button" className="lu-chip lu-hover" aria-pressed={!isPublic} title={isPublic ? "Shown in Events. Click to make it link-only." : "Only people with the link see it. Click to list it in Events."} onClick={onToggle}>
+    <button type="button" className="lu-chip lu-hover" aria-pressed={!isPublic} data-tooltip={isPublic ? "Shown in Events. Click to make it link-only." : "Only people with the link see it. Click to list it in Events."} onClick={onToggle}>
       <Icon d={isPublic ? "M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18" : "M6 11h12v9H6zM8 11V8a4 4 0 018 0v3"} size={14} />
       {isPublic ? "Public" : "Private"}
     </button>

@@ -89,7 +89,7 @@ export function EventThemePicker({ value, title, coverUrl, photo, onPhoto, onCha
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
               </button>
             )}
-            <button type="button" className="gc-icon-button" aria-label={photo ? "Change cover photo" : "Upload cover photo"} title={photo ? "Change cover photo" : "Upload your own photo"} onClick={() => fileInput.current?.click()}>
+            <button type="button" className="gc-icon-button" aria-label={photo ? "Change cover photo" : "Upload cover photo"} data-tooltip={photo ? "Change cover photo" : "Upload your own photo"} onClick={() => fileInput.current?.click()}>
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="M21 16l-5-5-9 9" /></svg>
             </button>
             <input ref={fileInput} type="file" accept="image/*" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(event) => { void pickPhoto(event.target.files?.[0]); event.target.value = ""; }} />
@@ -118,7 +118,7 @@ export function EventThemePicker({ value, title, coverUrl, photo, onPhoto, onCha
             {EVENT_THEMES.map((theme) => {
               const active = value.themeId === theme.id;
               return (
-                <button key={theme.id} type="button" role="option" aria-selected={active} title={active ? "Click again for another variant" : theme.note} className="gc-theme-tile w-[76px] shrink-0 snap-start space-y-1.5 text-center" onClick={() => pickTheme(theme.id)}>
+                <button key={theme.id} type="button" role="option" aria-selected={active} data-tooltip={active ? "Click again for another variant" : theme.note} className="gc-theme-tile w-[76px] shrink-0 snap-start space-y-1.5 text-center" onClick={() => pickTheme(theme.id)}>
                   <ThemeTile visual={active ? value : { themeId: theme.id, seed: 0 }} className={`h-[60px] w-full rounded-xl ring-offset-2 ring-offset-surface ${active ? "ring-2 ring-text" : ""}`} />
                   <span className={`block truncate text-xs ${active ? "font-semibold" : "text-muted"}`}>{theme.name}</span>
                 </button>

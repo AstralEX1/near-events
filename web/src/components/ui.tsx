@@ -29,7 +29,7 @@ function randomAvatarColors(seed: number): string[] {
  * picked one, otherwise from the account name, so everyone sees the same picture.
  */
 export function Avatar({ account, size = 32, src, seed }: { account: string; size?: number; src?: string | null; seed?: number | null }) {
-  if (src) return <img src={src} alt={account} title={account} width={size} height={size} className="inline-block shrink-0 rounded-full ring-2 ring-surface object-cover" style={{ width: size, height: size }} />;
+  if (src) return <img src={src} alt={account} data-tooltip={account} width={size} height={size} className="inline-block shrink-0 rounded-full ring-2 ring-surface object-cover" style={{ width: size, height: size }} />;
   const h = seed ?? hash(account);
   const hue = h % 360;
   const colors = seed != null ? randomAvatarColors(seed) : [0, 45, 160, 210].map((shift, i) => `hsl(${(hue + shift) % 360} ${70 + i * 5}% ${58 + (i % 2) * 10}%)`);
@@ -37,7 +37,7 @@ export function Avatar({ account, size = 32, src, seed }: { account: string; siz
     <span
       role="img"
       aria-label={account}
-      title={account}
+      data-tooltip={account}
       className="inline-block shrink-0 rounded-full ring-2 ring-surface"
       style={{ width: size, height: size, backgroundColor: colors[0], backgroundImage: meshGradient(h, colors.slice(1), 3) }}
     />

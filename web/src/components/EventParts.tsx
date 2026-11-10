@@ -102,7 +102,7 @@ export function GuestGrid({ event, guests, me }: { event: EventView; guests: Gue
               className={`flex flex-col items-center text-center gap-1 ${n?.dim ? "opacity-50 grayscale" : ""}`}
             >
               <Avatar account={g.account_id} size={48} />
-              <span className="text-[13px] font-medium truncate max-w-full" title={g.account_id}>
+              <span className="text-[13px] font-medium truncate max-w-full" data-tooltip={g.account_id}>
                 {g.account_id === me ? "You" : shortAccount(g.account_id)}
               </span>
               {n && <span className={`text-xs ${n.dim ? "text-muted" : "text-good"}`}>{n.text}</span>}
