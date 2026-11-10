@@ -47,7 +47,7 @@ export default function Events() {
           <h1 className="gc-page-title">Discover events</h1>
           <p className="text-lg text-muted">Find your next reason to get together.</p>
         </div>
-        <Link href="/create" className="btn btn-primary">Create event</Link>
+        <Link href="/create" className="btn btn-primary">Create Event</Link>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

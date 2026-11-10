@@ -100,7 +100,7 @@ export default function ConfirmEvent() {
         </div>
       ) : (
         <button className="btn btn-accent w-full !py-3.5" disabled={busy} onClick={create}>
-          {busy ? "Confirm in your wallet…" : "Create event"}
+          {busy ? "Confirm in your wallet…" : "Create Event"}
         </button>
       )}
       {error && <p className="text-sm text-warn break-words">{error}</p>}

@@ -17,7 +17,7 @@ export default function TryPage() {
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full text-left">
         <Link href="/create" className="rounded-2xl border border-border bg-surface p-4 hover:border-accent/40 transition-colors">
-          <div className="font-semibold">Create event</div>
+          <div className="font-semibold">Create Event</div>
           <p className="text-sm text-muted mt-1">Host on Nearvent</p>
         </Link>
         <Link href="/create?flow=widget&step=start" className="rounded-2xl border border-border bg-surface p-4 hover:border-accent/40 transition-colors">

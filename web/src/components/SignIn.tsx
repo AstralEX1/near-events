@@ -102,7 +102,7 @@ export function SignInMenu() {
         aria-controls="near-me-signin-options"
         onClick={() => setOpen((value) => !value)}
       >
-        Sign in
+        Sign In
       </button>
       {open && (
         <>
