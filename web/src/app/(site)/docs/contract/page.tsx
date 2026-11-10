@@ -57,6 +57,7 @@ export default async function ContractDocs() {
           items={[
             { title: "Deposit", text: "Guests who came split the whole pool. Nobody came: full refund." },
             { title: "Ticket", text: "The price goes to the host when a guest registers." },
+            { title: "Close", text: "The host closes with the list of who came only after the event ends." },
             { title: "Cancel", text: "The host can cancel a deposit event any time. Everyone is refunded." },
             { title: "Safety valve", text: "30 days after the end, anyone can refund an event the host never closed." },
           ]}
@@ -66,9 +67,14 @@ export default async function ContractDocs() {
       <Section id="trust" title="What the host can’t do">
         <ul className="list-disc pl-5 space-y-1">
           <li>Take the deposits.</li>
+          <li>Close the event before it ends. Before that, the only way out is a full refund.</li>
           <li>Mark someone who didn’t register.</li>
           <li>Touch anyone’s balance.</li>
         </ul>
+        <p className="text-sm text-muted">
+          The host does decide who came, so only verified hosts can create events while the whitelist is on.
+          Registration closes when the event ends.
+        </p>
         <p className="text-sm text-muted">
           Check-ins stay off-chain, so 300 guests cost nothing. Only the final list goes on-chain. The contract account
           has no keys: only the owner can upgrade the code, and after <Mono>freeze</Mono> nobody can. Check{" "}
@@ -82,11 +88,12 @@ export default async function ContractDocs() {
           rows={[
             [<Mono key="1">create_event</Mono>, "Host", "Creates an event"],
             [<Mono key="2">ft_transfer_call</Mono>, "Guest", <>Pays and registers · <Mono>{`{"action":"register","event_id":N}`}</Mono></>],
-            [<Mono key="3">finalize</Mono>, "Host", "Closes with the list of who came"],
+            [<Mono key="3">finalize</Mono>, "Host, after the end", "Closes with the list of who came"],
             [<Mono key="4">cancel</Mono>, "Host · anyone after 30 days", "Refunds everyone"],
             [<Mono key="5">withdraw</Mono>, "Anyone", "Sends out your balance"],
             [<Mono key="6">on_auth</Mono>, "NEAR Intents wallets", "Create, finalize or cancel through an auth_call intent"],
-            [<Mono key="7">add_to_whitelist · set_whitelist_mode</Mono>, "Owner", "Free events only for listed hosts, when on"],
+            [<Mono key="7">add_to_whitelist · set_whitelist_mode</Mono>, "Owner", "Only listed hosts create events, when on"],
+            [<Mono key="7b">add_sponsored · set_sponsored_mode</Mono>, "Owner", "Free events only for listed hosts, when on"],
             [<Mono key="8">upgrade · freeze</Mono>, "Owner", "New code until freeze; freeze is forever"],
             [<Mono key="9">get_event · get_guests · balance_of · get_config</Mono>, "Anyone", "Free reads"],
           ]}
@@ -96,7 +103,7 @@ export default async function ContractDocs() {
       </Section>
 
       <Section id="limits" title="Limits">
-        <p className="text-sm">From 0.1 USDC · up to 300 guests · free up to 50 seats, ending within 60 days · ends within a year.</p>
+        <p className="text-sm">From 0.1 USDC · up to 300 guests · free up to 50 seats, 2 per host in 30 days, ending within 60 days · ends within a year.</p>
       </Section>
 
       {PROOF.length > 0 && (

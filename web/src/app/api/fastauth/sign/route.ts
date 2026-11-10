@@ -3,7 +3,7 @@ import { NETWORK } from "@/lib/config";
 import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { FASTAUTH_CONTRACT, relayer } from "@/lib/relayer";
 import { decodePayload, relayAllowed, type Payload } from "@/lib/relayPolicy";
-import { CONTRACTS, FREE_TIER_ERROR, unpaidBeyondFreeTier } from "@/lib/relayServer";
+import { CONTRACTS, relayRefusal } from "@/lib/relayServer";
 
 // The payload is a transaction (testnet) or a NEP-366 delegate action (mainnet meta-transaction).
 function allowedPayload(signPayload: unknown): Payload | null {
@@ -65,13 +65,12 @@ export async function POST(req: Request) {
   }
   // The relayer would also pay a delegate action's deposits, so /api/fastauth/relay refuses them; don't sign them either.
   if (tx.delegate && tx.calls.some((call) => call.deposit > 1n)) {
-    return Response.json({ error: "Google and email accounts can create free events only: up to 50 seats, 2 open events, ending within 60 days." }, { status: 400 });
+    return Response.json({ error: "Google and email accounts can create free events only: up to 50 seats, 2 in 30 days, ending within 60 days." }, { status: 400 });
   }
   const account = tx.signerId;
   try {
-    if (await unpaidBeyondFreeTier(tx)) {
-      return Response.json({ error: FREE_TIER_ERROR }, { status: 400 });
-    }
+    const refusal = await relayRefusal(tx);
+    if (refusal) return Response.json({ error: refusal }, { status: 400 });
   } catch {
     return Response.json({ error: "Could not check the event's storage cost" }, { status: 502 });
   }

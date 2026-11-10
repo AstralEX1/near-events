@@ -220,6 +220,7 @@ function ManageEvent() {
     try {
       const fresh = await events.get(id);
       if (!fresh || fresh.status !== "Open") throw new Error("This event is closed or unavailable.");
+      if (Date.now() < fresh.metadata.ends_at) throw new Error("You can close the event once it ends. To refund everyone now, cancel it.");
       const [currentGuests, marks] = await Promise.all([events.guests(id), checkIns.list(id)]);
       if (currentGuests.length !== fresh.guest_count) throw new Error("Guest list changed. Try closing the event again.");
       const attended = currentGuests.filter((g) => marks[g.account_id]).map((g) => g.account_id);
@@ -339,6 +340,7 @@ function ManageEvent() {
             setTab("registration");
           }}
           onFinalize={finalizeEvent}
+          ended={Date.now() >= event.metadata.ends_at}
         />
       )}
 
@@ -387,6 +389,7 @@ function GuestsTab({
   onInvite,
   ticket,
   onFinalize,
+  ended,
 }: {
   open: boolean;
   isHost: boolean;
@@ -412,6 +415,8 @@ function GuestsTab({
   onInvite: () => void;
   ticket: boolean;
   onFinalize: () => void;
+  /** Finalize opens once the event has ended. */
+  ended: boolean;
 }) {
   return (
     <div className="space-y-8">
@@ -543,7 +548,13 @@ function GuestsTab({
 
       {open && isHost && paid > 0 && (
         <div className="pt-2 border-t border-border">
-          <button type="button" className="btn btn-primary w-full sm:w-auto" disabled={busy} onClick={onFinalize}>
+          <button
+            type="button"
+            className="btn btn-primary w-full sm:w-auto"
+            disabled={busy || !ended}
+            data-tooltip={ended ? undefined : "Available once the event ends"}
+            onClick={onFinalize}
+          >
             {ticket ? "Close event & get paid" : "Close event & pay out"}
           </button>
         </div>

@@ -40,7 +40,7 @@ export function Overview({ event, guests, guestNames, origin, isHost, busy, onGu
   const pageUrl = origin ? `${origin}/e/${id}` : "";
   const payUrl = origin ? `${origin}/p/${id}` : "";
   const integrationHref = `/e/${id}/manage?tab=integration`;
-  const over = open && Date.now() > event.metadata.ends_at;
+  const over = open && Date.now() >= event.metadata.ends_at;
 
   const closeCard = (
     <CloseEvent event={event} isHost={isHost} busy={busy} over={over} onFinalize={onFinalize} />
@@ -437,7 +437,7 @@ function CloseEvent({
     : attended > 0
       ? `${attended} of ${going} checked in. Closing splits ${formatUsdc(pool)} USDC: ${formatUsdc(pool / BigInt(attended))} USDC each.`
       : going > 0
-        ? "Nobody is checked in yet. Closing now sends every deposit back to its guest."
+        ? "Nobody is checked in yet. Closing with nobody checked in sends every deposit back to its guest."
         : "No deposits yet. Check guests in at the door, then close the event to split the pool.";
 
   return (
@@ -448,9 +448,16 @@ function CloseEvent({
       </div>
       {isHost ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <button type="button" className={`btn ${over ? "btn-accent" : "btn-primary"} !py-2 text-sm`} disabled={busy} onClick={onFinalize}>
+          <button
+            type="button"
+            className={`btn ${over ? "btn-accent" : "btn-primary"} !py-2 text-sm`}
+            disabled={busy || !over}
+            data-tooltip={over ? undefined : "Available once the event ends"}
+            onClick={onFinalize}
+          >
             {ticket ? "Close event & get paid" : "Close event & pay out"}
           </button>
+          {!over && <span className="text-xs text-muted">Opens when the event ends. To refund everyone now, cancel it below.</span>}
         </div>
       ) : (
         <p className="text-sm text-muted">Only the host ({shortAccount(event.host)}) can close the event. You can check guests in.</p>

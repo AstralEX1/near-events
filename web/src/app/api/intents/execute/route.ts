@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   let signer: string;
   let nonce: string;
   let registration: { eventId: number; amount: string } | undefined;
-  let hostAction: { create: { capacity: number; endsAt: number } } | { eventId: number } | undefined;
+  let hostAction: { create: { capacity: number; endsAt: number } } | { eventId: number; finalize: boolean } | undefined;
   try {
     signed = await req.json();
     if (signed.standard !== "erc191" || typeof signed.payload !== "string" || signed.payload.length > 24_576
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
         hostAction = { create: { capacity, endsAt } };
       } else if ((msg.action === "finalize" || msg.action === "cancel") && Number.isSafeInteger(msg.event_id) && msg.event_id >= 0) {
         if (msg.action === "finalize" && (!Array.isArray(msg.attended) || msg.attended.length > MAX_CAPACITY)) throw new Error();
-        hostAction = { eventId: msg.event_id };
+        hostAction = { eventId: msg.event_id, finalize: msg.action === "finalize" };
       } else throw new Error();
     } else if (intent.intent !== "transfer" || typeof intent.receiver_id !== "string"
       || intent.receiver_id.length > 64 || !/^[a-z0-9]+([._-][a-z0-9]+)*$/.test(intent.receiver_id)
@@ -77,19 +77,26 @@ export async function POST(req: Request) {
     if (registration) {
       const event = await events.get(registration.eventId);
       const existing = await events.guestStatus(registration.eventId, signer);
-      if (!event || event.status !== "Open" || event.guest_count >= event.capacity || existing || event.deposit !== registration.amount) {
+      if (!event || event.status !== "Open" || Date.now() >= event.metadata.ends_at || event.guest_count >= event.capacity
+        || existing || event.deposit !== registration.amount) {
         return Response.json({ error: "This registration is unavailable. Your USDC is still in NEAR Intents." }, { status: 409 });
       }
     }
     // Host actions that would fail on chain still burn relayer gas; refuse them here.
     if (hostAction && "create" in hostAction) {
+      if (!(await events.canCreate(signer))) {
+        return Response.json({ error: "Only verified hosts can create events right now." }, { status: 409 });
+      }
       if (await events.createCost(signer, hostAction.create.capacity, hostAction.create.endsAt) !== "0") {
-        return Response.json({ error: "Wallets outside NEAR can create free events only: up to 50 seats, 2 open events, ending within 60 days." }, { status: 409 });
+        return Response.json({ error: "Wallets outside NEAR can create free events only: up to 50 seats, 2 in 30 days, ending within 60 days." }, { status: 409 });
       }
     } else if (hostAction) {
       const event = await events.get(hostAction.eventId);
       if (!event || event.host !== signer || event.status !== "Open") {
         return Response.json({ error: "Only the host can close this event while it is open." }, { status: 409 });
+      }
+      if (hostAction.finalize && Date.now() < event.metadata.ends_at) {
+        return Response.json({ error: "You can close the event once it ends. To refund everyone now, cancel it." }, { status: 409 });
       }
     }
     if (await paidRequestLimited(req, "execute", signer, nonce)) return Response.json({ error: "Relayer quota unavailable or exceeded" }, { status: 429 });

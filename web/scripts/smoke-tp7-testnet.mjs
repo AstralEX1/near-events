@@ -1,10 +1,14 @@
-// Testnet check of the tp7 escrow rules with real transactions: the 60-day free
-// tier, the refund of empty paid seats, the host whitelist (direct and through a
-// NEAR Intents `auth_call` signed by the owner), an EVM host creating and closing
-// an event through `auth_call`, an Intents registration whose duplicate is
-// refunded by the verifier, a relayed payout, and an owner upgrade.
+// Testnet check of the escrow rules with real transactions: the free tier
+// (60 days, 2 free events per host in 30 days, closing early gives nothing back),
+// the refund of empty paid seats, the host whitelist (only listed hosts create)
+// and the sponsored list (only listed hosts get the free tier), both also run
+// through a NEAR Intents `auth_call` signed by the owner, finalize only after the
+// end, registration closed after the end, an EVM host through `auth_call`, an
+// Intents registration whose duplicate is refunded, a relayed payout, and an
+// owner upgrade. Each run uses a fresh host account (a sub-account of OWNER,
+// deleted at the end) so the free-tier limit starts empty.
 // Keys come from ~/.near-credentials/testnet (never printed).
-// Env: EVENTS_CONTRACT, OWNER, HOST_ACCOUNT, GUEST_ACCOUNT, RELAYER_ACCOUNT, WASM,
+// Env: EVENTS_CONTRACT, OWNER, GUEST_ACCOUNT, RELAYER_ACCOUNT, WASM,
 // optional APP_URL (relay EVM host actions through the app's /api/intents/execute).
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -15,7 +19,7 @@ import { keccak_256 } from "@noble/hashes/sha3.js";
 import { Account, JsonRpcProvider, KeyPair, baseEncode } from "near-api-js";
 
 const env = (k) => process.env[k] ?? (() => { throw new Error(`Set ${k}`); })();
-const [EVENTS, OWNER, HOST, GUEST, RELAYER, WASM] = ["EVENTS_CONTRACT", "OWNER", "HOST_ACCOUNT", "GUEST_ACCOUNT", "RELAYER_ACCOUNT", "WASM"].map(env);
+const [EVENTS, OWNER, GUEST, RELAYER, WASM] = ["EVENTS_CONTRACT", "OWNER", "GUEST_ACCOUNT", "RELAYER_ACCOUNT", "WASM"].map(env);
 const APP = process.env.APP_URL;
 const USDC = "usdc.tidepool-sandbox.testnet";
 const VERIFIER = "verifier.tidepool-sandbox.testnet";
@@ -25,7 +29,7 @@ const SEAT_BYTES = 560n;
 const DEPOSIT = "100000"; // 0.1 USDC
 const provider = new JsonRpcProvider({ url: "https://test.rpc.fastnear.com" });
 const secret = (id) => JSON.parse(readFileSync(`${homedir()}/.near-credentials/testnet/${id}.json`, "utf8")).private_key;
-const [owner, host, guest, relayer] = [OWNER, HOST, GUEST, RELAYER].map((id) => new Account(id, provider, secret(id)));
+const [owner, guest, relayer] = [OWNER, GUEST, RELAYER].map((id) => new Account(id, provider, secret(id)));
 const view = (method, args = {}, contractId = EVENTS) => provider.callFunction({ contractId, method, args });
 const raw = (who, contractId, methodName, args, deposit = 0n, gas = 100n * TGAS) =>
   who.callFunctionRaw({ contractId, methodName, args, deposit, gas, waitUntil: "FINAL" });
@@ -44,6 +48,7 @@ const meta = (title, endsInMs) => {
 };
 const HOUR = 3600_000;
 const DAY = 24 * HOUR;
+const until = async (ms) => { while (Date.now() < ms) await new Promise((r) => setTimeout(r, 2000)); };
 
 // 0. The guest needs a little test USDC.
 if (BigInt(await view("ft_balance_of", { account_id: GUEST }, USDC)) < 500_000n) {
@@ -51,15 +56,27 @@ if (BigInt(await view("ft_balance_of", { account_id: GUEST }, USDC)) < 500_000n)
 }
 const config = await view("get_config");
 assert.equal(config.owner, OWNER);
+assert.equal(config.whitelist_mode, false);
+assert.equal(config.sponsored_mode, false);
 assert.equal((await provider.viewAccessKeyList({ accountId: EVENTS })).keys.length, 0);
-step(0, `config ok, no access keys, owner ${OWNER}`);
+const HOST = `smoke${Date.now().toString(36)}.${OWNER}`;
+const hostKey = KeyPair.fromRandom("ed25519");
+await owner.createSubAccount({ accountOrPrefix: HOST.split(".")[0], publicKey: hostKey.getPublicKey().toString(), nearToTransfer: 10n ** 24n });
+const host = new Account(HOST, provider, hostKey.toString());
+step(0, `config ok (both lists off), no access keys, owner ${OWNER}, fresh host ${HOST}`);
 
-// 1. Free tier: within 60 days free, beyond that the host pays.
-const freeId = await host.callFunction({ contractId: EVENTS, methodName: "create_event", args: { metadata: meta("tp7 smoke free", HOUR), deposit: DEPOSIT, capacity: 10 }, gas: 30n * TGAS });
-const late = meta("tp7 smoke late", 61 * DAY);
+// 1. Free tier: ending within 60 days, 2 per host in 30 days; closing early gives nothing back.
+const free = (title, ends) => host.callFunction({ contractId: EVENTS, methodName: "create_event", args: { metadata: meta(title, ends), deposit: DEPOSIT, capacity: 10 }, gas: 30n * TGAS });
+const freeId = await free("smoke free A", 10 * 60_000);
+const late = meta("smoke late", 61 * DAY);
 assert.ok(BigInt(await view("create_event_cost", { host: HOST, capacity: 10, ends_at: late.ends_at })) > 0n);
 await rejects(raw(host, EVENTS, "create_event", { metadata: late, deposit: DEPOSIT, capacity: 10 }), "ending within 60 days");
-step(1, `free event ${freeId} created; a free event ending in 61 days is refused`);
+const secondId = await free("smoke free B", HOUR);
+await raw(host, EVENTS, "cancel", { event_id: secondId }, 1n, 100n * TGAS);
+assert.ok(BigInt(await view("create_event_cost", { host: HOST, capacity: 10 })) > 0n, "a cancelled free event gave its slot back");
+await rejects(raw(host, EVENTS, "create_event", { metadata: meta("smoke free C", HOUR), deposit: DEPOSIT, capacity: 10 }), "2 free events in 30 days");
+await rejects(raw(host, EVENTS, "finalize", { event_id: freeId, attended: [] }, 1n, 100n * TGAS), "The event has not ended yet");
+step(1, `free events ${freeId}, ${secondId}; 61 days refused; a third free one refused after cancelling one; finalize before the end refused`);
 
 // 2. A paid event gets its empty seats back at close.
 const cost = BigInt(await view("create_event_cost", { host: HOST, capacity: 51 }));
@@ -73,14 +90,24 @@ const refund = BigInt(JSON.parse(refundLog.slice("EVENT_JSON:".length)).data[0].
 assert.equal(refund, SEAT_BYTES * 50n * BYTE);
 step(2, `paid event ${paidId}: host paid ${cost} yocto, got ${refund} back for 50 empty seats`);
 
-// 3. Whitelist mode: only listed hosts get the free tier.
+// 3. Whitelist mode: only listed hosts create, even when paying. Sponsored mode: only listed hosts are free.
+const paid10 = BigInt(await view("create_event_cost", { host: HOST, capacity: 10 }));
 await raw(owner, EVENTS, "set_whitelist_mode", { enabled: true }, 1n, 30n * TGAS);
-await rejects(raw(host, EVENTS, "create_event", { metadata: meta("tp7 smoke unlisted", HOUR), deposit: DEPOSIT, capacity: 10 }), "whitelisted hosts");
+assert.equal(await view("can_create", { host: HOST }), false);
+await rejects(raw(host, EVENTS, "create_event", { metadata: meta("smoke unlisted", HOUR), deposit: DEPOSIT, capacity: 10 }, paid10, 30n * TGAS), "Only whitelisted hosts can create events");
 await raw(owner, EVENTS, "add_to_whitelist", { accounts: [HOST] }, 1n, 30n * TGAS);
-const listedId = await host.callFunction({ contractId: EVENTS, methodName: "create_event", args: { metadata: meta("tp7 smoke listed", HOUR), deposit: DEPOSIT, capacity: 10 }, gas: 30n * TGAS });
+const listedId = value(await raw(host, EVENTS, "create_event", { metadata: meta("smoke listed", HOUR), deposit: DEPOSIT, capacity: 10 }, paid10, 30n * TGAS));
 await raw(owner, EVENTS, "remove_from_whitelist", { accounts: [HOST] }, 1n, 30n * TGAS);
 await rejects(raw(host, EVENTS, "set_whitelist_mode", { enabled: false }, 1n, 30n * TGAS), "Only the owner");
-step(3, `whitelist on: unlisted host refused, listed host created event ${listedId}, stranger cannot switch the mode`);
+await raw(owner, EVENTS, "set_whitelist_mode", { enabled: false }, 1n, 30n * TGAS);
+await raw(owner, EVENTS, "set_sponsored_mode", { enabled: true }, 1n, 30n * TGAS);
+assert.ok(BigInt(await view("create_event_cost", { host: GUEST, capacity: 10 })) > 0n, "unsponsored host is free");
+await raw(owner, EVENTS, "add_sponsored", { accounts: [GUEST] }, 1n, 30n * TGAS);
+assert.equal(await view("create_event_cost", { host: GUEST, capacity: 10 }), "0");
+await raw(owner, EVENTS, "remove_sponsored", { accounts: [GUEST] }, 1n, 30n * TGAS);
+await rejects(raw(host, EVENTS, "add_sponsored", { accounts: [HOST] }, 1n, 30n * TGAS), "Only the owner");
+await raw(owner, EVENTS, "set_sponsored_mode", { enabled: false }, 1n, 30n * TGAS);
+step(3, `whitelist on: paying unlisted host refused, listed host created ${listedId}; sponsored on: only listed hosts free; strangers refused`);
 
 // 4. The owner runs the whitelist through a NEAR Intents auth_call (NEP-413).
 const salt = await view("current_salt", {}, VERIFIER);
@@ -116,12 +143,16 @@ function nep413(keyPair, signerId, intents) {
   };
 }
 const authCall = (msg) => ({ intent: "auth_call", contract_id: EVENTS, msg: JSON.stringify(msg) });
-const ownerIntent = nep413(ownerKey, OWNER, [authCall({ action: "add_to_whitelist", accounts: [HOST] })]);
+const ownerIntent = nep413(ownerKey, OWNER, [
+  authCall({ action: "add_to_whitelist", accounts: [HOST] }),
+  authCall({ action: "add_sponsored", accounts: [HOST] }),
+]);
 await raw(owner, VERIFIER, "execute_intents", { signed: [ownerIntent] }, 0n, 300n * TGAS);
 assert.equal(await view("is_whitelisted", { account_id: HOST }), true);
+assert.equal(await view("is_sponsored", { account_id: HOST }), true);
 await raw(owner, EVENTS, "remove_from_whitelist", { accounts: [HOST] }, 1n, 30n * TGAS);
-await raw(owner, EVENTS, "set_whitelist_mode", { enabled: false }, 1n, 30n * TGAS);
-step(4, "owner added a host through a signed Intents auth_call; mode back off");
+await raw(owner, EVENTS, "remove_sponsored", { accounts: [HOST] }, 1n, 30n * TGAS);
+step(4, "owner whitelisted and sponsored a host through one signed Intents auth_call; removed again");
 
 // 5. An EVM wallet hosts and closes an event through auth_call (ERC-191).
 const evm = () => {
@@ -147,15 +178,23 @@ async function relay(signed) {
   return json;
 }
 const evmHost = evm();
-await relay(erc191(evmHost, [authCall({ action: "create_event", metadata: meta("tp7 smoke EVM host", HOUR), deposit: DEPOSIT, capacity: 10 })]));
+await relay(erc191(evmHost, [authCall({ action: "create_event", metadata: meta("smoke EVM host", 90_000), deposit: DEPOSIT, capacity: 10 })]));
 const evmEvent = (await view("get_recent_events", { limit: 5 })).find((e) => e.host === evmHost.id);
 assert.ok(evmEvent, "the EVM host's event was not created");
 await raw(guest, USDC, "ft_transfer_call", { receiver_id: EVENTS, amount: DEPOSIT, msg: JSON.stringify({ action: "register", event_id: evmEvent.id }) }, 1n, 100n * TGAS);
 const before = BigInt(await view("balance_of", { account_id: GUEST }));
+if (APP) {
+  const early = await fetch(new URL("/api/intents/execute", APP), { method: "POST", body: JSON.stringify(erc191(evmHost, [authCall({ action: "finalize", event_id: evmEvent.id, attended: [GUEST] })])) });
+  assert.equal(early.status, 409, "the relayer accepted a finalize before the end");
+}
+await until(evmEvent.metadata.ends_at + 5_000);
+// Registration is closed now: a late payment comes back in full.
+const lateUsed = value(await raw(relayer, USDC, "ft_transfer_call", { receiver_id: EVENTS, amount: DEPOSIT, msg: JSON.stringify({ action: "register", event_id: evmEvent.id }) }, 1n, 100n * TGAS));
+assert.equal(lateUsed, "0", "a registration after the end was accepted");
 await relay(erc191(evmHost, [authCall({ action: "finalize", event_id: evmEvent.id, attended: [GUEST] })]));
 assert.equal((await view("get_event", { event_id: evmEvent.id })).status, "Finalized");
 assert.equal(BigInt(await view("balance_of", { account_id: GUEST })) - before, BigInt(DEPOSIT));
-step(5, `EVM host ${evmHost.id.slice(0, 10)}… created event ${evmEvent.id} and closed it through auth_call${APP ? " via the app relayer" : ""}`);
+step(5, `EVM host ${evmHost.id.slice(0, 10)}… created event ${evmEvent.id}; early finalize refused${APP ? " by the app relayer" : ""}; late registration refunded; closed after the end`);
 
 // 6. An Intents registration; the duplicate comes back to the guest's Intents balance.
 const evmGuest = evm();
@@ -182,4 +221,5 @@ assert.equal((await view("get_config")).frozen, false);
 step(7, `owner upgrade ok (${upgraded.transaction.hash}), ${eventsBefore} events kept`);
 
 for (const id of [listedId]) await raw(host, EVENTS, "cancel", { event_id: id }, 1n, 100n * TGAS);
-console.log("tp7 testnet smoke passed");
+await host.deleteAccount(OWNER);
+console.log("escrow testnet smoke passed");

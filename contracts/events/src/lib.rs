@@ -25,10 +25,11 @@
 //! names a guest other than the sender.
 //!
 //! Free tier: an event of up to `FREE_MAX_CAPACITY` seats that ends within
-//! `FREE_MAX_HORIZON_MS`, while the host has fewer than `FREE_MAX_OPEN_EVENTS`
-//! open events, is free. With the whitelist mode on, only whitelisted hosts
-//! get the free tier. The contract pays for storage from its own NEAR
-//! balance, which the operator keeps topped up. Anything else the host pays
+//! `FREE_MAX_HORIZON_MS` is free, up to `FREE_MAX_EVENTS` free events per host
+//! in any `FREE_WINDOW_MS` (closing one early does not give its slot back).
+//! With the sponsored mode on, only sponsored hosts get the free tier. The
+//! contract pays for storage from its own NEAR balance, which the operator
+//! keeps topped up. Anything else the host pays
 //! for: `create_event` takes the storage cost (`create_event_cost`) as
 //! attached NEAR, returns the excess, and gives back the share of empty seats
 //! when the event closes. The deposit has a floor so seats always cost guests
@@ -37,9 +38,15 @@
 //! Accounts that live in NEAR Intents (EVM, Solana, passkey wallets) act as
 //! hosts through the verifier's `auth_call` intent, which calls `on_auth`.
 //!
+//! Host trust: the contract cannot see who came, so it trusts the host's
+//! attendance list. With the whitelist mode on, only whitelisted (vetted)
+//! hosts can create events at all. The host can close with `finalize` only
+//! after `ends_at`; before that, only `cancel`, which refunds every deposit.
+//! Registration closes at `ends_at`.
+//!
 //! The owner can replace the code (`upgrade`) until `freeze`, which is one-way.
 //! The escrow account keeps no access keys, so after `freeze` nobody can
-//! change the code. The owner also runs the host whitelist.
+//! change the code. The owner also runs both host lists (whitelist, sponsored).
 //!
 //! Each guest's finalized attendances are counted (`get_attended_count`).
 
@@ -53,8 +60,8 @@ use near_sdk::{
 };
 
 // Sizes below are the measured worst case (64-char accounts, 120-char title)
-// plus ~25%: event 444 B, registration 191 B, balance entry 141 B,
-// attendance counter 113 B, whitelist entry 110 B. `tests.rs` checks real
+// plus ~25%: event 331 B, registration 191 B, balance entry 141 B,
+// attendance counter 113 B, whitelist entry 110 B, free log 125 B. `tests.rs` checks real
 // storage stays under them.
 /// Storage for one registration and its indexes. Each seat also reserves
 /// a separate balance entry and an attendance counter for settlement.
@@ -64,17 +71,20 @@ const BALANCE_BYTES: u64 = 176;
 const ATTENDED_BYTES: u64 = 144;
 /// One entry in `whitelist`.
 const WHITELIST_BYTES: u64 = 140;
+/// A host's free-tier log (creation times of the last free events).
+const FREE_LOG_BYTES: u64 = 160;
 /// Written per guest at settlement: their balance and attendance counter.
 const SETTLE_BYTES: u64 = BALANCE_BYTES + ATTENDED_BYTES;
 const SEAT_BYTES: u64 = STORAGE_BYTES_PER_GUEST + SETTLE_BYTES;
 const MAX_VIEW_PAGE: u32 = 100;
-/// Upper bound for one event record: max-length title, the vector slot and the
-/// host's open-event counter.
-const EVENT_RECORD_BYTES: u64 = 560;
+/// Upper bound for one event record: max-length title and the vector slot.
+const EVENT_RECORD_BYTES: u64 = 420;
 /// Largest event the contract pays storage for.
 pub const FREE_MAX_CAPACITY: u32 = 50;
-/// The free tier applies while the host has fewer open events than this.
-pub const FREE_MAX_OPEN_EVENTS: u32 = 2;
+/// The free tier gives a host this many events...
+pub const FREE_MAX_EVENTS: usize = 2;
+/// ...in any window of this length, counted at creation.
+pub const FREE_WINDOW_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 /// A free event must end within this time, so spam reservations expire fast.
 pub const FREE_MAX_HORIZON_MS: u64 = 60 * 24 * 60 * 60 * 1000;
 /// Smallest deposit: 0.1 USDC (6 decimals). Stops events with a dust deposit
@@ -103,9 +113,12 @@ enum StorageKey {
     Guests,
     GuestIndex,
     Balances,
+    /// tp7's open-event counter, no longer used; kept so later prefixes don't shift.
     OpenEvents,
     AttendedEvents,
     Whitelist,
+    Sponsored,
+    FreeLog,
 }
 
 #[near(serializers = [borsh, json])]
@@ -201,7 +214,10 @@ pub struct ConfigView {
     pub owner: AccountId,
     /// True once `freeze` ran: the code can never change again.
     pub frozen: bool,
+    /// On: only whitelisted hosts can create events.
     pub whitelist_mode: bool,
+    /// On: only sponsored hosts get the free tier.
+    pub sponsored_mode: bool,
 }
 
 /// `msg` accepted by `ft_on_transfer`.
@@ -224,6 +240,27 @@ pub enum AuthMsg {
     SetWhitelistMode { enabled: bool },
     AddToWhitelist { accounts: Vec<AccountId> },
     RemoveFromWhitelist { accounts: Vec<AccountId> },
+    SetSponsoredMode { enabled: bool },
+    AddSponsored { accounts: Vec<AccountId> },
+    RemoveSponsored { accounts: Vec<AccountId> },
+}
+
+/// The two owner-run host lists.
+#[derive(Clone, Copy)]
+enum HostList {
+    /// When its mode is on, only these hosts can create events.
+    Whitelist,
+    /// When its mode is on, only these hosts get the free tier.
+    Sponsored,
+}
+
+impl HostList {
+    fn name(self) -> &'static str {
+        match self {
+            HostList::Whitelist => "whitelist",
+            HostList::Sponsored => "sponsored",
+        }
+    }
 }
 
 #[ext_contract(ext_ft)]
@@ -251,17 +288,39 @@ pub struct Contract {
     guest_index: LookupMap<(u64, u32), AccountId>,
     balances: LookupMap<AccountId, Balance>,
     reserved_bytes: u64,
-    /// Open events per host (entry removed at 0).
-    open_events: LookupMap<AccountId, u32>,
     /// Finalized events each guest was checked in at.
     attended_events: LookupMap<AccountId, u32>,
     /// Optional account allowed to call `payout_to_intents` for other users (web relayer).
     relayer: Option<AccountId>,
-    /// Upgrades the code until `frozen`, and runs the whitelist.
+    /// Upgrades the code until `frozen`, and runs both host lists.
     owner: AccountId,
     frozen: bool,
-    /// When on, only whitelisted hosts get the free tier.
+    /// When on, only whitelisted hosts can create events.
     whitelist_mode: bool,
+    whitelist: LookupSet<AccountId>,
+    /// When on, only sponsored hosts get the free tier.
+    sponsored_mode: bool,
+    sponsored: LookupSet<AccountId>,
+    /// Creation times of each host's last `FREE_MAX_EVENTS` free events, oldest first.
+    free_log: LookupMap<AccountId, [u64; FREE_MAX_EVENTS]>,
+}
+
+/// The tp7 state layout, read once by `migrate`.
+#[near(serializers = [borsh])]
+struct StateTp7 {
+    usdc: AccountId,
+    intents: Option<AccountId>,
+    events: Vector<Event>,
+    guests: LookupMap<(u64, AccountId), GuestRecord>,
+    guest_index: LookupMap<(u64, u32), AccountId>,
+    balances: LookupMap<AccountId, Balance>,
+    reserved_bytes: u64,
+    _open_events: LookupMap<AccountId, u32>,
+    attended_events: LookupMap<AccountId, u32>,
+    relayer: Option<AccountId>,
+    owner: AccountId,
+    frozen: bool,
+    _whitelist_mode: bool,
     whitelist: LookupSet<AccountId>,
 }
 
@@ -277,7 +336,6 @@ impl Contract {
             guests: LookupMap::new(StorageKey::Guests),
             guest_index: LookupMap::new(StorageKey::GuestIndex),
             balances: LookupMap::new(StorageKey::Balances),
-            open_events: LookupMap::new(StorageKey::OpenEvents),
             attended_events: LookupMap::new(StorageKey::AttendedEvents),
             relayer,
             reserved_bytes: 0,
@@ -285,6 +343,9 @@ impl Contract {
             frozen: false,
             whitelist_mode: false,
             whitelist: LookupSet::new(StorageKey::Whitelist),
+            sponsored_mode: false,
+            sponsored: LookupSet::new(StorageKey::Sponsored),
+            free_log: LookupMap::new(StorageKey::FreeLog),
         }
     }
 
@@ -307,8 +368,8 @@ impl Contract {
     }
 
     /// Closes the event with the guests who came (`attended`, checked in at
-    /// the door off-chain). Host only. Unknown accounts fail the call,
-    /// duplicates count once.
+    /// the door off-chain). Host only, once `ends_at` has passed. Unknown
+    /// accounts fail the call, duplicates count once.
     /// `Deposit`: the pool is split equally between them, the rounding
     /// remainder goes to the host; an empty list returns every deposit.
     /// `Ticket`: just closes the event; the host was paid at registration.
@@ -344,33 +405,56 @@ impl Contract {
             }
             AuthMsg::Finalize { event_id, attended } => self.finalize_by(&signer_id, event_id, attended),
             AuthMsg::Cancel { event_id } => self.cancel_by(&signer_id, event_id),
-            AuthMsg::SetWhitelistMode { enabled } => self.set_mode(&signer_id, enabled),
-            AuthMsg::AddToWhitelist { accounts } => self.whitelist_add(&signer_id, accounts),
-            AuthMsg::RemoveFromWhitelist { accounts } => self.whitelist_remove(&signer_id, accounts),
+            AuthMsg::SetWhitelistMode { enabled } => self.set_list_mode(&signer_id, HostList::Whitelist, enabled),
+            AuthMsg::AddToWhitelist { accounts } => self.list_add(&signer_id, HostList::Whitelist, accounts),
+            AuthMsg::RemoveFromWhitelist { accounts } => self.list_remove(&signer_id, HostList::Whitelist, accounts),
+            AuthMsg::SetSponsoredMode { enabled } => self.set_list_mode(&signer_id, HostList::Sponsored, enabled),
+            AuthMsg::AddSponsored { accounts } => self.list_add(&signer_id, HostList::Sponsored, accounts),
+            AuthMsg::RemoveSponsored { accounts } => self.list_remove(&signer_id, HostList::Sponsored, accounts),
         }
         PromiseOrValue::Value(())
     }
 
     // --------------------------------------------------------------- owner
 
-    /// Turns the whitelist mode on or off. Owner only.
+    /// Whitelist mode on: only whitelisted hosts can create events. Owner only.
     #[payable]
     pub fn set_whitelist_mode(&mut self, enabled: bool) {
         near_sdk::assert_one_yocto();
-        self.set_mode(&env::predecessor_account_id(), enabled);
+        self.set_list_mode(&env::predecessor_account_id(), HostList::Whitelist, enabled);
     }
 
     /// Owner only. Up to 100 accounts per call; storage comes from the pool.
     #[payable]
     pub fn add_to_whitelist(&mut self, accounts: Vec<AccountId>) {
         near_sdk::assert_one_yocto();
-        self.whitelist_add(&env::predecessor_account_id(), accounts);
+        self.list_add(&env::predecessor_account_id(), HostList::Whitelist, accounts);
     }
 
     #[payable]
     pub fn remove_from_whitelist(&mut self, accounts: Vec<AccountId>) {
         near_sdk::assert_one_yocto();
-        self.whitelist_remove(&env::predecessor_account_id(), accounts);
+        self.list_remove(&env::predecessor_account_id(), HostList::Whitelist, accounts);
+    }
+
+    /// Sponsored mode on: only sponsored hosts get the free tier. Owner only.
+    #[payable]
+    pub fn set_sponsored_mode(&mut self, enabled: bool) {
+        near_sdk::assert_one_yocto();
+        self.set_list_mode(&env::predecessor_account_id(), HostList::Sponsored, enabled);
+    }
+
+    /// Owner only. Up to 100 accounts per call; storage comes from the pool.
+    #[payable]
+    pub fn add_sponsored(&mut self, accounts: Vec<AccountId>) {
+        near_sdk::assert_one_yocto();
+        self.list_add(&env::predecessor_account_id(), HostList::Sponsored, accounts);
+    }
+
+    #[payable]
+    pub fn remove_sponsored(&mut self, accounts: Vec<AccountId>) {
+        near_sdk::assert_one_yocto();
+        self.list_remove(&env::predecessor_account_id(), HostList::Sponsored, accounts);
     }
 
     /// Replaces the code with the call input (raw WASM, not JSON) and runs
@@ -391,16 +475,40 @@ impl Contract {
             .as_return()
     }
 
-    /// Run by `upgrade` on the new code. This version keeps the state as is;
-    /// a version that changes the state layout converts it here.
+    /// Run by `upgrade` on the new code. Keeps the current layout as is and
+    /// converts the tp7 layout (one list that gated the free tier, an
+    /// open-event counter): its list becomes the host whitelist, both modes off.
     #[private]
     #[init(ignore_state)]
     pub fn migrate() -> Self {
-        env::state_read().unwrap_or_else(|| env::panic_str("No state to migrate"))
+        let raw = env::storage_read(b"STATE").unwrap_or_else(|| env::panic_str("No state to migrate"));
+        if let Ok(state) = near_sdk::borsh::from_slice::<Self>(&raw) {
+            return state;
+        }
+        let old: StateTp7 =
+            near_sdk::borsh::from_slice(&raw).unwrap_or_else(|_| env::panic_str("Unknown state layout"));
+        Self {
+            usdc: old.usdc,
+            intents: old.intents,
+            events: old.events,
+            guests: old.guests,
+            guest_index: old.guest_index,
+            balances: old.balances,
+            reserved_bytes: old.reserved_bytes,
+            attended_events: old.attended_events,
+            relayer: old.relayer,
+            owner: old.owner,
+            frozen: old.frozen,
+            whitelist_mode: false,
+            whitelist: old.whitelist,
+            sponsored_mode: false,
+            sponsored: LookupSet::new(StorageKey::Sponsored),
+            free_log: LookupMap::new(StorageKey::FreeLog),
+        }
     }
 
     /// Makes the code permanent: `upgrade` stops working for good. One-way.
-    /// The owner keeps running the whitelist.
+    /// The owner keeps running both host lists.
     #[payable]
     pub fn freeze(&mut self) {
         near_sdk::assert_one_yocto();
@@ -515,14 +623,22 @@ impl Contract {
 
     /// NEAR (yocto) `host` must attach to create an event of `capacity` seats
     /// now; 0 on the free tier. Pass `ends_at` to apply the free tier's end
-    /// date limit as well.
+    /// date limit as well. With the whitelist mode on, check `can_create` too.
     pub fn create_event_cost(&self, host: AccountId, capacity: u32, ends_at: Option<u64>) -> U128 {
-        let open = self.open_events.get(&host).copied().unwrap_or(0);
-        U128(self.event_cost(&host, open, capacity, ends_at))
+        U128(self.event_cost(&host, capacity, ends_at))
+    }
+
+    /// Whether `host` may create events at all (whitelist mode).
+    pub fn can_create(&self, host: AccountId) -> bool {
+        !self.whitelist_mode || self.whitelist.contains(&host)
     }
 
     pub fn is_whitelisted(&self, account_id: AccountId) -> bool {
         self.whitelist.contains(&account_id)
+    }
+
+    pub fn is_sponsored(&self, account_id: AccountId) -> bool {
+        self.sponsored.contains(&account_id)
     }
 
     pub fn get_config(&self) -> ConfigView {
@@ -533,6 +649,7 @@ impl Contract {
             owner: self.owner.clone(),
             frozen: self.frozen,
             whitelist_mode: self.whitelist_mode,
+            sponsored_mode: self.sponsored_mode,
         }
     }
 }
@@ -581,23 +698,27 @@ impl Contract {
         attached: u128,
     ) -> u64 {
         let mode = mode.unwrap_or_default();
+        require!(self.can_create(host.clone()), "Only whitelisted hosts can create events");
         validate_metadata(&metadata);
         require!(deposit.0 >= MIN_DEPOSIT, "Deposit must be at least 0.1 USDC");
         require!(capacity > 0 && capacity <= MAX_CAPACITY, "Capacity out of range");
-        let open = self.open_events.get(&host).copied().unwrap_or(0);
         // The whole event, full house included, must be paid for up front.
         let reserve = SEAT_BYTES * u64::from(capacity) + BALANCE_BYTES;
-        let cost = self.event_cost(&host, open, capacity, Some(metadata.ends_at));
+        let cost = self.event_cost(&host, capacity, Some(metadata.ends_at));
         if cost == 0 {
-            self.require_storage_pool(EVENT_RECORD_BYTES + reserve);
+            self.require_storage_pool(EVENT_RECORD_BYTES + reserve + FREE_LOG_BYTES);
+            let mut log = self.free_log.get(&host).copied().unwrap_or_default();
+            log.rotate_left(1);
+            log[FREE_MAX_EVENTS - 1] = env::block_timestamp_ms();
+            self.free_log.insert(host.clone(), log);
         } else {
             require!(
                 attached >= cost,
                 format!(
-                    "This event is beyond the free tier (up to {} seats, {} open events, ending within 60 days{}). Attach {} yoctoNEAR for its storage",
+                    "This event is beyond the free tier (up to {} seats, {} free events in 30 days, ending within 60 days{}). Attach {} yoctoNEAR for its storage",
                     FREE_MAX_CAPACITY,
-                    FREE_MAX_OPEN_EVENTS,
-                    if self.whitelist_mode { ", whitelisted hosts" } else { "" },
+                    FREE_MAX_EVENTS,
+                    if self.sponsored_mode { ", sponsored hosts" } else { "" },
                     cost
                 )
             );
@@ -622,7 +743,6 @@ impl Contract {
             closed_at: 0,
             storage_paid: cost,
         });
-        self.open_events.insert(host.clone(), open + 1);
 
         emit("event_created", json!({ "event_id": id, "host": host, "deposit": deposit, "mode": mode }));
         id
@@ -632,6 +752,8 @@ impl Contract {
         let event = self.event(event_id);
         require!(*caller == event.host, "Only the host");
         require!(event.status == EventStatus::Open, "Event is closed");
+        // Before the end the host can only cancel, which refunds everyone.
+        require!(env::block_timestamp_ms() >= event.metadata.ends_at, "The event has not ended yet");
         require!(attended.len() <= MAX_CAPACITY as usize, "Too many accounts");
         let (host, deposit, guest_count, mode) = (event.host.clone(), event.deposit, event.guest_count, event.mode);
 
@@ -692,37 +814,53 @@ impl Contract {
         require!(*caller == self.owner, "Only the owner");
     }
 
-    fn set_mode(&mut self, caller: &AccountId, enabled: bool) {
+    fn set_list_mode(&mut self, caller: &AccountId, list: HostList, enabled: bool) {
         self.require_owner(caller);
-        self.whitelist_mode = enabled;
-        emit("whitelist_mode", json!({ "enabled": enabled }));
+        match list {
+            HostList::Whitelist => self.whitelist_mode = enabled,
+            HostList::Sponsored => self.sponsored_mode = enabled,
+        }
+        emit(&format!("{}_mode", list.name()), json!({ "enabled": enabled }));
     }
 
-    fn whitelist_add(&mut self, caller: &AccountId, accounts: Vec<AccountId>) {
+    fn list_mut(&mut self, list: HostList) -> &mut LookupSet<AccountId> {
+        match list {
+            HostList::Whitelist => &mut self.whitelist,
+            HostList::Sponsored => &mut self.sponsored,
+        }
+    }
+
+    fn list_add(&mut self, caller: &AccountId, list: HostList, accounts: Vec<AccountId>) {
         self.require_owner(caller);
         require!(!accounts.is_empty() && accounts.len() <= MAX_WHITELIST_BATCH, "Pass 1 to 100 accounts");
         self.require_storage_pool(WHITELIST_BYTES * accounts.len() as u64);
         for account in &accounts {
-            self.whitelist.insert(account.clone());
+            self.list_mut(list).insert(account.clone());
         }
-        emit("whitelist_added", json!({ "accounts": accounts }));
+        emit(&format!("{}_added", list.name()), json!({ "accounts": accounts }));
     }
 
-    fn whitelist_remove(&mut self, caller: &AccountId, accounts: Vec<AccountId>) {
+    fn list_remove(&mut self, caller: &AccountId, list: HostList, accounts: Vec<AccountId>) {
         self.require_owner(caller);
         require!(!accounts.is_empty() && accounts.len() <= MAX_WHITELIST_BATCH, "Pass 1 to 100 accounts");
         for account in &accounts {
-            self.whitelist.remove(account);
+            self.list_mut(list).remove(account);
         }
-        emit("whitelist_removed", json!({ "accounts": accounts }));
+        emit(&format!("{}_removed", list.name()), json!({ "accounts": accounts }));
     }
 
-    /// Storage cost of a new event for a host with `open` open events; 0 when free.
-    fn event_cost(&self, host: &AccountId, open: u32, capacity: u32, ends_at: Option<u64>) -> u128 {
+    /// Fewer than `FREE_MAX_EVENTS` free events in the last `FREE_WINDOW_MS`.
+    fn free_slot_open(&self, host: &AccountId) -> bool {
+        let oldest = self.free_log.get(host).map_or(0, |log| log[0]);
+        oldest == 0 || env::block_timestamp_ms() >= oldest + FREE_WINDOW_MS
+    }
+
+    /// Storage cost of a new event; 0 when free.
+    fn event_cost(&self, host: &AccountId, capacity: u32, ends_at: Option<u64>) -> u128 {
         let free = capacity <= FREE_MAX_CAPACITY
-            && open < FREE_MAX_OPEN_EVENTS
+            && self.free_slot_open(host)
             && ends_at.map_or(true, |end| end <= env::block_timestamp_ms() + FREE_MAX_HORIZON_MS)
-            && (!self.whitelist_mode || self.whitelist.contains(host));
+            && (!self.sponsored_mode || self.sponsored.contains(host));
         if free {
             0
         } else {
@@ -770,12 +908,6 @@ impl Contract {
         let refund = bytes_cost(SEAT_BYTES * empty)
             .min(event.storage_paid.saturating_sub(bytes_cost(EVENT_RECORD_BYTES + BALANCE_BYTES)));
         self.reserved_bytes -= release;
-        let open = self.open_events.get(&host).copied().unwrap_or(1);
-        if open <= 1 {
-            self.open_events.remove(&host);
-        } else {
-            self.open_events.insert(host.clone(), open - 1);
-        }
         if refund > 0 {
             emit("storage_refund", json!({ "event_id": event_id, "host": host, "amount": U128(refund) }));
             Promise::new(host).transfer(NearToken::from_yoctonear(refund)).detach();
@@ -834,6 +966,7 @@ impl Contract {
     fn can_register(&self, event_id: u64, guest: &AccountId) -> bool {
         let event = self.event(event_id);
         event.status == EventStatus::Open
+            && env::block_timestamp_ms() < event.metadata.ends_at
             && event.guest_count < event.capacity
             && self.keyless_ok(guest)
             && !self.guests.contains_key(&(event_id, guest.clone()))
@@ -844,6 +977,7 @@ impl Contract {
     fn register(&mut self, event_id: u64, guest: AccountId, paid_by: AccountId) {
         let event = self.event(event_id);
         require!(event.status == EventStatus::Open, "Event is closed");
+        require!(env::block_timestamp_ms() < event.metadata.ends_at, "The event has ended");
         require!(event.guest_count < event.capacity, "Event is full");
         require!(!self.guests.contains_key(&(event_id, guest.clone())), "Already registered");
         require!(self.keyless_ok(&guest), "Keyless registration requires Intents and a relayer");

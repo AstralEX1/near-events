@@ -43,7 +43,7 @@ await contract.signAndSendTransaction({
 const deployed = await provider.viewAccount({ accountId: id });
 if (deployed.code_hash !== expectedHash) throw new Error("Deployed bytecode does not match the input WASM");
 const config = await provider.callFunction({ contractId: id, method: "get_config", args: {} });
-assert.deepEqual(config, { usdc: USDC, intents, relayer: RELAYER, owner: OWNER, frozen: false, whitelist_mode: false });
+assert.deepEqual(config, { usdc: USDC, intents, relayer: RELAYER, owner: OWNER, frozen: false, whitelist_mode: false, sponsored_mode: false });
 const keys = await provider.viewAccessKeyList({ accountId: id });
 assert.equal(keys.keys.length, 0, "The escrow account still has an access key");
 // The escrow must hold a USDC storage registration to receive deposits.

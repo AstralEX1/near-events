@@ -114,6 +114,17 @@ async fn transfer_call(
         .await?)
 }
 
+/// Produces blocks until the sandbox clock reaches `ms`.
+async fn wait_until(worker: &Worker<Sandbox>, ms: u64) -> anyhow::Result<()> {
+    for _ in 0..200 {
+        if worker.view_block().await?.timestamp() / 1_000_000 > ms {
+            return Ok(());
+        }
+        worker.fast_forward(500).await?;
+    }
+    anyhow::bail!("the sandbox clock did not reach {ms}")
+}
+
 #[tokio::test]
 async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     let worker = near_workspaces::sandbox().await?;
@@ -171,8 +182,8 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
         .args_json(json!({
             "metadata": {
                 "title": "QA meetup",
-                "starts_at": now_ms + 3_600_000,
-                "ends_at": now_ms + 7_200_000
+                "starts_at": now_ms,
+                "ends_at": now_ms + 600_000
             },
             "deposit": "10000000",
             "capacity": 10
@@ -196,6 +207,13 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
         .transact()
         .await?;
     expect_reject(&helper_finalize, "Only the host");
+    let early_finalize = host
+        .call(events.id(), "finalize")
+        .args_json(json!({ "event_id": event_id, "attended": [] }))
+        .deposit(yocto(1))
+        .transact()
+        .await?;
+    expect_reject(&early_finalize, "The event has not ended yet");
 
     // Exact self payment, then a second one. The second must come back.
     let deposit = 10 * 1_000_000;
@@ -282,6 +300,13 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     .await?;
     assert_eq!(token_balance(&usdc, sponsor.id()).await?, sponsor_before, "unknown action must be refunded");
 
+    // Registration closes at the end: a late payment comes back in full.
+    wait_until(&worker, now_ms + 600_000).await?;
+    let late: String = transfer_call(&sponsor, usdc.id(), events.id(), deposit, json!({ "action": "register", "event_id": event_id }))
+        .await?
+        .json()?;
+    assert_eq!(late, "0", "a payment after the end was accepted");
+
     // Check-in happened off-chain; the host closes with the list of who came.
     host.call(events.id(), "finalize")
         .args_json(json!({ "event_id": event_id, "attended": [guest.id()] }))
@@ -347,6 +372,7 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     assert_eq!(token_balance(&usdc, guest.id()).await?, guest_tokens_before + 20 * 1_000_000);
 
     // A second event: cancel returns the deposit.
+    let now_ms = worker.view_block().await?.timestamp() / 1_000_000;
     let cancel_id: u64 = host
         .call(events.id(), "create_event")
         .args_json(json!({
@@ -380,13 +406,15 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     assert_eq!(escrow_balance(&events, noshow.id()).await?, deposit);
 
     // Past the end, a stranger still cannot cancel: only after 30 more days.
-    let ended: u64 = host
+    // Hosted by `helper`: `host` has used its 2 free events for 30 days.
+    let ends_soon = worker.view_block().await?.timestamp() / 1_000_000 + 30_000;
+    let ended: u64 = helper
         .call(events.id(), "create_event")
         .args_json(json!({
             "metadata": {
                 "title": "Ends soon",
-                "starts_at": now_ms,
-                "ends_at": now_ms + 1_000
+                "starts_at": ends_soon - 30_000,
+                "ends_at": ends_soon
             },
             "deposit": "10000000",
             "capacity": 4
@@ -403,9 +431,7 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     )
     .await?
     .into_result()?;
-    worker.fast_forward(400).await?;
-    let later = worker.view_block().await?.timestamp() / 1_000_000;
-    assert!(later > now_ms + 1_000, "clock did not pass the event end: {later} vs {now_ms}");
+    wait_until(&worker, ends_soon).await?;
     let too_soon = stranger
         .call(events.id(), "cancel")
         .args_json(json!({ "event_id": ended }))
@@ -444,9 +470,9 @@ async fn measure_full_event_gas(
         }
     }
 
-    // "abandoned" is `cancel` by a stranger, 30+ days after the event ended.
-    let stranger = worker.dev_create_account().await?;
-    for operation in ["finalize", "cancel", "abandoned"] {
+    // A stranger's `cancel` 30 days after the end runs the same refund loop as
+    // the host's; the unit tests cover who may call it.
+    for operation in ["finalize", "cancel"] {
         // Each settlement starts without balance entries for these guests.
         let target = if operation == "finalize" {
             events.clone()
@@ -458,16 +484,13 @@ async fn measure_full_event_gas(
             storage_deposit(usdc, host, contract.id()).await?;
             contract
         };
-        let now = worker.view_block().await?.timestamp() / 1_000_000;
-        let start = if operation == "abandoned" {
-            now - 31 * 24 * 60 * 60 * 1000
-        } else {
-            now
-        };
+        // Long enough for 300 registrations; `finalize` then waits for the end.
+        let start = worker.view_block().await?.timestamp() / 1_000_000;
+        let end = start + 1_200_000;
         let create = json!({
             "metadata": {
                 "title": "Full event gas check",
-                "starts_at": start, "ends_at": start + 60_000
+                "starts_at": start, "ends_at": end
             },
             "deposit": "1000000", "capacity": guests.len()
         });
@@ -515,8 +538,10 @@ async fn measure_full_event_gas(
         } else {
             json!({ "event_id": event_id })
         };
-        let (caller, method) = if operation == "abandoned" { (&stranger, "cancel") } else { (host, operation) };
-        let result = caller.call(target.id(), method)
+        if operation == "finalize" {
+            wait_until(worker, end).await?;
+        }
+        let result = host.call(target.id(), operation)
             .args_json(args)
             .deposit(yocto(1)).gas(Gas::from_tgas(300))
             .transact().await?.into_result()?;
@@ -562,7 +587,7 @@ async fn sandbox_ticket_cycle() -> anyhow::Result<()> {
             "metadata": {
                 "title": "Paid workshop",
                 "starts_at": now_ms - 60_000,
-                "ends_at": now_ms + 3_600_000
+                "ends_at": now_ms + 120_000
             },
             "deposit": price.to_string(),
             "capacity": 10,
@@ -586,6 +611,7 @@ async fn sandbox_ticket_cycle() -> anyhow::Result<()> {
     }
 
     // Finalize only closes the event; the host keeps exactly the two tickets.
+    wait_until(&worker, now_ms + 120_000).await?;
     host.call(events.id(), "finalize")
         .args_json(json!({ "event_id": event_id, "attended": [] }))
         .deposit(yocto(1))
