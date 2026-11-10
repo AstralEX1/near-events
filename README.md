@@ -1,5 +1,9 @@
 # Nearvent: show up, split the pool
 
+<a href="showcase/nearvent-showcase.mp4"><img src="showcase/preview.webp" alt="Nearvent in 30 seconds: discover an event, create one with a USDC deposit, register and get a QR pass, check guests in, close the event and withdraw the payout" width="100%"></a>
+
+**▶ [Watch the 30-second product video with sound (MP4, 1080p)](showcase/nearvent-showcase.mp4)**
+
 **Problem.** Free meetups lose many of their RSVPs to no-shows: an RSVP costs
 nothing, so hosts over-book, order the wrong amount of food and can't plan the room.
 
