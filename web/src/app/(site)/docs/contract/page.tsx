@@ -46,8 +46,9 @@ export default function ContractDocs() {
           <li>Touch anyone’s balance.</li>
         </ul>
         <p className="text-sm text-muted">
-          Check-ins stay off-chain, so 300 guests cost nothing. Only the final list goes on-chain. This test deployment
-          keeps a full-access key so the team can redeploy; the code hash shows what runs today.
+          Check-ins stay off-chain, so 300 guests cost nothing. Only the final list goes on-chain. The contract account
+          has no keys: only the owner can upgrade the code, and after <Mono>freeze</Mono> nobody can. Check{" "}
+          <Mono>get_config</Mono> and the code hash.
         </p>
       </Section>
 
@@ -60,7 +61,10 @@ export default function ContractDocs() {
             [<Mono key="3">finalize</Mono>, "Host", "Closes with the list of who came"],
             [<Mono key="4">cancel</Mono>, "Host · anyone after 30 days", "Refunds everyone"],
             [<Mono key="5">withdraw</Mono>, "Anyone", "Sends out your balance"],
-            [<Mono key="6">get_event · get_guests · balance_of</Mono>, "Anyone", "Free reads"],
+            [<Mono key="6">on_auth</Mono>, "NEAR Intents wallets", "Create, finalize or cancel through an auth_call intent"],
+            [<Mono key="7">add_to_whitelist · set_whitelist_mode</Mono>, "Owner", "Free events only for listed hosts, when on"],
+            [<Mono key="8">upgrade · freeze</Mono>, "Owner", "New code until freeze; freeze is forever"],
+            [<Mono key="9">get_event · get_guests · balance_of · get_config</Mono>, "Anyone", "Free reads"],
           ]}
         />
         <Code>{`near contract call-function as-read-only ${EVENTS_CONTRACT} get_event \\
@@ -68,14 +72,15 @@ export default function ContractDocs() {
       </Section>
 
       <Section id="limits" title="Limits">
-        <p className="text-sm">From 0.1 USDC · up to 300 guests · free up to 50 seats · ends within a year.</p>
+        <p className="text-sm">From 0.1 USDC · up to 300 guests · free up to 50 seats, ending within 60 days · ends within a year.</p>
       </Section>
 
       <Section id="proof" title="See it on-chain">
         <ul className="space-y-1 text-sm">
-          <li><Ext href={tx("DB9MtjrsfZXB923dZTpTY6D68wW8oH1ZjWdovfmtszen")}>Guest pays 0.1 USDC</Ext></li>
-          <li><Ext href={tx("7SwvaMPX9h7s5whMss8UKNdGaB4BtWbeaHK7rYR58YtH")}>Host closes: one guest came</Ext></li>
-          <li><Ext href={tx("6gEZvogYJ35xWAUCXwbDQUzDbxmxsj8JmTAEMWCTHxo7")}>That guest withdraws the whole 0.2 USDC pool</Ext></li>
+          <li><Ext href={tx("5THM1T3rxJ2Lm2Gnmc4YSaXUgNM87poq4hbhEZuRn6U2")}>Guest pays 0.1 USDC</Ext></li>
+          <li><Ext href={tx("FNzcdnkA5KNVP8C2NXCo2bgjgy73HL9yNFbsfHbn2VmB")}>Host closes: the guest came</Ext></li>
+          <li><Ext href={tx("8shBJSzRK7aKDEHNPupzfvLY8funfvfR1fFbxkZEsp3Y")}>The guest withdraws 0.1 USDC</Ext></li>
+          <li><Ext href={tx("5ovEmf3ue62JSxkNzkY17dXWYdJM8W3pss2jDGSNydQf")}>Owner upgrades the code</Ext></li>
         </ul>
       </Section>
 

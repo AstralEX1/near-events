@@ -29,13 +29,13 @@ Hackathon track: Real-World Money (USDC deposits, NEAR Intents, gasless onboardi
 | Event feed, Luma/BaliSquad import, themes, cover upload, embed button, guest profiles | Mainnet: payment, payout and EVM flows are implemented but not release-checked; nothing runs on mainnet |
 
 - Hosted demo: [www.nearvent.site](https://www.nearvent.site) (Vercel + Upstash
-  Redis), open demo event: [www.nearvent.site/e/11](https://www.nearvent.site/e/11).
-- Escrow used by the app: [`escrow-tp6.tp6-nv1110.testnet`](https://testnet.nearblocks.io/address/escrow-tp6.tp6-nv1110.testnet),
-  built from the CI reproducible WASM (code hash
-  `G8ym7g1tSQevzz9qXHynUvRyDHnxG3iBz8zxhdZ8ZUo2`; evidence in
-  [docs/DEPLOY.md](docs/DEPLOY.md)).
+  Redis), open demo event: [www.nearvent.site/e/4](https://www.nearvent.site/e/4).
+- Escrow used by the app: [`escrow-tp7.tp7-nv1110.testnet`](https://testnet.nearblocks.io/address/escrow-tp7.tp7-nv1110.testnet).
+  The account has no keys; the owner can upgrade the code until `freeze`
+  (`get_config` shows the owner and whether it is frozen). Evidence in
+  [docs/DEPLOY.md](docs/DEPLOY.md).
 - Test USDC: [`usdc.tidepool-sandbox.testnet`](https://testnet.nearblocks.io/address/usdc.tidepool-sandbox.testnet).
-  Older escrows (`tp3`–`tp5`) keep their test data on chain but the app does not read them.
+  Older escrows (`tp3`–`tp6`) keep their test data on chain but the app does not read them.
 
 ## Try it in two minutes (no wallet)
 
@@ -82,7 +82,7 @@ testnet accounts from `~/.near-credentials`):
 
 ```bash
 cd web
-export EVENTS_CONTRACT=escrow-tp6.tp6-nv1110.testnet HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet
+export EVENTS_CONTRACT=escrow-tp7.tp7-nv1110.testnet HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet
 node scripts/smoke-intents-testnet.mjs   # deposit via 1Click → finalize(attended) → cash out to Base and into Intents
 node scripts/smoke-tickets-testnet.mjs   # paid ticket → host paid at registration → finalize → cancel refunds nothing
 ```

@@ -140,12 +140,12 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     let events = worker.dev_deploy(events_wasm).await?;
     let untrusted = worker.dev_create_account().await?;
     let rejected = untrusted.call(events.id(), "new")
-        .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null }))
+        .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null, "owner": "owner.test.near" }))
         .transact().await?;
     assert!(rejected.is_failure(), "a third party initialized the escrow");
     events
         .call("new")
-        .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null }))
+        .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null, "owner": "owner.test.near" }))
         .transact()
         .await?
         .into_result()?;
@@ -453,7 +453,7 @@ async fn measure_full_event_gas(
         } else {
             let contract = worker.dev_deploy(escrow_wasm).await?;
             contract.call("new")
-                .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null }))
+                .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null, "owner": "owner.test.near" }))
                 .transact().await?.into_result()?;
             storage_deposit(usdc, host, contract.id()).await?;
             contract
@@ -540,7 +540,7 @@ async fn sandbox_ticket_cycle() -> anyhow::Result<()> {
     let events = worker.dev_deploy(wasm("near-events")).await?;
     events
         .call("new")
-        .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null }))
+        .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null, "owner": "owner.test.near" }))
         .transact()
         .await?
         .into_result()?;
@@ -605,5 +605,55 @@ async fn sandbox_ticket_cycle() -> anyhow::Result<()> {
         .into_result()?;
     assert_eq!(token_balance(&usdc, host.id()).await?, 2 * price);
     assert_eq!(token_balance(&usdc, events.id()).await?, 0);
+    Ok(())
+}
+
+/// The owner upgrades the code through the contract itself, with no access
+/// key left on the escrow account; a broken upgrade changes nothing; after
+/// `freeze` nobody can upgrade.
+#[tokio::test]
+async fn sandbox_upgrade_and_freeze() -> anyhow::Result<()> {
+    let worker = near_workspaces::sandbox().await?;
+    let events_wasm = wasm("near-events");
+    let usdc = worker.dev_deploy_tla(wasm("test-usdc")).await?;
+    usdc.call("new").transact().await?.into_result()?;
+    let owner = worker.dev_create_account().await?;
+    let host = worker.dev_create_account().await?;
+    let stranger = worker.dev_create_account().await?;
+    let events = worker.dev_deploy(events_wasm).await?;
+    events.call("new")
+        .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null, "owner": owner.id() }))
+        .transact().await?.into_result()?;
+    // Lock the account: no key can deploy code any more.
+    events.as_account().batch(events.id())
+        .delete_key(events.as_account().secret_key().public_key())
+        .transact().await?.into_result()?;
+
+    let now = worker.view_block().await?.timestamp() / 1_000_000;
+    host.call(events.id(), "create_event")
+        .args_json(json!({
+            "metadata": { "title": "Before upgrade", "starts_at": now, "ends_at": now + 60_000 },
+            "deposit": "1000000", "capacity": 10
+        }))
+        .transact().await?.into_result()?;
+
+    let upgrade = |caller: &Account, code: Vec<u8>| {
+        caller.call(events.id(), "upgrade").args(code).deposit(yocto(1)).gas(Gas::from_tgas(300)).transact()
+    };
+    expect_reject(&upgrade(&stranger, events_wasm.to_vec()).await?, "Only the owner");
+    upgrade(&owner, events_wasm.to_vec()).await?.into_result()?;
+    let event: Value = events.view("get_event").args_json(json!({ "event_id": 0 })).await?.json()?;
+    assert_eq!(event["metadata"]["title"], "Before upgrade", "state did not survive the upgrade");
+
+    // Not a contract: the batch fails and the old code keeps working.
+    let broken = upgrade(&owner, b"not a wasm module".to_vec()).await?;
+    assert!(broken.is_failure(), "a broken upgrade went through");
+    let config: Value = events.view("get_config").await?.json()?;
+    assert_eq!(config["owner"], owner.id().as_str());
+
+    owner.call(events.id(), "freeze").deposit(yocto(1)).transact().await?.into_result()?;
+    let config: Value = events.view("get_config").await?.json()?;
+    assert_eq!(config["frozen"], true);
+    expect_reject(&upgrade(&owner, events_wasm.to_vec()).await?, "The code is frozen");
     Ok(())
 }

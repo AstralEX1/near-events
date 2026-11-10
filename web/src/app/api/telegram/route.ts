@@ -209,7 +209,7 @@ async function onButton(q: { id: string; data?: string; message?: Msg }) {
     return say(chat, `<b>${esc(e.metadata.title)}</b>: ${guests.length} registered, ${e.attended_count} checked in\n\n${lines.join("\n")}`);
   }
   if (kind === "x") {
-    const rows = [["account", "status", "registered_at", "paid_by"], ...guests.map((g) => [g.account_id, g.status, new Date(g.registered_at).toISOString(), g.paid_by])];
+    const rows = [["account", "status", "registered_at"], ...guests.map((g) => [g.account_id, g.status, new Date(g.registered_at).toISOString()])];
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     return tgDocument(chat, `event-${id}-guests.csv`, csv, "Opens in Google Sheets or Excel.");
   }

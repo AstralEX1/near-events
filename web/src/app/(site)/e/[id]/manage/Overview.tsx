@@ -349,9 +349,6 @@ function GuestsSection({ event, guests, guestNames, onGuests, onShare }: { event
                     {name && (
                       <span className="block text-xs text-muted truncate">{shortAccount(g.account_id)}</span>
                     )}
-                    {g.paid_by !== g.account_id && (
-                      <span className="block text-xs text-muted truncate">paid by {shortAccount(g.paid_by)}</span>
-                    )}
                   </span>
                   <span className="text-right shrink-0">
                     <span className={`block text-xs font-medium px-2 py-0.5 rounded-full ${g.status === "Attended" ? "bg-good text-bg" : "bg-good/15 text-good"}`}>

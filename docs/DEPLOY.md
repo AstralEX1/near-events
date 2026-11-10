@@ -1,10 +1,10 @@
 # Web app hosting and escrow release
 
 Current status (2026-11-10): Vercel project `near-me-testnet` is linked from
-`web/` and serves `www.nearvent.site`. The app, `.env.example` and Vercel
-Production/Preview `NEXT_PUBLIC_EVENTS_CONTRACT` point at
-`escrow-tp6.tp6-nv1110.testnet` (PR #25 rules, see "TP6 testnet deploy" below).
-TP5/TP4 events remain on chain outside the app flow. USDC remains
+`web/` and serves `www.nearvent.site`. The app default, `.env.example` and the
+local `.env.local` point at `escrow-tp7.tp7-nv1110.testnet` (see "TP7 testnet
+deploy" below); Vercel `NEXT_PUBLIC_EVENTS_CONTRACT` follows once the site is
+redeployed. TP6/TP5/TP4 events remain on chain outside the app flow. USDC remains
 `usdc.tidepool-sandbox.testnet`, verifier `verifier.tidepool-sandbox.testnet`.
 Upstash `NearMeTestnet` stores off-chain details keyed by contract id. Hosted
 secret values are intentionally not documented here.
@@ -168,3 +168,58 @@ Smoke on faucet accounts `tp6host-nv1110`, `tp6guest1-nv1110`, `tp6guest2-nv1110
 
 Not covered: 1Click/Intents registration, relayer `payout_to_intents`, the
 3rd-open-event charge, UI wallet signing.
+
+## TP7 testnet deploy (2026-11-10, Claude)
+
+What changed from tp6: an `owner` (set at init) can `upgrade` the code until
+`freeze`, which is one-way; the escrow account keeps no access keys, so after
+`freeze` the code can never change. The owner runs a host whitelist
+(`set_whitelist_mode`, `add_to_whitelist`, `remove_from_whitelist`; off by
+default): when on, only listed hosts get the free tier. Free events must end
+within 60 days. A host who paid for storage gets the share of empty seats back
+when the event closes. `on_auth` takes NEAR Intents `auth_call` intents, so EVM,
+Solana and passkey wallets can create (free tier only, no NEAR attached),
+finalize and cancel events; the owner can run the whitelist the same way.
+Removed: `paid_by` in guest records and the never-used "pay a seat from the pool
+at registration" branch with `reserved_seats`. Measured worst-case sizes: event
+444 B, registration 191 B, whitelist entry 109 B; a free 50-seat event now
+reserves 0.287 NEAR (was 0.331).
+
+Checks: 130 unit tests, 3 sandbox scenarios (incl. `sandbox_upgrade_and_freeze`:
+upgrade with no keys left, broken WASM leaves the old code, upgrade after
+`freeze` refused), web tests (40) and production build.
+
+Deploy: local `cargo near build non-reproducible-wasm` (285,139 bytes, NEAR code
+hash `5n4RCTYYN2AUbJbsCuZbFTry8RGPuyBjfAS85GuD2WyU`); CI's reproducible build
+differs, so the owner upgrades to the CI artifact once main is pushed.
+`deploy-escrow.mjs` created `escrow-tp7.tp7-nv1110.testnet` (9.5 NEAR) under the
+faucet account `tp7-nv1110.testnet` (also the owner), deployed, initialised and
+deleted the account's key in one transaction, then checked `get_config` and an
+empty key list, and registered its Tidepool USDC storage.
+
+`node scripts/smoke-tp7-testnet.mjs` passed on testnet (host `tp6host-nv1110`,
+guest `tp6guest1-nv1110`, relayer as funder): a free event ending in 61 days is
+refused; a paid 51-seat event (0.29296 NEAR) got 0.28 NEAR back for 50 empty
+seats at cancel; whitelist on refuses an unlisted host and accepts a listed one;
+the owner whitelisted a host through a NEP-413 `auth_call` intent; a fresh EVM
+key created and finalized an event through ERC-191 `auth_call`; an Intents
+registration's duplicate came back to the guest's Intents balance; a relayed
+payout after cancel; owner upgrade with the same WASM
+(`5ovEmf3ue62JSxkNzkY17dXWYdJM8W3pss2jDGSNydQf`) kept all events. A second
+disposable escrow `escrow.tp7freeze-nv1110.testnet` was upgraded, then frozen;
+the next upgrade failed with "The code is frozen".
+
+Proof flow on tp7 event 5: pay `5THM1T3rxJ2Lm2Gnmc4YSaXUgNM87poq4hbhEZuRn6U2`,
+finalize `FNzcdnkA5KNVP8C2NXCo2bgjgy73HL9yNFbsfHbn2VmB`, withdraw
+`8shBJSzRK7aKDEHNPupzfvLY8funfvfR1fFbxkZEsp3Y`. Demo event `/e/4` was seeded with
+`seed-demo.mjs`; the four free events (incl. the public BaliSquad `/f/GhcgconU`)
+were copied in Upstash from the tp6 namespace to tp7.
+
+Owner actions: `OWNER=… EVENTS_CONTRACT=… node scripts/escrow-owner.mjs
+mode on|off | add <accounts> | remove <accounts> | upgrade <wasm> | freeze`.
+For mainnet the owner should be a Ledger account; `freeze` only after the code
+is final.
+
+Not covered: the app's `/api/intents/execute` relaying an EVM host's
+`auth_call` from the browser (the route was exercised by the smoke only when
+`APP_URL` is set), UI for EVM hosts, mainnet.
