@@ -75,6 +75,37 @@ export function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
   );
 }
 
+/** A real screenshot from the site with a short title and one line under it. */
+export function Shot({ src, w, h, n, title, children }: { src: string; w: number; h: number; n: number; title: string; children: ReactNode }) {
+  return (
+    <figure className="space-y-3">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} width={w} height={h} alt={title} loading="lazy" className="w-full h-auto rounded-2xl border border-border" />
+      <figcaption className="flex gap-3">
+        <span className="w-7 h-7 shrink-0 rounded-full bg-accent-soft text-accent text-sm font-semibold flex items-center justify-center">{n}</span>
+        <span>
+          <span className="block font-medium">{title}</span>
+          <span className="block text-sm text-muted">{children}</span>
+        </span>
+      </figcaption>
+    </figure>
+  );
+}
+
+/** Unlock-style cards: a bold title and one line each. */
+export function Cards({ items }: { items: [string, ReactNode][] }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {items.map(([t, d]) => (
+        <div key={t} className="card px-5 py-4">
+          <div className="font-medium">{t}</div>
+          <div className="text-sm text-muted mt-1">{d}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Code({ children }: { children: string }) {
   return <pre className="card overflow-x-auto px-4 py-3 text-xs font-mono leading-relaxed">{children}</pre>;
 }

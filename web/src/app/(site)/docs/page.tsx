@@ -1,98 +1,58 @@
 import Link from "next/link";
-import { Ext, Faq, Next, Section, Steps, Table, Title } from "./parts";
+import { Cards, Faq, Next, Section, Shot, Title } from "./parts";
 
 export default function DocsHome() {
   return (
     <>
-      <Title lead="Free events lose half their guests. Nearvent asks everyone for a small deposit and gives it back to the people who come.">
-        How Nearvent Works
-      </Title>
+      <Title lead="Guests put down a small deposit. Those who show up split it.">How Nearvent Works</Title>
 
-      <Section id="idea" title="The idea">
-        <p>
-          Every guest puts down the same small deposit in USDC when they register. At the door the host checks people in.
-          After the event, the people who came get their deposit back plus an equal share of the deposits of those who
-          didn’t. Nobody pays a fee to Nearvent.
-        </p>
-        <p>There are three kinds of events:</p>
-        <Table
-          head={["Kind", "Guest pays", "After the event"]}
-          rows={[
-            ["Deposit", "A deposit, e.g. 5 USDC", "Guests who came split the whole pool"],
-            ["Ticket", "A ticket price", "The money goes to the host"],
-            ["Free", "Nothing", "Just an RSVP list"],
-          ]}
-        />
+      <div className="card bg-accent-soft border-transparent px-5 py-4 mb-12 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-medium">Try it now, no wallet needed</div>
+          <div className="text-sm text-muted">Sign In → Try with a demo account. Test money included.</div>
+        </div>
+        <Link href="/create" className="btn btn-primary">Create Event</Link>
+      </div>
+
+      <Section id="flow" title="Four steps">
+        <div className="space-y-10">
+          <Shot n={1} src="/docs/create.png" w={1480} h={1080} title="Create an event">
+            Stake to RSVP, sell tickets, or keep it free. Up to 50 seats costs the host nothing.
+          </Shot>
+          <Shot n={2} src="/docs/register.png" w={1304} h={506} title="Guests register">
+            One click puts down the deposit in USDC.
+          </Shot>
+          <Shot n={3} src="/docs/pass.png" w={1304} h={722} title="Check in at the door">
+            Guests show their QR. The host or door team marks them in.
+          </Shot>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/docs/checkin.png" width={1840} height={156} alt="A guest marked as checked in" loading="lazy" className="w-full h-auto rounded-2xl border border-border -mt-6" />
+          <Shot n={4} src="/docs/payout.png" w={1304} h={1030} title="Get paid">
+            The host closes the event. Everyone who came gets their deposit back plus a share of the no-shows.
+          </Shot>
+        </div>
       </Section>
 
-      <Section id="try" title="Try it in two minutes">
-        <p>
-          Press <b>Sign In → Try with a demo account</b>. You get a fresh account with test USDC already on it. Every
-          action signs on its own, so you can click through the whole flow without a wallet.
-        </p>
-        <Steps
+      <Section id="near" title="Built on NEAR">
+        <Cards
           items={[
-            ["Create an event", <>Open <Link href="/create" className="text-accent underline">Create Event</Link>, pick Stake to RSVP, set 0.1 USDC, press Create Event.</>],
-            ["Register as a guest", "Open the event link in a private window, sign in with another demo account, press Register."],
-            ["Check the guest in", "Back as the host: Manage → Guests → Check in."],
-            ["Close the event", "Manage → Close event & pay out. The pool is split on-chain."],
-            ["Withdraw", "As the guest, open the event and press Withdraw."],
+            ["Escrow contract", <>Holds every deposit. <Link href="/docs/contract" className="text-accent underline">How it works</Link></>],
+            ["USDC", "A deposit keeps its value until the door."],
+            ["NEAR Intents", "Pay and withdraw from any chain."],
+            ["Google sign-in", "A real NEAR account, no seed phrase."],
           ]}
         />
-        <p className="text-sm text-muted">Each of these steps is a real NEAR transaction you can open in the explorer.</p>
-      </Section>
-
-      <Section id="guests" title="Going to an event">
-        <Steps
-          items={[
-            ["Find an event", <>Open the link from the host, or browse <Link href="/events" className="text-accent underline">Explore</Link>.</>],
-            ["Sign in", "Google or email works without any crypto: we create a NEAR account for you. A NEAR or EVM wallet works too."],
-            ["Put down the deposit", "Press Register and pay in USDC. You can also pay from another chain through NEAR Intents."],
-            ["Show your QR at the door", "The host scans it and marks you as here."],
-            ["Get your money", "When the host closes the event, press Withdraw: your deposit plus your share of the no-shows."],
-          ]}
-        />
-      </Section>
-
-      <Section id="hosts" title="Hosting an event">
-        <Steps
-          items={[
-            ["Create or import", "Fill in title, time, place, deposit and seats, or paste a Luma or BaliSquad link. Up to 50 seats is free."],
-            ["Share", <>Send the link, or add a registration button to your own site (<Link href="/docs/website" className="text-accent underline">how</Link>).</>],
-            ["Check people in", "On the day open Manage → Scan QR codes. Add friends as your door team so they can scan too. Check-ins cost nothing: no transaction per guest."],
-            ["Close the event", "After it ends, review the list and close. Payouts go out in one transaction."],
-          ]}
-        />
-      </Section>
-
-      <Section id="near" title="What runs on NEAR">
-        <Table
-          head={["Part", "Why"]}
-          rows={[
-            ["Escrow smart contract", <>Holds every deposit and pays out by fixed rules. <Link href="/docs/contract" className="text-accent underline">Details</Link></>],
-            ["USDC", "A deposit is worth the same at the door as when you paid it."],
-            [<Ext key="i" href="https://docs.near-intents.org">NEAR Intents · 1Click</Ext>, "Pay and withdraw from other chains and tokens."],
-            ["NEAR Auth", "Google or email sign-in creates a real NEAR account, no seed phrase."],
-            ["Gas sponsoring", "New accounts get a little NEAR for gas from our relayer, so guests never buy NEAR."],
-          ]}
-        />
-        <p className="text-sm text-muted">
-          Names, descriptions, photos and door check-ins are kept on the Nearvent server. The contract keeps only what
-          money depends on: title, time, deposit, guests and who came.
-        </p>
       </Section>
 
       <Section id="faq" title="FAQ">
         <Faq
           items={[
-            ["Who holds the money?", "A NEAR smart contract. Not Nearvent and not the host. Every deposit and payout is public on-chain."],
-            ["Can the host keep the deposits?", "No. In Deposit mode the host can only say who came. The contract splits the pool between those guests."],
-            ["What if nobody shows up?", "Everyone gets their deposit back."],
-            ["What if the host never closes the event?", "30 days after it ends, anyone can trigger a full refund."],
-            ["Can I cancel after registering?", "No, that is what makes people come. If the host cancels, everyone gets their deposit back."],
-            ["I came but wasn’t checked in.", "Tell the host before they close the event; they can still add you."],
-            ["Is there a fee?", "No platform fee. Network fees are tiny and sponsored for new accounts."],
-            ["Is there a time limit to withdraw?", "No. Your money stays on your balance until you take it."],
+            ["Who holds the money?", "A smart contract. Not Nearvent, not the host."],
+            ["Can the host keep the deposits?", "No. The host only says who came."],
+            ["Nobody showed up?", "Everyone gets their deposit back."],
+            ["The host never closes the event?", "30 days after it ends, anyone can refund everyone."],
+            ["I came but wasn’t checked in.", "Ask the host before they close the event."],
+            ["Fees?", "None from Nearvent."],
           ]}
         />
       </Section>
