@@ -22,8 +22,8 @@ function wrongNetwork(id: string): boolean {
   return NETWORK === "testnet" ? !id.endsWith(".testnet") : id.endsWith(".testnet");
 }
 const wrongNetworkMessage = (id: string) =>
-  `${id} is a ${NETWORK === "testnet" ? "mainnet" : "testnet"} account, but this site runs on ${NETWORK}. ` +
-  `Sign out, switch your wallet to ${NETWORK} and sign in with a ${NETWORK === "testnet" ? "name.testnet" : "name.near"} account.`;
+  `${id} is on a different NEAR network than this site. ` +
+  `Sign out, switch your wallet to the network this site uses, and sign in again.`;
 
 type Kind = "wallet" | "email" | "evm";
 const KIND_KEY = "near-events:login";

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@/lib/wallet";
-import { NETWORK } from "@/lib/config";
 import { Avatar } from "./ui";
 import { SignInMenu } from "./SignIn";
 
@@ -25,7 +24,6 @@ function HeaderContent({ accountId, signOut, path, preview = false }: {
     <header className="gc-header">
       <div className="gc-header-inner">
         <Link href="/" className="gc-brand" aria-label="Nearvent home">near<em>vent</em></Link>
-        {NETWORK === "testnet" && <span className="hidden min-[380px]:inline text-[10px] font-medium px-2 py-1 rounded-full bg-accent-soft text-accent">testnet</span>}
         <nav aria-label="Main navigation" className="hidden sm:flex items-center gap-1 ml-auto">
           {links.map(([href, label]) => <Link key={href} href={href} className="gc-nav-link" aria-current={path.startsWith(href) ? "page" : undefined}>{label}</Link>)}
         </nav>

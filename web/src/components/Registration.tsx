@@ -4,13 +4,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, usdc, type EventView, type GuestStatus, isTicket } from "@/lib/near";
-import { EVENTS_CONTRACT, HAS_FAUCET, LIVE_EVENT_SWAPS, TEST_EVM_FAUCET_LIMIT, USDC_CONTRACT } from "@/lib/config";
+import { EVENTS_CONTRACT, HAS_FAUCET, TEST_EVM_FAUCET_LIMIT, USDC_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
 import { confirmRegistration, intentsUsdcBalance, registerFromIntents } from "@/lib/intents";
 import { NextSteps } from "@/components/EventParts";
 import { CashOut } from "@/components/CashOut";
 import { DepositRulesTooltip } from "@/components/DepositRulesTooltip";
+import { guestNamesApi } from "@/lib/guestNamesClient";
+
+function requireDisplayName(value: string): string {
+  const name = value.trim().replace(/\s+/g, " ");
+  if (!name) throw new Error("Enter your name so the host can find you at the door.");
+  if (new TextEncoder().encode(name).length > 80) throw new Error("Name is too long. Shorten it and try again.");
+  return name;
+}
 
 /** Sign in, then put down the deposit. Used on the event page and in the embed popup. */
 export function RegistrationCard({
@@ -24,8 +32,9 @@ export function RegistrationCard({
   onChange: () => Promise<void>;
   embedReturnTo?: string;
 }) {
-  const { accountId, kind, send } = useWallet();
+  const { accountId, kind, send, staffToken } = useWallet();
   const router = useRouter();
+  const [displayName, setDisplayName] = useState("");
   const [intentsBalance, setIntentsBalance] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,17 +88,24 @@ export function RegistrationCard({
     }
   };
 
+  const saveName = async (name: string) => {
+    setStage("Saving your name…");
+    const token = await staffToken();
+    await guestNamesApi.save(event.id, name, token);
+  };
+
   const registerDirect = async () => {
+    const name = requireDisplayName(displayName);
     const deposit = BigInt(event.deposit);
     if (BigInt(await usdc.balance(accountId!).catch(() => "0")) < deposit) {
       if (!HAS_FAUCET) {
         router.push(paymentUrl);
         return;
       }
-      setStage("Getting test USDC…");
+      setStage("Getting USDC…");
       const r = await fetch("/api/faucet", { method: "POST", body: JSON.stringify({ accountId }) });
-      if (!r.ok) throw new Error((await r.json()).error ?? "Faucet failed");
-      if (BigInt(await usdc.balance(accountId!)) < deposit) throw new Error("The test faucet did not cover this price.");
+      if (!r.ok) throw new Error((await r.json()).error ?? "Could not get USDC");
+      if (BigInt(await usdc.balance(accountId!)) < deposit) throw new Error("Not enough USDC for this price.");
     }
     setStage("Confirm in your wallet…");
     await send([
@@ -101,6 +117,9 @@ export function RegistrationCard({
       },
     ]);
     await confirmRegistration(event.id, accountId!);
+    await saveName(name).catch(() => {
+      // Registration already landed on-chain; name is best-effort for the host list.
+    });
   };
 
   const register = () => run(registerDirect);
@@ -113,6 +132,7 @@ export function RegistrationCard({
   // balance gets free test USDC first (the relayer deposits it into Intents).
   const registerViaIntents = () =>
     run(async () => {
+      const name = requireDisplayName(displayName);
       let available = await intentsUsdcBalance(accountId!);
       if (available < BigInt(event.deposit) && !HAS_FAUCET) {
         router.push(paymentUrl);
@@ -120,14 +140,14 @@ export function RegistrationCard({
       }
       if (available < BigInt(event.deposit)) {
         if (BigInt(event.deposit) > TEST_EVM_FAUCET_LIMIT) {
-          throw new Error(`The test faucet tops up to ${formatUsdc(TEST_EVM_FAUCET_LIMIT)} USDC. You need ${formatUsdc(event.deposit)} USDC in Intents to register.`);
+          throw new Error(`You need ${formatUsdc(event.deposit)} USDC in Intents to register.`);
         }
-        setStage("Getting test USDC into NEAR Intents…");
+        setStage("Getting USDC into NEAR Intents…");
         const r = await fetch("/api/faucet", { method: "POST", body: JSON.stringify({ accountId }) });
-        if (!r.ok) throw new Error((await r.json()).error ?? "Faucet failed");
+        if (!r.ok) throw new Error((await r.json()).error ?? "Could not get USDC");
         available = await intentsUsdcBalance(accountId!);
         if (available < BigInt(event.deposit)) {
-          throw new Error(`The test faucet tops up to ${formatUsdc(TEST_EVM_FAUCET_LIMIT)} USDC. You need ${formatUsdc(event.deposit)} USDC in Intents to register.`);
+          throw new Error(`You need ${formatUsdc(event.deposit)} USDC in Intents to register.`);
         }
       }
       setStage("Sign in your wallet…");
@@ -135,6 +155,7 @@ export function RegistrationCard({
       await confirmRegistration(event.id, accountId!).catch(() => {
         throw new Error("Registration is not confirmed. Check your event and NEAR Intents balance before paying again.");
       });
+      await saveName(name).catch(() => {});
     });
 
   const price = `${formatUsdc(event.deposit)} USDC`;
@@ -239,21 +260,49 @@ export function RegistrationCard({
     body = <p className="text-sm">This event is full.</p>;
   } else if (kind === "evm") {
     const enough = HAS_FAUCET || (intentsBalance !== null && intentsBalance >= BigInt(event.deposit));
-    body = enough ? (
-      <button className="btn btn-accent w-full" disabled={busy} onClick={registerViaIntents}>
-        {busy ? stage ?? "Sign in your wallet…" : `${action} · ${price}`}
-      </button>
-    ) : (
-      <Link href={paymentUrl} className="btn btn-accent w-full">{action} · {price}</Link>
+    body = (
+      <div className="space-y-2">
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">Your name</span>
+          <input
+            className="input w-full"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Name for the guest list"
+            autoComplete="name"
+            maxLength={80}
+            disabled={busy}
+          />
+        </label>
+        {enough ? (
+          <button className="btn btn-accent w-full" disabled={busy} onClick={registerViaIntents}>
+            {busy ? stage ?? "Sign in your wallet…" : `${action} · ${price}`}
+          </button>
+        ) : (
+          <Link href={paymentUrl} className="btn btn-accent w-full">{action} · {price}</Link>
+        )}
+      </div>
     );
   } else {
     body = (
       <div className="space-y-2">
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">Your name</span>
+          <input
+            className="input w-full"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Name for the guest list"
+            autoComplete="name"
+            maxLength={80}
+            disabled={busy}
+          />
+        </label>
         <button className="btn btn-accent w-full !py-3.5" disabled={busy} onClick={register}>
           {busy ? stage ?? "Working…" : `${action} · ${price}`}
         </button>
         <p className="text-xs text-muted text-center">
-          {LIVE_EVENT_SWAPS ? "Paid through NEAR Intents. No USDC on NEAR? You can use a supported token and network." : "Testnet: free test USDC. Payouts go out through NEAR Intents."}
+          Paid through NEAR Intents. No USDC on NEAR? You can use a supported token and network.
         </p>
       </div>
     );
