@@ -61,7 +61,9 @@ assert.equal(config.sponsored_mode, false);
 assert.equal((await provider.viewAccessKeyList({ accountId: EVENTS })).keys.length, 0);
 const HOST = `smoke${Date.now().toString(36)}.${OWNER}`;
 const hostKey = KeyPair.fromRandom("ed25519");
-await owner.createSubAccount({ accountOrPrefix: HOST.split(".")[0], publicKey: hostKey.getPublicKey().toString(), nearToTransfer: 10n ** 24n });
+await owner.createSubAccount({ accountOrPrefix: HOST.split(".")[0], publicKey: hostKey.getPublicKey().toString(), nearToTransfer: 5n * 10n ** 22n });
+// The relayer funds the paid events below (~0.36 NEAR of storage, mostly refunded).
+await relayer.transfer({ receiverId: HOST, amount: 6n * 10n ** 23n });
 const host = new Account(HOST, provider, hostKey.toString());
 step(0, `config ok (both lists off), no access keys, owner ${OWNER}, fresh host ${HOST}`);
 

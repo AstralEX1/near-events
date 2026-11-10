@@ -37,8 +37,9 @@ demo and for development.
 - Hosted site: [www.nearvent.site](https://www.nearvent.site) (Vercel + Upstash
   Redis), still on testnet until the mainnet escrow is deployed; demo event:
   [www.nearvent.site/e/4](https://www.nearvent.site/e/4).
-- The testnet escrow runs the CI reproducible WASM (code hash
-  `D3VY2iUDYKtuYvWBAYQQ6UAudNCZqWQqwxV2HiXH7WAx`). The account has no keys; the
+- The testnet escrow runs a local build with the 2026-11-10 audit fixes (code
+  hash `9bzLSqerBC3jV1BTGuivp1eqVkxua6vUAK2RTHKELEoa`; the CI reproducible WASM
+  replaces it once these commits are pushed). The account has no keys; the
   owner can upgrade the code until `freeze` (`get_config` shows the owner and
   whether it is frozen). Evidence in [docs/DEPLOY.md](docs/DEPLOY.md).
 - Mainnet pieces checked read-only on 2026-11-10 with `web/scripts/check-release.mjs`:
@@ -104,9 +105,15 @@ creation, deposit, ticket, finalize, withdraw; see docs/DEPLOY.md).
 ## Rules the escrow enforces
 
 - Free tier for hosts: the escrow pays storage for events up to 50 seats that
-  end within 60 days, while the host has fewer than 2 open events. Bigger events (up to 300 seats) or more
-  open events cost the host a little NEAR for storage (~0.33 NEAR for 50 seats,
-  ~1.95 NEAR for 300).
+  end within 60 days, up to 2 free events per host in any 30 days (closing one
+  early does not give it back). Bigger or extra events cost the host a little
+  NEAR for storage (~0.29 NEAR for 50 seats, ~1.7 NEAR for 300), and the empty
+  seats' share comes back at close.
+- The host decides who came, so with the whitelist mode on only whitelisted
+  (verified) hosts can create events at all. A separate sponsored list, when its
+  mode is on, limits the free tier to listed hosts. Both are off by default.
+- The host can `finalize` only after the event ends; before that the only way
+  out is `cancel`, which refunds everyone. Registration closes at the end.
 - Deposit mode: the host records who showed up but cannot take the pool. Ticket
   mode: each ticket goes to the host's balance at registration and is never
   refunded.
@@ -165,14 +172,16 @@ the escrow, USDC, and USDC leaving NEAR Intents.
 
 | Method | Who | What |
 |---|---|---|
-| `create_event(metadata, deposit, capacity, mode)` | anyone (caller = host) | `metadata` = `{title, starts_at, ends_at}`. Payable. Free tier (≤ 50 seats, < 2 open events, ending within 60 days): the contract pays storage, attached NEAR is returned. Otherwise attach ≥ `create_event_cost`, the excess is returned. Capacity ≤ 300 (finalize gas), deposit ≥ 0.1 USDC. Title and times cannot be changed later |
+| `create_event(metadata, deposit, capacity, mode)` | anyone (caller = host) | `metadata` = `{title, starts_at, ends_at}`. Payable. Whitelist mode on: listed hosts only. Free tier (≤ 50 seats, 2 per host in 30 days, ending within 60 days, sponsored hosts when that mode is on): the contract pays storage, attached NEAR is returned. Otherwise attach ≥ `create_event_cost`, the excess is returned. Capacity ≤ 300 (finalize gas), deposit ≥ 0.1 USDC. Title and times cannot be changed later |
 | `ft_transfer_call` → `ft_on_transfer` | guest / verifier | `{"action":"register","event_id":N}`; `guest` only from the Intents verifier (from anyone else it must equal the sender, otherwise the whole amount is returned) |
-| `finalize(event_id, attended)` | host (+1 yocto) | `attended` = guests checked in at the door (kept off-chain on our server until now). Deposit: pool ÷ attendees, remainder to host, empty list → full refund. Ticket: only closes; the host was paid at registration |
+| `finalize(event_id, attended)` | host (+1 yocto), after `ends_at` | `attended` = guests checked in at the door (kept off-chain on our server until now). Deposit: pool ÷ attendees, remainder to host, empty list → full refund. Ticket: only closes; the host was paid at registration |
 | `cancel(event_id)` | host any time while open; anyone after event end + 30 days (+1 yocto) | refund every deposit (Ticket: refunds nothing) |
 | `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to a NEAR account (e.g. a 1Click deposit address) or into NEAR Intents |
 | `payout_to_intents(account_id)` | owner or configured relayer | moves that account's balance into *its own* Intents balance; how EVM-wallet guests get paid |
 | `on_auth` | NEAR Intents wallets via an `auth_call` intent | create (free tier), finalize or cancel an event as an EVM/Solana/passkey host |
-| `upgrade`, `freeze`, `set_whitelist_mode`, `add_to_whitelist`, `remove_from_whitelist` | owner (+1 yocto) | new code until the one-way `freeze`; optional host whitelist for the free tier (off by default) |
+| `upgrade`, `freeze` | owner (+1 yocto) | new code until the one-way `freeze` |
+| `set_whitelist_mode`, `add_to_whitelist`, `remove_from_whitelist` | owner (+1 yocto) | when on, only listed hosts create events (off by default) |
+| `set_sponsored_mode`, `add_sponsored`, `remove_sponsored` | owner (+1 yocto) | when on, only listed hosts get the free tier (off by default) |
 
 Views: `get_event`, `get_recent_events(limit ≤ 100)`, `get_guests`,
 `get_guest_status`, `get_guest_statuses(account_id, event_ids ≤ 100)`, `balance_of`,
