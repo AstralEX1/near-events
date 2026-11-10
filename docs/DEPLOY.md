@@ -6,7 +6,7 @@ registration, host-only event-detail save to Upstash, and off-chain check-in.
 It uses the Upstash Redis database `NearMeTestnet`. After the latest
 `git-main` production deployment failed, a clean production deployment from
 remote `main` commit `5176910` reached READY. The project domain
-`near-event-me.vercel.app` was attached and the production home page and `/e/4`
+`www.nearvent.site` was attached and the production home page and `/e/4`
 both returned HTTP 200. Production still serves snapshot `5176910`; later main
 commit `c0c6b2a` and local uncommitted StageShow/demo edits are not deployed.
 PR #21 merged to `main` on 2026-11-08 as `e8329a6`; its TP5 contract was
@@ -123,7 +123,7 @@ Tested on 2026-11-07 by Codex against the PR head 4d0c93eb7e11dc9b481cc428996e95
 
 The disposable deployment used usdc.tidepool-sandbox.testnet, verifier.tidepool-sandbox.testnet, and a fresh test relayer. Test accounts were tp5-codex-qa-20261107-a.testnet, host-b.tp5-codex-qa-20261107-b.testnet, guest-1.tp5-codex-qa-20261107-b.testnet, guest-2.tp5-codex-qa-20261107-b.testnet, guest-3.tp5-codex-qa-20261107-b.testnet, guest-4.tp5-codex-qa-20261107-b.testnet, stranger.tp5-codex-qa-20261107-b.testnet, and relayer.tp5-codex-qa-20261107-b.testnet. No credentials are recorded here.
 
-PR #21 was merged on 2026-11-08 as `e8329a603600bd08bc57733d0b24e5cffe25b2df`. Its final head `267f6d60b3434bc4df0e4b4ebc7ff70f5dc1abe8` passed GitHub Actions run [42441930530](https://github.com/AstralEX1/NearHackathon/actions/runs/42441930530): web tests and production build, contracts including both sandbox scenarios, and reproducible escrow WASM. The original main worktree also held eight later StageShow/demo changes; they were committed and pushed in `0e25579`. GitHub Actions run [42443470979](https://github.com/AstralEX1/NearHackathon/actions/runs/42443470979) then passed web (tests and production build), contracts/sandbox, and reproducible escrow WASM on that follow-up main commit. No deployment or app-default switch was part of the merge.
+PR #21 was merged on 2026-11-08 as `e8329a603600bd08bc57733d0b24e5cffe25b2df`. Its final head `267f6d60b3434bc4df0e4b4ebc7ff70f5dc1abe8` passed GitHub Actions run [42441930530](https://github.com/AstralEX1/Nearvent/actions/runs/42441930530): web tests and production build, contracts including both sandbox scenarios, and reproducible escrow WASM. The original main worktree also held eight later StageShow/demo changes; they were committed and pushed in `0e25579`. GitHub Actions run [42443470979](https://github.com/AstralEX1/Nearvent/actions/runs/42443470979) then passed web (tests and production build), contracts/sandbox, and reproducible escrow WASM on that follow-up main commit. No deployment or app-default switch was part of the merge.
 
 | Handoff cases | Result | Testnet transaction evidence |
 |---|---|---|

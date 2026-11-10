@@ -1,6 +1,6 @@
-/*! Near Me embed · https://github.com/AstralEX1/near-events · MIT
+/*! Nearvent embed · https://github.com/AstralEX1/near-events · MIT
  *
- * <script src="https://YOUR-NEAR-ME-HOST/embed.js" async></script>
+ * <script src="https://YOUR-NEARVENT-HOST/embed.js" async></script>
  * <near-event event="3"></near-event>                       deposit block (iframe)
  * <near-event event="3" mode="button"></near-event>         just the button
  * <button onclick="NearEvents.open(3)">Join</button>        your own button

@@ -199,7 +199,7 @@ export async function fetchBaliSquadEvent(input: string): Promise<ImportedEvent>
   let redirects = 0;
   for (;;) {
     const response = await fetch(url, {
-      headers: { accept: "text/html", "user-agent": "NearMe/1.0" },
+      headers: { accept: "text/html", "user-agent": "Nearvent/1.0" },
       cache: "no-store",
       redirect: "manual",
       signal: AbortSignal.timeout(12_000),

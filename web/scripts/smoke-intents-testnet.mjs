@@ -1,4 +1,4 @@
-// Full Near Me cycle on testnet with every payment through NEAR Intents
+// Full Nearvent cycle on testnet with every payment through NEAR Intents
 // (Tidepool's 1Click sandbox): create → fund guest Intents → register → check in →
 // finalize → withdraw to another chain via 1Click → withdraw into an Intents account.
 // Keys are read from ~/.near-credentials (never printed).

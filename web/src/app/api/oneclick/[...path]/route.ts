@@ -34,7 +34,7 @@ async function handle(req: Request, { params }: { params: Promise<{ path: string
       body = await req.text();
       if (body.length > 2048 || !quoteAllowed(JSON.parse(body))) throw new Error();
     } catch {
-      return Response.json({ error: "Invalid Near Me quote" }, { status: 400 });
+      return Response.json({ error: "Invalid Nearvent quote" }, { status: 400 });
     }
   }
   if (path === "status") {

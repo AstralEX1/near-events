@@ -97,7 +97,7 @@ test("aiPrompt has the real values, no placeholders, and describes the event's m
     assert.ok(prompt.includes(buttonCode(target).split("\n")[1]));
     assert.ok(prompt.includes("https://near.me/p/7"));
     assert.ok(prompt.includes("NearEvents.open(7)"));
-    assert.doesNotMatch(prompt, /YOUR-NEAR-ME-HOST|EVENT_ID/);
+    assert.doesNotMatch(prompt, /YOUR-NEARVENT-HOST|EVENT_ID/);
   }
   assert.match(aiPrompt(target, "Deposit"), /refundable USDC deposit/);
   assert.match(aiPrompt(target, "Ticket"), /buying a USDC ticket/);

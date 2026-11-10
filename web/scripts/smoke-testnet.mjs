@@ -1,4 +1,4 @@
-// Runs a full Near Me cycle on testnet: create → register → check in → finalize → withdraw.
+// Runs a full Nearvent cycle on testnet: create → register → check in → finalize → withdraw.
 // Keys are read from ~/.near-credentials (never printed). Account names come from env:
 //   EVENTS_CONTRACT, USDC_CONTRACT, HOST_ACCOUNT, GUEST_ACCOUNT
 import { readFileSync } from "node:fs";

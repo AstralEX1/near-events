@@ -14,7 +14,7 @@ export default function SiteLayout({ children }: LayoutProps<"/">) {
       <main className="gc-main">{children}</main>
       <footer className="gc-footer">
         <div className="gc-footer-links">
-          <span>Near Me · no platform fee</span>
+          <span>Nearvent · no platform fee</span>
           <Link href="/guide">How it works</Link>
         </div>
         <AppearancePicker />

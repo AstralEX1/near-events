@@ -14,7 +14,8 @@ import { rememberEventVisual } from "@/lib/event-visual-client";
 import { SignInOptions } from "@/components/SignIn";
 import { LOCAL_TZ, city, dayLabel, fromEpoch, gmtLabel, toEpoch } from "@/lib/time";
 import { detectEventSource, IMPORT_ENDPOINT, locationProblem, type EventDetails, type ImportedEvent } from "@/lib/eventImport";
-import { createStep, integrationUrl, parseMode, startUrl, validAmount } from "@/lib/flow";
+import { createStep, integrationUrl, parseMode, startUrl, validAmount, type JoinMode } from "@/lib/flow";
+import { MAX_FREE_CAPACITY } from "@/lib/freeEventsShared";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 import { cohostsProblem, splitCohosts } from "@/lib/cohostsShared";
 import { StartStep } from "@/components/StartStep";
@@ -61,7 +62,7 @@ function CreateEvent() {
     deposit: params.get("amount") ?? "10",
     capacity: "50",
     cohosts: "",
-    mode: parseMode(params.get("mode")) ?? ("Deposit" as EventMode),
+    mode: parseMode(params.get("mode")) ?? ("Deposit" as JoinMode),
   });
   // Site-only: private events are reachable by link but left out of public listings.
   const [isPublic, setIsPublic] = useState(true);
@@ -174,11 +175,14 @@ function CreateEvent() {
     if (integrate && saved && created) router.replace(integrationUrl(created.id));
   }, [integrate, saved, created, router]);
 
-  const amountOk = validAmount(form.deposit);
+  const free = form.mode === "Free";
+  const maxSeats = free ? MAX_FREE_CAPACITY : 300;
+  const amountOk = free || validAmount(form.deposit);
   const seats = Number(form.capacity);
-  const seatsOk = Number.isInteger(seats) && seats >= 1 && seats <= 300;
-  const doorTeamProblem = cohostsProblem(form.cohosts);
-  const missing = !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? "Set the capacity: 1 to 300" : doorTeamProblem ?? undefined;
+  const seatsOk = Number.isInteger(seats) && seats >= 1 && seats <= maxSeats;
+  const doorTeamProblem = free ? null : cohostsProblem(form.cohosts);
+  // Past events can only be added as Free: a deposit or ticket for something already over makes no sense.
+  const missing = !free && when && when.end < Date.now() ? "Pick Free to add a past event" : !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? `Set the capacity: 1 to ${maxSeats}` : doorTeamProblem ?? undefined;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -203,6 +207,20 @@ function CreateEvent() {
       const coverUrl = rawCoverUrl ? safeImageUrl(rawCoverUrl) : null;
       if (rawCoverUrl && !coverUrl) throw new Error("Use a public HTTP or HTTPS image link for the cover image.");
       if (encoder.encode(description).length > 10_000) throw new Error("Event details are too long. Shorten them and try again.");
+      if (free) {
+        // No chain: save on our server and open the event page.
+        const token = await staffToken();
+        const cover = photo ? await uploadCover(photo, token) : coverUrl;
+        const response = await fetch("/api/free-events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: "create", event: { title, starts_at: when.start, ends_at: when.end, capacity, location, description, cover_url: cover, visual: eventVisual, public: isPublic } }),
+        });
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok || typeof json.id !== "string") throw new Error(json.error ?? "Could not create the event");
+        router.push(`/f/${json.id}`);
+        return;
+      }
       const submittedAt = Date.now();
       // Theme, image, font and random-seed choices are presentation data; save them off-chain below.
       await send([
@@ -217,7 +235,7 @@ function CreateEvent() {
             },
             deposit: toUnits(form.deposit),
             capacity,
-            mode: form.mode,
+            mode: form.mode as EventMode,
           },
         },
       ]);
@@ -349,6 +367,7 @@ function CreateEvent() {
           error={error}
           onSubmit={submit}
           onEdit={() => setEditing(true)}
+          visibility={<PublicChip isPublic={isPublic} onToggle={() => setIsPublic(!isPublic)} />}
           backHref={startUrl({ mode: form.mode, amount: form.deposit, link: importOnArrival ?? undefined }, true)}
         />
         {askSignIn && <SignInDialog onClose={() => setAskSignIn(false)} />}
@@ -372,10 +391,7 @@ function CreateEvent() {
               <button type="button" className="lu-chip lu-hover" onClick={() => setImportOpen(!importOpen)}>
                 {imported ? `✓ Imported from ${imported}` : "Import event"}
               </button>
-              <button type="button" className="lu-chip lu-hover" aria-pressed={!isPublic} title={isPublic ? "Shown in Events. Click to make it link-only." : "Only people with the link see it. Click to list it in Events."} onClick={() => setIsPublic(!isPublic)}>
-                <Icon d={isPublic ? "M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18" : "M6 11h12v9H6zM8 11V8a4 4 0 018 0v3"} size={14} />
-                {isPublic ? "Public" : "Private"}
-              </button>
+              <PublicChip isPublic={isPublic} onToggle={() => setIsPublic(!isPublic)} />
             </div>
           </div>
           {importOpen && (
@@ -452,7 +468,7 @@ function CreateEvent() {
                 <Icon d="M12 8c-2.2 0-4 .9-4 2s1.8 2 4 2 4 .9 4 2-1.8 2-4 2m0-8V6m0 10v2M4 12a8 8 0 1016 0 8 8 0 00-16 0z" className="text-muted" />
                 <span className="flex-1">Guests pay</span>
                 <div className="flex gap-1 rounded-full p-0.5" style={{ background: "color-mix(in srgb, var(--text) 8%, transparent)" }} role="radiogroup" aria-label="Guests pay">
-                  {(["Deposit", "Ticket"] as const).map((m) => (
+                  {(integrate ? ["Deposit", "Ticket"] as const : ["Deposit", "Ticket", "Free"] as const).map((m) => (
                     <button
                       key={m}
                       type="button"
@@ -466,7 +482,7 @@ function CreateEvent() {
                   ))}
                 </div>
               </div>
-              <OptionRow
+              {!free && <OptionRow
                 icon="M4 8a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4zM14 6v12"
                 label={form.mode === "Ticket" ? "Ticket price" : "Deposit"}
                 value={`${form.deposit} USDC`}
@@ -479,10 +495,15 @@ function CreateEvent() {
                 }
               >
                 <input className="input" type="number" min="0.1" step="0.01" required value={form.deposit} onChange={(e) => set("deposit")(e.target.value)} />
-              </OptionRow>
+              </OptionRow>}
               <div className="lu-row">
                 <Icon d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" className="text-muted" />
-                {form.mode === "Ticket" ? (
+                {free ? (
+                  <>
+                    <span className="flex-1">Guests just RSVP</span>
+                    <span className="text-muted text-sm">No crypto needed</span>
+                  </>
+                ) : form.mode === "Ticket" ? (
                   <>
                     <span className="flex-1">You get paid after the event</span>
                     <span className="text-muted text-sm">Refunds if cancelled</span>
@@ -500,11 +521,12 @@ function CreateEvent() {
                 value={form.capacity}
                 attention={!seatsOk}
                 title="Max capacity"
-                help="Up to 300 guests. Registration closes when it's full."
+                help={`Up to ${maxSeats} guests. Registration closes when it's full.`}
               >
-                <input className="input" type="number" min="1" max="300" required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
+                <input className="input" type="number" min="1" max={maxSeats} required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
               </OptionRow>
-              <OptionRow
+              {/* Door check-in is for paid events; free events only keep an RSVP list. */}
+              {!free && <OptionRow
                 icon="M9 11l2 2 4-4M4 4h16v16H4z"
                 label="Door team"
                 value={splitCohosts(form.cohosts).length ? `${splitCohosts(form.cohosts).length} people` : "Just you"}
@@ -513,14 +535,19 @@ function CreateEvent() {
                 help="NEAR accounts that can check guests in, separated by commas. You can change this later in Manage."
               >
                 <input className="input" value={form.cohosts} onChange={(e) => set("cohosts")(e.target.value)} placeholder="alice.near, bob.near" />
-              </OptionRow>
+              </OptionRow>}
             </div>
           </div>
 
+          {when && when.end < Date.now() && (
+            <p className="text-sm text-muted">
+              {free ? "This date is in the past. The event goes to Past, and guests can add themselves as attended." : "Paid events need a future date. Pick Free to add a past event."}
+            </p>
+          )}
           {error && <p className="text-sm text-warn break-words">{error}</p>}
           <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy || !!missing} title={missing}>
             {busy && <span className="gc-spinner" aria-hidden="true" />}
-            {busy ? "Confirm in your wallet…" : integrate ? "Integrate" : "Create Event"}
+            {busy ? (free ? "Creating…" : "Confirm in your wallet…") : integrate ? "Integrate" : "Create Event"}
           </button>
         </div>
       </form>
@@ -530,8 +557,18 @@ function CreateEvent() {
 }
 
 /** Integrate flow, right after Import: what will be created, one button, and a way to edit details first. */
-function ImportSummary({ form, when, visual, imported, busy, error, onSubmit, onEdit, backHref }: {
-  form: { title: string; location: string; cover_url: string; deposit: string; capacity: string; mode: EventMode };
+/** Public events show in Events; private ones only by link. Stored off-chain as `public`. */
+function PublicChip({ isPublic, onToggle }: { isPublic: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" className="lu-chip lu-hover" aria-pressed={!isPublic} title={isPublic ? "Shown in Events. Click to make it link-only." : "Only people with the link see it. Click to list it in Events."} onClick={onToggle}>
+      <Icon d={isPublic ? "M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18" : "M6 11h12v9H6zM8 11V8a4 4 0 018 0v3"} size={14} />
+      {isPublic ? "Public" : "Private"}
+    </button>
+  );
+}
+
+function ImportSummary({ form, when, visual, imported, busy, error, onSubmit, onEdit, backHref, visibility }: {
+  form: { title: string; location: string; cover_url: string; deposit: string; capacity: string; mode: JoinMode };
   when: When;
   visual: EventVisualConfig;
   imported: string;
@@ -540,6 +577,7 @@ function ImportSummary({ form, when, visual, imported, busy, error, onSubmit, on
   onSubmit: (e: React.FormEvent) => void;
   onEdit: () => void;
   backHref: string;
+  visibility: ReactNode;
 }) {
   const start = fromEpoch(when.start, when.tz);
   return (
@@ -547,7 +585,7 @@ function ImportSummary({ form, when, visual, imported, busy, error, onSubmit, on
       <div className="flex gap-4 items-center">
         <EventPoster title={form.title} visual={visual} coverUrl={safeImageUrl(form.cover_url)} className="w-24 h-24 rounded-xl shrink-0 [&>span]:hidden" />
         <div className="min-w-0">
-          <div className="text-sm text-good font-medium">✓ Imported from {imported}</div>
+          <div className="flex flex-wrap items-center gap-2"><span className="text-sm text-good font-medium">✓ Imported from {imported}</span>{visibility}</div>
           <h1 className="text-2xl font-semibold tracking-tight break-words">{form.title}</h1>
         </div>
       </div>
