@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SlShare } from "@/components/SlUi";
 import { useFreeEvent } from "@/lib/freeEventsClient";
+import { getProfiles } from "@/lib/profilesClient";
+import type { Profile } from "@/lib/profilesShared";
 import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
 import { Avatar, DateBadge, EventSkeleton, formatWhen, shortAccount } from "@/components/ui";
 import { EventPageBackground, EventPoster } from "@/components/EventVisual";
@@ -17,6 +19,12 @@ export default function FreeEventPage() {
   const id = useParams<{ id: string }>().id;
   const { accountId, event, busy, error, post } = useFreeEvent(id);
   const [choosing, setChoosing] = useState(false);
+  const [profiles, setProfiles] = useState<Record<string, Profile>>({});
+  const guestKey = (event?.guests ?? []).slice(0, 100).join(",");
+  // Guest names and photos come from their profiles; a failed load just keeps account names.
+  useEffect(() => {
+    if (guestKey) getProfiles(guestKey.split(",")).then(setProfiles, () => {});
+  }, [guestKey]);
 
   const rsvp = (going: boolean) =>
     post({ action: going ? "join" : "leave" }, going ? (event?.approval && accountId !== event.host ? "Request sent" : "You’re going") : event?.requested ? "Request canceled" : "Removed from the guest list");
@@ -90,7 +98,11 @@ export default function FreeEventPage() {
               <span className="truncate font-medium">{shortAccount(event.host)}</span>
             </Link>
           </Section>
-          <GoingList accounts={guests} total={event.guest_count} verb={ended ? "Went" : "Going"} />
+          <GoingList
+            accounts={guests}
+            names={Object.fromEntries(Object.entries(profiles).flatMap(([a, p]) => { const n = `${p.first_name} ${p.last_name}`.trim(); return n ? [[a, n]] : []; }))}
+            avatars={Object.fromEntries(Object.entries(profiles).flatMap(([a, p]) => (p.avatar_url ? [[a, p.avatar_url]] : [])))}
+            total={event.guest_count} verb={ended ? "Went" : "Going"} />
         </aside>
 
         <section className="space-y-6 min-w-0">

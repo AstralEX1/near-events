@@ -16,12 +16,12 @@ export function Section({ label, id, children }: { label: ReactNode; id?: string
   );
 }
 
-export function GoingList({ accounts, names = {}, total, verb = "Going" }: { accounts: string[]; names?: Record<string, string>; total: number; verb?: string }) {
+export function GoingList({ accounts, names = {}, avatars, total, verb = "Going" }: { accounts: string[]; names?: Record<string, string>; avatars?: Record<string, string>; total: number; verb?: string }) {
   if (!total || !accounts.length) return null;
   const shown = accounts.slice(0, 2).map((a) => names[a] || shortAccount(a));
   return (
     <Section label={`${total} ${verb}`}>
-      <SlAvatars accounts={accounts} names={names} role={verb === "Going" ? "Going · view profile" : "Went · view profile"} />
+      <SlAvatars accounts={accounts} names={names} avatars={avatars} role={verb === "Going" ? "Going · view profile" : "Went · view profile"} />
       <p className="mt-2 text-sm text-muted break-words">{goingLine(shown, total)}</p>
     </Section>
   );

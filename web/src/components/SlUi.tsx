@@ -205,7 +205,7 @@ export function SlAmount({ value, onChange, label }: { value: string; onChange: 
 const TINTS = ["sage", "blue", "sand", "rose"];
 
 /** Who's going: three faces, the rest behind +N. Picking one shows the name and a profile link. */
-export function SlAvatars({ accounts, names = {}, role }: { accounts: string[]; names?: Record<string, string>; role: string }) {
+export function SlAvatars({ accounts, names = {}, avatars = {}, role }: { accounts: string[]; names?: Record<string, string>; avatars?: Record<string, string>; role: string }) {
   const nameOf = (a: string) => names[a] || shortAccount(a);
   const lead = accounts.slice(0, 3);
   const rest = accounts.slice(3);
@@ -232,7 +232,7 @@ export function SlAvatars({ accounts, names = {}, role }: { accounts: string[]; 
         <div className="dd-avatars" role="group" aria-label="Guests">
           {lead.map((a, i) => (
             <button key={a} type="button" className={`dd-avatar dd-avatar--${TINTS[i % 4]}`} data-action="member" data-value={a} data-name={nameOf(a)} data-role={role} aria-label={`${nameOf(a)}, ${role}`} aria-pressed={a === selected}>
-              <Avatar account={a} size={36} />
+              <Avatar account={a} size={36} src={avatars[a]} />
             </button>
           ))}
           {rest.length > 0 && (
@@ -249,7 +249,7 @@ export function SlAvatars({ accounts, names = {}, role }: { accounts: string[]; 
               <div className="dd-member-list">
                 {rest.map((a, i) => (
                   <button key={a} type="button" data-action="member" data-value={a} data-name={nameOf(a)} data-role={role} aria-pressed="false">
-                    <span className={`dd-mini-avatar dd-avatar--${TINTS[(i + 3) % 4]}`}>{initials(a)}</span>
+                    <span className={`dd-mini-avatar dd-avatar--${TINTS[(i + 3) % 4]}`}>{avatars[a] ? <img src={avatars[a]} alt="" className="w-full h-full rounded-full object-cover" /> : initials(a)}</span>
                     <span>{nameOf(a)}<small>{role}</small></span>
                     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m8 5 7 7-7 7" /></svg>
                   </button>
