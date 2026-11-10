@@ -99,7 +99,7 @@ export async function listPublicFreeEvents(): Promise<FreeEvent[]> {
   return all.filter((e) => e.public);
 }
 
-/** Adds or removes a guest. Returns an error message, or null on success. */
+/** Adds or removes a guest. Past events stay open so guests can add themselves after the fact. Returns an error message, or null on success. */
 export async function setFreeGuest(id: string, account: string, going: boolean): Promise<string | null> {
   if (usesRedis()) {
     const [raw, count, member] = await pipeline<unknown>([["GET", key(id)], ["SCARD", guestsKey(id)], ["SISMEMBER", guestsKey(id), account]]);
@@ -110,7 +110,6 @@ export async function setFreeGuest(id: string, account: string, going: boolean):
       return null;
     }
     if (Number(member)) return null;
-    if (event.ends_at < Date.now()) return "This event has ended";
     // shortcut: count-then-add can overshoot capacity by a few under simultaneous joins; use a Lua script if that matters.
     if (Number(count) >= event.capacity) return "This event is full";
     await redis(["SADD", guestsKey(id), account]);
@@ -124,7 +123,6 @@ export async function setFreeGuest(id: string, account: string, going: boolean):
       return null;
     }
     if (event.guests.includes(account)) return null;
-    if (event.ends_at < Date.now()) return "This event has ended";
     if (event.guests.length >= event.capacity) return "This event is full";
     event.guests.push(account);
     return null;

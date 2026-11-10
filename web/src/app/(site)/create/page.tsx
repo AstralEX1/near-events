@@ -178,7 +178,8 @@ function CreateEvent() {
   const seats = Number(form.capacity);
   const seatsOk = Number.isInteger(seats) && seats >= 1 && seats <= maxSeats;
   const doorTeamProblem = free ? null : cohostsProblem(form.cohosts);
-  const missing = !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? `Set the capacity: 1 to ${maxSeats}` : doorTeamProblem ?? undefined;
+  // Past events can only be added as Free: a deposit or ticket for something already over makes no sense.
+  const missing = !free && when && when.end < Date.now() ? "Pick Free to add a past event" : !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? `Set the capacity: 1 to ${maxSeats}` : doorTeamProblem ?? undefined;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -543,6 +544,11 @@ function CreateEvent() {
             </div>
           </div>
 
+          {when && when.end < Date.now() && (
+            <p className="text-sm text-muted">
+              {free ? "This date is in the past. The event goes to Past, and guests can add themselves as attended." : "Paid events need a future date. Pick Free to add a past event."}
+            </p>
+          )}
           {error && <p className="text-sm text-warn break-words">{error}</p>}
           <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={busy || !!missing} title={missing}>
             {busy && <span className="gc-spinner" aria-hidden="true" />}

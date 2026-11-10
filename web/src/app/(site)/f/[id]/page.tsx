@@ -71,7 +71,7 @@ export default function FreeEventPage() {
           </div>
           {guests.length > 0 && (
             <div>
-              <div className="label pb-2 mb-3 border-b border-border">{event.guest_count} going</div>
+              <div className="label pb-2 mb-3 border-b border-border">{event.guest_count} {ended ? "went" : "going"}</div>
               <AvatarStack accounts={guests} max={9} />
             </div>
           )}
@@ -98,31 +98,29 @@ export default function FreeEventPage() {
               </div>
             </div>
             <div className="text-sm text-muted">
-              {event.guest_count} going{!ended && ` · ${Math.max(0, event.capacity - event.guest_count)} spots left`}
+              {event.guest_count} {ended ? "went" : "going"}{!ended && ` · ${Math.max(0, event.capacity - event.guest_count)} spots left`}
               {!event.public && " · Private, only people with the link see it"}
             </div>
           </div>
 
           <div id="registration" className="gc-registration space-y-4">
             <div>
-              <p className="gc-eyebrow">{going ? "Your place" : "Registration"}</p>
+              <p className="gc-eyebrow">{going ? "Your place" : ended ? "Past event" : "Registration"}</p>
               {!going && <p className="gc-price mt-1">Free</p>}
             </div>
             {going ? (
               <div className="space-y-3">
-                <p className="text-good font-medium">You’re going ✓</p>
-                {!ended && <button type="button" className="btn btn-ghost w-full" disabled={busy} onClick={() => void rsvp(false)}>{busy ? "Saving…" : "Can’t go anymore"}</button>}
+                <p className="text-good font-medium">{ended ? "You were there ✓" : "You’re going ✓"}</p>
+                <button type="button" className="btn btn-ghost w-full" disabled={busy} onClick={() => void rsvp(false)}>{busy ? "Saving…" : ended ? "I wasn’t there" : "Can’t go anymore"}</button>
               </div>
-            ) : ended ? (
-              <p className="text-muted">This event has ended.</p>
             ) : full ? (
               <p className="text-muted">This event is full.</p>
             ) : accountId ? (
               <button type="button" className="btn btn-accent w-full !py-3" disabled={busy} onClick={() => void rsvp(true)}>
-                {busy ? "Saving…" : "Join event"}
+                {busy ? "Saving…" : ended ? "I was there" : "Join event"}
               </button>
             ) : (
-              <div className="space-y-2"><p className="text-sm text-muted">Sign in to join. No deposit, no ticket.</p><SignInMenu /></div>
+              <div className="space-y-2"><p className="text-sm text-muted">{ended ? "Were you there? Sign in to add yourself." : "Sign in to join. No deposit, no ticket."}</p><SignInMenu /></div>
             )}
             {error && <p className="text-sm text-warn break-words">{error}</p>}
           </div>
