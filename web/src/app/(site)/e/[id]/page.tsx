@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, isTicket, type EventView, type GuestView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
 import { Avatar, AvatarStack, Cover, DateBadge, StatusPill, formatWhen, shortAccount } from "@/components/ui";
@@ -13,7 +13,6 @@ import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
 import { isGoogleMapsLink, type EventDetails } from "@/lib/eventImport";
 import { useEventVisual } from "@/lib/event-visual-client";
 import { VisualBackdrop } from "@/components/EventVisual";
-import { resolveEventVisual } from "@/lib/event-visuals";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 
 /**
@@ -76,7 +75,7 @@ export default function EventPage() {
   // Cover, hosts and who's going on the left; title, time and registration on the right.
   return (
     <>
-    <VisualBackdrop visual={visual} className="gc-event-shell" style={themeFont(visual)}>
+    <VisualBackdrop visual={visual} className="gc-event-shell" themeFont>
       <div className="gc-event-content">
         <aside className="space-y-6">
           <Cover event={event} visual={visual} coverUrl={details?.cover_url} className="aspect-square w-full rounded-2xl shadow-sm" />
@@ -258,11 +257,4 @@ function MoreMenu({ id, isStaff }: { id: number; isStaff: boolean }) {
       )}
       </div>
   );
-}
-
-/** The theme's font replaces body, heading and button fonts on the whole event card. Nearvent themes keep the brand fonts. */
-function themeFont(visual: Parameters<typeof resolveEventVisual>[0]): CSSProperties | undefined {
-  const { theme, fontFamily } = resolveEventVisual(visual);
-  if (theme.group === "near-me") return undefined;
-  return { fontFamily, "--font-body": fontFamily, "--font-display": fontFamily, "--font-geist-sans": fontFamily } as CSSProperties;
 }
