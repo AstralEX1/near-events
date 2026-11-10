@@ -8,17 +8,17 @@ import { redis, usesRedis } from "./eventDetails";
 import type { Profile } from "./profilesShared";
 
 const key = (account: string) => `profile:${account}`;
-const nickKey = (nick: string) => `profile-nick:${nick}`;
+const usernameKey = (username: string) => `profile-username:${username}`;
 
 const FILE = path.join(process.cwd(), ".data", "profiles.json");
-type FileStore = { profiles: Record<string, Profile>; nicks: Record<string, string> };
+type FileStore = { profiles: Record<string, Profile>; usernames: Record<string, string> };
 let lock: Promise<unknown> = Promise.resolve();
 
 async function loadFile(): Promise<FileStore> {
   try {
     return JSON.parse(await readFile(FILE, "utf8"));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { profiles: {}, nicks: {} };
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { profiles: {}, usernames: {} };
     throw error;
   }
 }
@@ -48,26 +48,26 @@ export async function getProfiles(accounts: string[]): Promise<Record<string, Pr
   return Object.fromEntries(accounts.flatMap((a) => (profiles[a] ? [[a, profiles[a]]] : [])));
 }
 
-/** Saves a cleaned profile. Returns an error message (nickname taken), or null on success. */
+/** Saves a cleaned profile. Returns an error message (username taken), or null on success. */
 export async function saveProfile(account: string, profile: Profile): Promise<string | null> {
-  const TAKEN = "This nickname is taken";
+  const TAKEN = "This username is taken";
   if (usesRedis()) {
     const old = (await getProfiles([account]))[account];
-    if (profile.nickname && profile.nickname !== old?.nickname) {
-      // SET NX claims the nickname atomically, so two accounts can't both get it.
-      const claimed = await redis<string | null>(["SET", nickKey(profile.nickname), account, "NX"]);
-      if (!claimed && (await redis<string | null>(["GET", nickKey(profile.nickname)])) !== account) return TAKEN;
+    if (profile.username && profile.username !== old?.username) {
+      // SET NX claims the username atomically, so two accounts can't both get it.
+      const claimed = await redis<string | null>(["SET", usernameKey(profile.username), account, "NX"]);
+      if (!claimed && (await redis<string | null>(["GET", usernameKey(profile.username)])) !== account) return TAKEN;
     }
     await redis(["SET", key(account), JSON.stringify(profile)]);
-    if (old?.nickname && old.nickname !== profile.nickname) await redis(["DEL", nickKey(old.nickname)]);
+    if (old?.username && old.username !== profile.username) await redis(["DEL", usernameKey(old.username)]);
     return null;
   }
   return updateFile((store) => {
-    const owner = profile.nickname && store.nicks[profile.nickname];
+    const owner = profile.username && store.usernames[profile.username];
     if (owner && owner !== account) return TAKEN;
     const old = store.profiles[account];
-    if (old?.nickname && old.nickname !== profile.nickname) delete store.nicks[old.nickname];
-    if (profile.nickname) store.nicks[profile.nickname] = account;
+    if (old?.username && old.username !== profile.username) delete store.usernames[old.username];
+    if (profile.username) store.usernames[profile.username] = account;
     store.profiles[account] = profile;
     return null;
   });

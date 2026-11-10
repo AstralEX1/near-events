@@ -1,10 +1,10 @@
-// User profiles (avatar, nickname, name, social links). Off-chain only; shared by the browser and the API.
+// User profiles (avatar, username, name, social links). Off-chain only; shared by the browser and the API.
 
 export const LINK_KINDS = ["x", "telegram", "instagram", "website"] as const;
 export type LinkKind = (typeof LINK_KINDS)[number];
 
 export interface Profile {
-  nickname: string;
+  username: string;
   first_name: string;
   last_name: string;
   /** Path of an uploaded photo, `/api/covers/<sha256>`, or null. */
@@ -15,7 +15,7 @@ export interface Profile {
   links: Partial<Record<LinkKind, string>>;
 }
 
-export const EMPTY_PROFILE: Profile = { nickname: "", first_name: "", last_name: "", avatar_url: null, avatar_seed: null, links: {} };
+export const EMPTY_PROFILE: Profile = { username: "", first_name: "", last_name: "", avatar_url: null, avatar_seed: null, links: {} };
 
 const HOSTS: Record<Exclude<LinkKind, "website">, { hosts: string[]; handle: RegExp; url: string }> = {
   x: { hosts: ["x.com", "twitter.com"], handle: /^[A-Za-z0-9_]{1,15}$/, url: "https://x.com/" },
@@ -54,7 +54,7 @@ export function cleanWebsite(value: string): string | null {
 /** Where a saved link opens. */
 export const linkUrl = (kind: LinkKind, value: string) => (kind === "website" ? value : HOSTS[kind].url + value);
 
-export const isNickname = (v: string) => /^[a-z0-9_]{3,20}$/.test(v);
+export const isUsername = (v: string) => /^[a-z0-9_]{3,20}$/.test(v);
 const AVATAR = /^\/api\/covers\/[0-9a-f]{64}$/;
 const bytes = (s: string) => new TextEncoder().encode(s).length;
 
@@ -63,8 +63,8 @@ export function cleanProfile(value: unknown): { profile: Profile } | { error: st
   if (!value || typeof value !== "object") return { error: "Bad profile" };
   const p = value as Record<string, unknown>;
   const text = (v: unknown) => (typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "");
-  const nickname = text(p.nickname).toLowerCase().replace(/^@/, "");
-  if (nickname && !isNickname(nickname)) return { error: "Nickname: 3–20 letters, numbers or _" };
+  const username = text(p.username).toLowerCase().replace(/^@/, "");
+  if (username && !isUsername(username)) return { error: "Username: 3–20 letters, numbers or _" };
   const first_name = text(p.first_name);
   const last_name = text(p.last_name);
   if (bytes(first_name) > 60 || bytes(last_name) > 60) return { error: "Name is too long" };
@@ -86,11 +86,11 @@ export function cleanProfile(value: unknown): { profile: Profile } | { error: st
     if (!clean) return { error: `Check the ${kind === "x" ? "X" : kind[0].toUpperCase() + kind.slice(1)} link` };
     links[kind] = clean;
   }
-  return { profile: { nickname, first_name, last_name, avatar_url, avatar_seed: avatar_seed as number | null, links } };
+  return { profile: { username, first_name, last_name, avatar_url, avatar_seed: avatar_seed as number | null, links } };
 }
 
-/** "First Last", else "@nickname", else null. */
+/** "First Last", else "@username", else null. */
 export function displayName(p: Profile | null | undefined): string | null {
   if (!p) return null;
-  return `${p.first_name} ${p.last_name}`.trim() || (p.nickname ? `@${p.nickname}` : null);
+  return `${p.first_name} ${p.last_name}`.trim() || (p.username ? `@${p.username}` : null);
 }

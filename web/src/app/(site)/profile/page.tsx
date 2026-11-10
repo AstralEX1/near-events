@@ -38,7 +38,8 @@ function Editor({ accountId }: { accountId: string }) {
   useEffect(() => {
     attendedCount(accountId).then(setAttended).catch(() => setAttended(null));
     getProfiles([accountId])
-      .then((p) => { setSaved(p[accountId] ?? null); setForm(p[accountId] ?? EMPTY_PROFILE); })
+      // A new profile gets a random generated avatar, like a new event gets a random theme; it is kept on first save.
+      .then((p) => { setSaved(p[accountId] ?? null); setForm(p[accountId] ?? { ...EMPTY_PROFILE, avatar_seed: crypto.getRandomValues(new Uint32Array(1))[0] }); })
       .catch(() => { setForm(EMPTY_PROFILE); setStatus("Could not load your profile."); });
   }, [accountId]);
 
@@ -90,12 +91,12 @@ function Editor({ accountId }: { accountId: string }) {
           <button type="button" className="btn btn-ghost text-sm" disabled={busy !== null} onClick={() => file.current?.click()}>
             {busy === "photo" ? "Uploading…" : form.avatar_url ? "Change photo" : "Upload photo"}
           </button>
-          <button type="button" className="btn btn-ghost text-sm" disabled={busy !== null} onClick={() => edit({ avatar_url: null, avatar_seed: crypto.getRandomValues(new Uint32Array(1))[0] })}>Shuffle</button>
+          {form.avatar_url && <button type="button" className="btn btn-ghost text-sm" disabled={busy !== null} onClick={() => edit({ avatar_url: null })}>Remove photo</button>}
           <input ref={file} type="file" accept="image/*" hidden onChange={(e) => void onPhoto(e.target.files?.[0])} />
         </div>
         <label className="block space-y-1.5">
-          <span className="label">Nickname</span>
-          <input className={field} value={form.nickname} onChange={(e) => edit({ nickname: e.target.value })} placeholder="nickname" autoComplete="username" maxLength={21} />
+          <span className="label">Username</span>
+          <input className={field} value={form.username} onChange={(e) => edit({ username: e.target.value })} placeholder="username" autoComplete="username" maxLength={21} />
         </label>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block space-y-1.5">
