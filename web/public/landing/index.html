@@ -198,16 +198,20 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .quote blockquote { margin: 0; text-align: left; font-size: clamp(28px, 3.6vw, 44px); font-weight: 650; letter-spacing: -0.035em; line-height: 1.08; max-width: 15em; }
 
 /* ---------- LIVE (BaliSquad) ---------- */
-.live { border-top: 1px solid var(--line); }
-.live .wrap { display: flex; flex-direction: column; gap: clamp(28px, 4vw, 48px); }
-.live-photos { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; aspect-ratio: 2 / 1; }
-.live-photos img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 20px; background: var(--soft); }
-.live-photos img:first-child { grid-row: span 2; }
-@media (max-width: 860px) {
-  .live-photos { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; aspect-ratio: auto; }
-  .live-photos img { height: auto; aspect-ratio: 1; border-radius: 16px; }
-  .live-photos img:first-child { grid-row: auto; grid-column: 1 / -1; aspect-ratio: 4 / 3; }
-}
+.live { border-bottom: 1px solid var(--line); }
+.live-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.strip-nav { display: flex; gap: 8px; flex-shrink: 0; }
+.strip-btn { appearance: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: 600 18px var(--font); cursor: pointer; transition: background .15s ease, opacity .15s ease; }
+.strip-btn:hover:not(:disabled) { background: var(--soft); }
+.strip-btn:disabled { opacity: .35; cursor: default; }
+.strip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (hover: none) { .strip-nav { display: none; } }
+/* photos run from the text column to the screen edge; swipe on phones, arrows on desktop */
+.strip { --pad: max(20px, calc((100% - 1160px) / 2 + 20px)); display: flex; gap: 12px; margin-top: clamp(28px, 4vw, 48px); padding-inline: var(--pad); scroll-padding-inline: var(--pad); overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; }
+.strip::-webkit-scrollbar { display: none; }
+.strip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.strip img { flex: none; height: clamp(260px, 34vw, 440px); width: auto; border-radius: 20px; scroll-snap-align: start; background: var(--soft); }
+@media (max-width: 860px) { .strip img { border-radius: 16px; } }
 
 
 /* ---------- INTEGRATE ---------- */
@@ -277,6 +281,42 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 </div>
 
 <main>
+  <section class="live" id="live">
+    <div class="wrap live-head">
+      <div class="txt reveal">
+        <span class="eyebrow">Already live</span>
+        <h2 class="h2">Running with BaliSquad.</h2>
+        <p class="lead">AI Coworking Meetup in Uluwatu, 9 November. 7 guests put down a deposit. All 7 checked in.</p>
+        <a class="more" href="https://balisquad.com/event/bukitsocial-z3CmSN" target="_blank" rel="noreferrer">See the event on BaliSquad →</a>
+      </div>
+      <div class="strip-nav">
+        <button class="strip-btn" type="button" aria-label="Previous photos">←</button>
+        <button class="strip-btn" type="button" aria-label="Next photos">→</button>
+      </div>
+    </div>
+    <div class="strip reveal" tabindex="0" role="region" aria-label="Photos from the BaliSquad meetup">
+      <img src="/landing/photos/balisquad-room.webp" alt="Guests at the BaliSquad AI Coworking Meetup in Uluwatu" width="1174" height="880" decoding="async" />
+      <img src="/landing/photos/balisquad-stage.webp" alt="The host shows the live Nearvent guest list on the big screen" width="1365" height="768" decoding="async" />
+      <img src="/landing/photos/balisquad-rsvp.webp" alt="Registering on a phone with a 0.5 USDC deposit" width="768" height="735" loading="lazy" decoding="async" />
+      <img src="/landing/photos/balisquad-phone.webp" alt="Joining the event from a phone" width="1365" height="768" loading="lazy" decoding="async" />
+      <img src="/landing/photos/balisquad-done.webp" alt="The wallet confirms the deposit: All Done" width="768" height="870" loading="lazy" decoding="async" />
+      <img src="/landing/photos/balisquad-pass.webp" alt="The QR pass: You're on the list" width="768" height="855" loading="lazy" decoding="async" />
+      <img src="/landing/photos/balisquad-door.webp" alt="Scanning a guest's QR pass at the door" width="1365" height="768" loading="lazy" decoding="async" />
+      <img src="/landing/photos/balisquad-scan.webp" alt="Guests check in by showing a QR pass to the host's laptop camera" width="1365" height="768" loading="lazy" decoding="async" />
+      <img src="/landing/photos/balisquad-guest.webp" alt="A guest shows a QR pass" width="1365" height="768" loading="lazy" decoding="async" />
+      <img src="/landing/photos/balisquad-list.webp" alt="The host's guest list on a laptop" width="1365" height="768" loading="lazy" decoding="async" />
+    </div>
+    <script>
+      (() => {
+        const strip = document.querySelector('.strip'), [prev, next] = document.querySelectorAll('.strip-btn');
+        const go = dir => strip.scrollBy({ left: dir * strip.clientWidth * 0.8, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        const sync = () => { prev.disabled = strip.scrollLeft < 4; next.disabled = strip.scrollLeft + strip.clientWidth > strip.scrollWidth - 4; };
+        prev.onclick = () => go(-1); next.onclick = () => go(1);
+        strip.addEventListener('scroll', sync, { passive: true }); addEventListener('resize', sync); addEventListener('load', sync); sync();
+      })();
+    </script>
+  </section>
+
   <section>
     <div class="wrap">
       <div class="head reveal">
@@ -400,22 +440,6 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       </div>
       <div class="quote reveal">
         <blockquote>“It costs nothing to click Sign in. Which ruins everything.”</blockquote>
-      </div>
-    </div>
-  </section>
-
-  <section class="live" id="live">
-    <div class="wrap">
-      <div class="txt reveal">
-        <span class="eyebrow">Already live</span>
-        <h2 class="h2">Running with BaliSquad.</h2>
-        <p class="lead">AI Coworking Meetup in Uluwatu, 9 November. 7 guests put down a deposit. All 7 checked in.</p>
-        <a class="more" href="https://balisquad.com/event/bukitsocial-z3CmSN" target="_blank" rel="noreferrer">See the event on BaliSquad →</a>
-      </div>
-      <div class="live-photos reveal">
-        <img src="/landing/photos/balisquad-room.webp" alt="Guests at the BaliSquad AI Coworking Meetup; a laptop in front shows a Nearvent QR pass" width="1200" height="900" loading="lazy" decoding="async" />
-        <img src="/landing/photos/balisquad-scan.webp" alt="Host checks in guests by scanning a QR pass with the laptop camera" width="910" height="512" loading="lazy" decoding="async" style="object-position: 40% center" />
-        <img src="/landing/photos/balisquad-guest.webp" alt="Guest shows a QR pass at the door" width="910" height="512" loading="lazy" decoding="async" style="object-position: 55% center" />
       </div>
     </div>
   </section>
