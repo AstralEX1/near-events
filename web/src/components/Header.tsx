@@ -19,7 +19,7 @@ export function HeaderPreview({ path = "/e/4", accountId = null }: { path?: stri
 function HeaderContent({ accountId, signOut, path, preview = false }: {
   accountId: string | null; signOut?: () => void; path: string; preview?: boolean;
 }) {
-  const links = [["/events", "Events"], ["/create", "Create event"]];
+  const links = [["/events", "Events"], ["/me", "My events"], ["/create", "Create event"]];
   return (
     <header className="gc-header">
       <div className="gc-header-inner">
@@ -32,7 +32,6 @@ function HeaderContent({ accountId, signOut, path, preview = false }: {
           <nav aria-label="Mobile navigation" className="gc-account-panel">
             {links.map(([href, label]) => <Link key={href} href={href} aria-current={path.startsWith(href) ? "page" : undefined}>{label}</Link>)}
             {accountId && <Link href="/profile">My profile</Link>}
-            <Link href="/me">My events</Link>
             <Link href="/guide">How it works</Link>
           </nav>
         </details>
@@ -41,7 +40,6 @@ function HeaderContent({ accountId, signOut, path, preview = false }: {
             <summary aria-label="Your account"><Avatar account={accountId} size={26} /><span className="hidden md:inline">My profile</span></summary>
             <div className="gc-account-panel">
               <Link href="/profile">My profile</Link>
-              <Link href="/me">My events & funds</Link>
               {!preview && <button type="button" onClick={signOut}>Sign out</button>}
             </div>
           </details>
