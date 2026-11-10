@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
+import { PageSkeleton, SlShare } from "@/components/SlUi";
 import { useFreeEvent } from "@/lib/freeEventsClient";
 import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
 import { Avatar, DateBadge, formatWhen, shortAccount } from "@/components/ui";
@@ -15,13 +16,13 @@ import { SignInOptions } from "@/components/SignIn";
 export default function FreeEventPage() {
   const id = useParams<{ id: string }>().id;
   const { accountId, event, busy, error, post } = useFreeEvent(id);
-  const [copied, setCopied] = useState(false);
   const [choosing, setChoosing] = useState(false);
 
-  const rsvp = (going: boolean) => post({ action: going ? "join" : "leave" });
+  const rsvp = (going: boolean) =>
+    post({ action: going ? "join" : "leave" }, going ? (event?.approval && accountId !== event.host ? "Request sent" : "You’re going") : event?.requested ? "Request canceled" : "Removed from the guest list");
 
   if (event === null) return <p>Event not found.</p>;
-  if (event === undefined) return error ? <p className="text-warn">{error}</p> : <p className="text-muted">Loading…</p>;
+  if (event === undefined) return error ? <p className="text-warn">{error}</p> : <PageSkeleton />;
 
   const guests = event.guests ?? [];
   const going = !!accountId && guests.includes(accountId);
@@ -92,25 +93,12 @@ export default function FreeEventPage() {
         </aside>
 
         <section className="space-y-6 min-w-0">
-          {isHost && (
-            <div className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm">
-              <span className="min-w-0 flex-1 text-muted">
-                You have manage access for this event.{event.approval && event.requests?.length ? ` ${event.requests.length} waiting for approval.` : ""}
-              </span>
-              <Link href={`/f/${id}/manage`} className="btn btn-accent shrink-0">Manage</Link>
-            </div>
-          )}
           <div className="flex items-start gap-2">
             <h1 className="gc-event-title mt-1 min-w-0">{event.title}</h1>
             <div className="ml-auto shrink-0 flex items-center gap-1.5">
+              {isHost && <Link href={`/f/${id}/manage`} className="btn btn-accent !py-2 text-sm">Manage</Link>}
               {!event.public && <span className="lu-chip">Private</span>}
-              <button
-                type="button"
-                className="lu-chip lu-hover"
-                onClick={() => navigator.clipboard.writeText(window.location.href).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}
-              >
-                {copied ? "Copied ✓" : "Copy link"}
-              </button>
+              <SlShare url={`${typeof window === "undefined" ? "" : window.location.origin}/f/${id}`} />
             </div>
           </div>
 

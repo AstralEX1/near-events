@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { savedStaffToken, useWallet } from "./wallet";
 import type { FreeEvent } from "./freeEventsShared";
+import { toast } from "@/components/SlUi";
 
 /** Loads one free event and saves changes to it. Shared by /f/<id> and its Manage page. */
 export function useFreeEvent(id: string) {
@@ -23,7 +24,7 @@ export function useFreeEvent(id: string) {
   useEffect(() => void load(), [load]);
 
   // Signed-in saves reuse the token from sign-in: no wallet window here.
-  const post = async (body: object) => {
+  const post = async (body: object, done?: string) => {
     setBusy(true);
     setError(null);
     try {
@@ -36,6 +37,7 @@ export function useFreeEvent(id: string) {
       const json = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(json.error ?? "Could not save. Try again.");
       await load();
+      if (done) toast(done);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

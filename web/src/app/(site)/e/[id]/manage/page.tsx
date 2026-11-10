@@ -1,5 +1,6 @@
 "use client";
 
+import { SlCopy, confirmAction } from "@/components/SlUi";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
@@ -144,7 +145,7 @@ function ManageEvent() {
   }
 
   const run = async (methodName: string, args: object, confirmText?: string) => {
-    if (confirmText && !confirm(confirmText)) return;
+    if (confirmText && !(await confirmAction(confirmText, methodName === "cancel" ? "Cancel event" : "Close event"))) return;
     setBusy(true);
     setError(null);
     try {
@@ -684,9 +685,7 @@ function CopyRow({
             Open
           </Link>
         ) : (
-          <button type="button" className="btn btn-ghost !py-1.5 text-sm shrink-0" onClick={onCopy} disabled={!value}>
-            {copied ? "Copied" : "Copy"}
-          </button>
+          value && <SlCopy text={value} />
         )}
       </div>
     </div>

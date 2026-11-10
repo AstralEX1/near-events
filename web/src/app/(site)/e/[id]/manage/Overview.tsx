@@ -1,5 +1,6 @@
 "use client";
 
+import { SlCopy } from "@/components/SlUi";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatUsdc, isTicket, priceLabel, type EventView, type GuestView } from "@/lib/near";
@@ -584,23 +585,8 @@ function LinkRow({ title, hint, value }: { title: string; hint: string; value: s
   );
 }
 
-function CopyButton({ value, label, className }: { value: string; label: string; className: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      className={className}
-      disabled={!value}
-      onClick={() =>
-        navigator.clipboard.writeText(value).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1400);
-        })
-      }
-    >
-      {copied ? "Copied" : label}
-    </button>
-  );
+function CopyButton({ value }: { value: string; label?: string; className?: string }) {
+  return value ? <SlCopy text={value} /> : null;
 }
 
 function ShareDialog({ title, pageUrl, payUrl, onClose }: { title: string; pageUrl: string; payUrl: string; onClose: () => void }) {

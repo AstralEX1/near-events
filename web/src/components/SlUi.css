@@ -1,0 +1,55 @@
+/* Nearvent host tokens and sizes for the SL UI components in SlUi.tsx. Library CSS stays untouched. */
+
+/* Toast: the library's dark card, fixed at the bottom, app font. */
+.fb-demo.nv-toast { position: fixed; z-index: 70; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); width: min(360px, calc(100vw - 32px)); transform: translateX(-50%); font-family: inherit; pointer-events: none; }
+.nv-toast .fb-scene { height: auto; }
+.nv-toast .fb-card { pointer-events: auto; box-shadow: 0 12px 32px #1c152033; }
+.nv-toast [data-detail]:empty { display: none; }
+
+/* Skeleton: light lines on the page surface. */
+.fb-demo.nv-skeleton { --fb-ink: var(--surface); width: 100%; max-width: 560px; margin: 2rem auto; font-family: inherit; }
+.nv-skeleton .fb-scene { height: auto; }
+.nv-skeleton .fb-card { border-color: var(--border); box-shadow: none; }
+.nv-skeleton .fb-skel-line, .nv-skeleton .fb-skel-avatar { background: color-mix(in srgb, var(--text) 9%, transparent); }
+
+/* Copy: compact dark pill like the app's primary buttons. */
+.nv-copy { display: inline-flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
+.nv-copy .sl-copy { --copy-unit: 0.62px; --copy-ink: var(--text); --copy-hover: color-mix(in srgb, var(--text) 88%, white); --copy-focus: var(--accent); font-family: inherit; width: calc(130 * var(--copy-unit)); }
+.nv-copy__feedback:empty { display: none; }
+.nv-copy__feedback { max-width: 16rem; margin-top: 4px; font-size: 11px; color: var(--muted); text-align: right; }
+
+/* Share: same size as the event page chips. */
+.nv-share { display: inline-flex; }
+.nv-share .sl-share-control { --share-unit: 0.6px; --share-width: 140; --share-ink: var(--text); --share-hover: color-mix(in srgb, var(--text) 88%, white); }
+.nv-share .sl-share { font-family: inherit; }
+/* Opens below and right-aligned: the button sits in the top-right corner of the event card. */
+.nv-share .sl-share__popover { font-family: inherit; z-index: 30; bottom: auto; top: calc(100% + 8px); left: auto; right: 0; transform: translate(0, -7px) scale(.97); transform-origin: top right; }
+.nv-share .sl-share-control[data-share-open="true"] .sl-share__popover { transform: translate(0, 0) scale(1); }
+.nv-share .sl-share__url, .nv-share .sl-share__copy, .nv-share .sl-share__send { font-family: inherit; }
+
+/* Join request: one row, name on the left, Approve / Decline on the right. */
+.sl-component.nv-review { --action-ink: transparent; --action-surface: var(--surface); --action-hover: color-mix(in srgb, var(--text) 6%, var(--surface)); --action-text: var(--text); --action-muted: var(--muted); --action-accent: var(--accent); --action-on-accent: #fff; --action-danger: var(--danger); --action-border: var(--border); --action-focus: var(--accent);
+  display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; min-height: 3.5rem; width: 100%; background: none; border: 0; box-shadow: none; border-radius: 0; color: var(--text); font-family: inherit; }
+.nv-review .ab-eyebrow, .nv-review .ab-description, .nv-review .ab-decision-mark, .nv-review .ab-note { display: none; }
+.nv-review .ab-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); min-height: 0; margin: 0; }
+.nv-review__who { display: flex; align-items: center; gap: 0.75rem; min-width: 0; flex: 1; font-size: 0.95rem !important; }
+.nv-review__who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nv-review .ab-decisions { display: flex; margin: 0; flex-shrink: 0; }
+.nv-review .ab-decisions button { min-height: 36px; padding: 6px 12px; font-size: 13px; }
+.nv-review .ab-decisions .ab-danger { order: -1; }
+
+/* Amount: the app's input look. */
+.sl-field.nv-amount { --field-ink: color-mix(in srgb, var(--text) 6%, var(--surface)); --field-hover: color-mix(in srgb, var(--text) 9%, var(--surface)); --field-active: color-mix(in srgb, var(--text) 12%, var(--surface)); --field-text: var(--text); --field-muted: var(--muted); --field-focus: var(--accent); width: 100%; font-family: inherit; }
+.nv-amount .sl-field__input, .nv-amount .sl-field__label, .nv-amount .sl-field__helper { font-family: inherit; }
+
+/* Who's going: avatars on the page, no card. */
+.dd-demo.nv-avatars { --dd-ink: var(--surface); --dd-text: var(--text); --dd-muted: var(--muted); --dd-hover: color-mix(in srgb, var(--text) 6%, var(--surface)); --dd-edge: var(--border); --dd-focus: var(--accent); --dd-accent: var(--accent); font-family: inherit; }
+.nv-avatars .dd-card { padding: 0; background: none; border: 0; box-shadow: none; }
+.nv-avatars .dd-avatars { margin: 0 0 0.5rem; }
+.nv-avatars .dd-avatar { overflow: hidden; padding: 0; }
+.nv-avatars .dd-avatar > * { width: 100%; height: 100%; }
+.nv-avatars .dd-avatar--more { color: var(--text); background: color-mix(in srgb, var(--text) 8%, var(--surface)); }
+.nv-avatars .dd-person { font-size: 0.875rem; }
+.nv-avatars .nv-avatars__profile { color: var(--muted); font-size: 0.8125rem; }
+.nv-avatars .nv-avatars__profile:hover { color: var(--accent); }
+.nv-avatars .dd-member-list { max-height: 15rem; overflow-y: auto; }

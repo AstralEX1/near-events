@@ -1,5 +1,6 @@
 "use client";
 
+import { SlAmount, SlCopy } from "@/components/SlUi";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -509,7 +510,7 @@ function CreateEvent() {
                     : "Each guest puts this down. People who come get it back plus a share of the no-shows."
                 }
               >
-                <input className="input" type="number" min="0.1" step="0.01" required value={form.deposit} onChange={(e) => set("deposit")(e.target.value)} />
+                <SlAmount value={form.deposit} onChange={set("deposit")} label={form.mode === "Ticket" ? "Ticket price" : "Deposit"} />
               </OptionRow>}
               <OptionRow
                 icon="M16 19v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9.5 10a3 3 0 100-6 3 3 0 000 6zM21 19v-1a4 4 0 00-3-3.9M16 4.1a3 3 0 010 5.8"
@@ -777,7 +778,7 @@ function TzBox({ tz, at, onChange }: { tz: string; at: number; onChange: (tz: st
       </button>
       {open && (
         <Popover onClose={() => setOpen(false)} className="right-0 w-72 p-1">
-          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search for a time zone" className="w-full px-3 py-2 mb-1 bg-transparent outline-none border-b border-border text-sm" />
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search for a time zone" className="w-full px-3 py-2 mb-1 bg-transparent outline-none border-b border-border focus:border-accent text-sm" />
           <div className="max-h-64 overflow-y-auto">
             {list.map((z) => (
               <button
@@ -936,25 +937,12 @@ async function saveVisual(eventId: number, visual: EventVisualConfig, token: str
 }
 
 function Way({ title, value }: { title: string; value: string }) {
-  const [copied, setCopied] = useState(false);
   return (
     <div className="card p-4 space-y-2">
       <div className="font-medium">{title}</div>
       <div className="flex gap-2">
         <code className="flex-1 min-w-0 truncate text-xs bg-bg rounded-lg px-3 py-2 border border-border">{value}</code>
-        <button
-          type="button"
-          className="btn btn-ghost !py-1.5 text-sm"
-          disabled={!value}
-          onClick={() =>
-            navigator.clipboard.writeText(value).then(() => {
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            })
-          }
-        >
-          {copied ? "Copied" : "Copy"}
-        </button>
+        {value && <SlCopy text={value} />}
       </div>
     </div>
   );

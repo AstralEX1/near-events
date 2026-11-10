@@ -1,5 +1,6 @@
 "use client";
 
+import { PageSkeleton, SlShare } from "@/components/SlUi";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -69,7 +70,7 @@ export default function EventPage() {
   }, [load]);
 
   if (loadError) return <div className="card p-6 space-y-3"><h1 className="text-xl font-semibold">Couldn’t load this event</h1><p className="text-muted">Please try again in a moment.</p><button className="btn btn-accent" onClick={() => void load()}>Try again</button></div>;
-  if (event === undefined) return <p className="text-muted">Loading…</p>;
+  if (event === undefined) return <PageSkeleton />;
   if (event === null) return <p>Event not found.</p>;
 
   const me = guests.find((g) => g.account_id === accountId);
@@ -103,18 +104,16 @@ export default function EventPage() {
         </aside>
 
         <section className="space-y-6 min-w-0">
-          {isStaff && (
-            <div className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm">
-              <span className="min-w-0 flex-1 text-muted">You have manage access for this event.</span>
-              <Link href={`/e/${id}/manage`} className="btn btn-accent shrink-0">Manage</Link>
-            </div>
-          )}
           <div className="flex items-start gap-2">
             <div className="min-w-0">
               {!open && <StatusPill status={event.status} />}
               <h1 className="gc-event-title mt-1">{event.metadata.title}</h1>
             </div>
-            <MoreMenu id={id} isStaff={isStaff} />
+            <div className="ml-auto shrink-0 flex items-center gap-1.5">
+              {isStaff && <Link href={`/e/${id}/manage`} className="btn btn-accent !py-2 text-sm">Manage</Link>}
+              <SlShare url={`${typeof window === "undefined" ? "" : window.location.origin}/e/${id}`} />
+              <MoreMenu id={id} isStaff={isStaff} />
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -179,10 +178,9 @@ export default function EventPage() {
 /** Everything secondary: share link, contract, host tools. */
 function MoreMenu({ id, isStaff }: { id: number; isStaff: boolean }) {
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const item = "block w-full text-left px-3 py-2 rounded-lg hover:bg-border/50";
   return (
-    <div className="relative ml-auto shrink-0">
+    <div className="relative shrink-0">
       <button className="w-8 h-8 rounded-lg hover:bg-border/50 text-muted" aria-label="More" onClick={() => setOpen(!open)}>
         •••
       </button>
@@ -190,17 +188,6 @@ function MoreMenu({ id, isStaff }: { id: number; isStaff: boolean }) {
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute right-0 mt-1 w-56 card p-1 shadow-xl z-20 text-sm">
-            <button
-              className={item}
-              onClick={() =>
-                navigator.clipboard.writeText(`${window.location.origin}/e/${id}`).then(() => {
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1500);
-                })
-              }
-            >
-              {copied ? "Link copied ✓" : "Copy link"}
-            </button>
             <a className={item} href={`${EXPLORER_URL}/address/${EVENTS_CONTRACT}`} target="_blank" rel="noopener">
               View contract ↗
             </a>

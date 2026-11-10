@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useFreeEvent } from "@/lib/freeEventsClient";
 import { Avatar, formatWhen, shortAccount } from "@/components/ui";
+import { SlCopy, SlReviewDecision } from "@/components/SlUi";
 
 type Tab = "overview" | "guests" | "registration";
 const TABS: { id: Tab; label: string }[] = [
@@ -19,7 +20,6 @@ export default function ManageFreeEventPage() {
   const { accountId, event, busy, error, post } = useFreeEvent(id);
   const [tab, setTab] = useState<Tab>("overview");
   const [query, setQuery] = useState("");
-  const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
 
@@ -40,7 +40,6 @@ export default function ManageFreeEventPage() {
   const q = query.trim().toLowerCase();
   const shown = q ? guests.filter((a) => a.toLowerCase().includes(q)) : guests;
 
-  const copy = () => navigator.clipboard.writeText(pageUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1400); });
   const exportCsv = () => {
     const csv = ["account", ...guests].map((c) => `"${c.replace(/"/g, '""')}"`).join("\n");
     const a = document.createElement("a");
@@ -56,11 +55,12 @@ export default function ManageFreeEventPage() {
       {requests.length ? (
         <ul className="card divide-y divide-border">
           {requests.map((guest) => (
-            <li key={guest} className="flex items-center gap-3 px-3 sm:px-4 min-h-14 py-2">
-              <Avatar account={guest} size={36} />
-              <span className="min-w-0 flex-1 truncate font-medium" data-tooltip={guest}>{shortAccount(guest)}</span>
-              <button type="button" className="btn btn-ghost !py-2 !px-3 text-sm" disabled={busy} onClick={() => void post({ action: "decline", guest })}>Decline</button>
-              <button type="button" className="btn btn-accent !py-2 !px-3 text-sm" disabled={busy || spots === 0} data-tooltip={spots === 0 ? "The event is full" : undefined} onClick={() => void post({ action: "approve", guest })}>Approve</button>
+            <li key={guest} className="px-0 sm:px-1">
+              <SlReviewDecision
+                account={guest}
+                approveBlocked={spots === 0 ? "The event is full" : undefined}
+                onDecide={(approve) => void post({ action: approve ? "approve" : "decline", guest }, approve ? `${shortAccount(guest)} is going` : "Request declined")}
+              />
             </li>
           ))}
         </ul>
@@ -149,7 +149,7 @@ export default function ManageFreeEventPage() {
               <div className="font-medium">{event.public ? "Public" : "Private"}</div>
               <p className="text-sm text-muted">{event.public ? "Shown in Events for everyone." : "Only people with the link see it."}</p>
             </div>
-            <button type="button" className="btn btn-ghost !py-2 text-sm" disabled={busy} onClick={() => void post({ action: "visibility", public: !event.public })}>
+            <button type="button" className="btn btn-ghost !py-2 text-sm" disabled={busy} onClick={() => void post({ action: "visibility", public: !event.public }, event.public ? "Event is private now" : "Event is public now")}>
               {event.public ? "Make private" : "Make public"}
             </button>
           </section>
@@ -157,7 +157,7 @@ export default function ManageFreeEventPage() {
             <div className="text-sm font-medium">Event page</div>
             <div className="flex gap-2">
               <code className="flex-1 min-w-0 truncate text-xs bg-bg rounded-lg px-3 py-2 border border-border">{pageUrl || "…"}</code>
-              <button type="button" className="btn btn-ghost !py-1.5 text-sm shrink-0" onClick={copy} disabled={!origin}>{copied ? "Copied" : "Copy"}</button>
+              {origin && <SlCopy text={pageUrl} />}
             </div>
           </section>
         </div>

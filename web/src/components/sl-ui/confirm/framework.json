@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "variant": "confirm-overlay",
+  "kind": "react-adapter",
+  "rendering": "client-widget",
+  "status": "verified-client-widget",
+  "formats": [
+    "html",
+    "css",
+    "javascript",
+    "react",
+    "nextjs"
+  ],
+  "react": "Component.jsx",
+  "nextjs": "NextClient.jsx",
+  "required": [
+    "Component.jsx",
+    "react-controller.mjs",
+    "react-font.mjs",
+    "instrument-sans-variable.woff2"
+  ],
+  "tested": {
+    "react": true,
+    "nextjs": true
+  },
+  "verification": {
+    "controllerSHA256": "d685f816791447fd6ee44c18813dda1d1d73160ff1c149d79cd9b2717651c8a0",
+    "runtimeSHA256": "d062821ee69f96cd7a3465f8126d97391a01f6b2d05e7da9a6a1ff25e85793b0",
+    "scope": "Client mount, generic input/activation, focus, host geometry, runtime reduced motion, isolated instances and cleanup in React StrictMode and production Next.js; source control typography/SVG fingerprint at320px.",
+    "limitations": "Not exhaustive application-state or real-backend verification. No meaningful widget SSR. Original default-size constraints and generic activation limits are recorded below.",
+    "notes": []
+  }
+}

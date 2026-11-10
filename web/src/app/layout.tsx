@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { WalletProvider } from "@/lib/wallet";
 import { Tooltips } from "@/components/Tooltips";
+import { ConfirmHost, ToastHost } from "@/components/SlUi";
 
 export const metadata: Metadata = {
   title: "Nearvent — Events people actually show up to.",
@@ -18,6 +19,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <WalletProvider>{children}</WalletProvider>
         <Tooltips />
+        <ToastHost />
+        <ConfirmHost />
       </body>
     </html>
   );

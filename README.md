@@ -1,71 +1,114 @@
 # Nearvent: show up, split the pool
 
-Kickback-style events on NEAR. In Deposit mode, every guest puts down the same
-small USDC deposit; guests who show up get it back plus an equal share of the
-no-shows' deposits. Paid Ticket mode is also available. There is no platform
-fee, and creating an event is free.
+**Problem.** Free meetups lose many of their RSVPs to no-shows: an RSVP costs
+nothing, so hosts over-book, order the wrong amount of food and can't plan the room.
 
-- Funds are held by a Rust escrow on NEAR. Mainnet cross-chain payments use NEAR
-  Intents and 1Click; testnet uses Tidepool because NEAR Intents has no testnet.
-  Mainnet 1Click first funds the guest's Intents account, then the guest confirms
-  registration. Withdrawals can go through 1Click to another chain or to an
-  Intents account.
-- Guests can sign in with Google or email through FastAuth, use a NEAR wallet, or
-  use an EVM wallet. Mainnet EVM and FastAuth release checks are still pending.
-- Free tier for hosts: the escrow pays the storage for events up to 50 seats
-  while the host has fewer than 2 open events. Bigger events (up to 300) or more
-  open events cost the host a little NEAR for storage (~0.33 NEAR for 50 seats,
-  ~1.95 NEAR for 300).
-- Each guest's profile shows how many events they attended (an on-chain counter).
-- The host is a person (any NEAR account) with an optional door team (co-hosts)
-  kept on the Nearvent server; only the host can close or cancel.
-- In Deposit mode the host records who showed up but cannot take the pool. In
-  Ticket mode each ticket goes to the host's balance at registration and is
-  never refunded. The host can cancel a Deposit event and refund everyone at
-  any time; anyone can do it 30 days after the event ended if the host never
-  closed it.
-- A guest always pays for their own seat; only a payment relayed by NEAR
-  Intents names the guest.
+**Product.** Nearvent is a Kickback-style event app on NEAR. In Deposit mode
+every guest puts down the same small USDC deposit. Guests who show up get it
+back plus an equal share of the no-shows' deposits. Hosts can also sell paid
+tickets or run free RSVP events. No platform fee, and creating an event is free.
 
-Hackathon track focus: Real-World Money (USDC, NEAR Intents, gasless onboarding).
+**How NEAR fits in.**
+- A Rust escrow contract on NEAR holds the deposits. The host records who came
+  but cannot take the pool; the contract splits it.
+- Payments and payouts go through NEAR Intents: a guest can pay from another
+  chain through 1Click and withdraw to any chain or to an Intents account.
+  NEAR Intents has no testnet, so the testnet build uses the
+  [Tidepool](https://www.usetidepool.tech/docs) sandbox (official Intents
+  verifier `verifier.tidepool-sandbox.testnet` + its own test USDC).
+- An EVM wallet (MetaMask etc.) registers by signing one intent; our relayer
+  pays the NEAR gas. Hosts need no NEAR to create a small event.
 
-## Try it in two minutes
+Hackathon track: Real-World Money (USDC deposits, NEAR Intents, gasless onboarding).
+
+## Status (2026-11-10)
+
+| Works on testnet, hosted | Not ready |
+|---|---|
+| NEAR-wallet and EVM-wallet sign-in, deposit or ticket registration with test USDC, free RSVP events, door check-in, close & pay out, withdraw, cancel & refund | Google/email sign-in on the hosted site (waiting for NEAR Auth credentials; works on `localhost:3000` only) |
+| Event feed, Luma/BaliSquad import, themes, cover upload, embed button, guest profiles | Mainnet: payment, payout and EVM flows are implemented but not release-checked; nothing runs on mainnet |
+
+- Hosted demo: [www.nearvent.site](https://www.nearvent.site) (Vercel + Upstash
+  Redis), open demo event: [www.nearvent.site/e/11](https://www.nearvent.site/e/11).
+- Escrow used by the app: [`escrow-tp6.tp6-nv1110.testnet`](https://testnet.nearblocks.io/address/escrow-tp6.tp6-nv1110.testnet),
+  built from the CI reproducible WASM (code hash
+  `G8ym7g1tSQevzz9qXHynUvRyDHnxG3iBz8zxhdZ8ZUo2`; evidence in
+  [docs/DEPLOY.md](docs/DEPLOY.md)).
+- Test USDC: [`usdc.tidepool-sandbox.testnet`](https://testnet.nearblocks.io/address/usdc.tidepool-sandbox.testnet).
+  Older escrows (`tp3`–`tp5`) keep their test data on chain but the app does not read them.
+
+## Try it in two minutes (no wallet)
 
 Open **[www.nearvent.site](https://www.nearvent.site)** → **Sign In** → **Try with a
 demo account**. You get a fresh NEAR account with a little NEAR for gas and
 2 test USDC. Every action signs on its own (no wallet, no popups), and each one
 is a real NEAR transaction you can open in the explorer.
 
-1. **Create Event** → **Stake to RSVP** → 0.1 USDC → **Create Event**. → The event is on-chain.
-2. Open the event link in a private window, take another demo account, press **Register**. → You show up under “Going”.
-3. Back as the host: **Manage → Guests → Check in**. → No transaction: check-ins are kept off-chain.
-4. **Manage → Close event & pay out**. → One transaction sends the list of who came; the pool is split on-chain.
-5. As the guest, press **Withdraw**. → The deposit plus the no-shows’ share lands in your account.
+1. **Create Event** → **Stake to RSVP** → 0.1 USDC → **Create Event** → the event is on-chain.
+2. Open the event link in a private window, take another demo account, press
+   **Register** → you appear under "Going" with a QR pass.
+3. Back as the host: **Manage → Guests → Check in** → saved on our server, no
+   transaction per guest.
+4. **Close event & pay out** → one transaction sends the list of who came; the
+   escrow splits the pool.
+5. As the guest, press **Withdraw** → the deposit plus the no-shows' share
+   leaves the escrow.
 
-User docs: [www.nearvent.site/docs](https://www.nearvent.site/docs) ·
+A NEAR testnet wallet or MetaMask works the same way, with the wallet asking
+before each transaction. Free mode: on `/create` pick Free → `/f/<id>` with a
+one-click RSVP. User docs: [www.nearvent.site/docs](https://www.nearvent.site/docs),
 smart contract: [/docs/contract](https://www.nearvent.site/docs/contract).
 
-| What | Account |
-|---|---|
-| Event escrow | [`escrow-tp6.tp6-nv1110.testnet`](https://testnet.nearblocks.io/address/escrow-tp6.tp6-nv1110.testnet) (code hash `G8ym7g1tSQevzz9qXHynUvRyDHnxG3iBz8zxhdZ8ZUo2`) |
-| Test USDC | [`usdc.tidepool-sandbox.testnet`](https://testnet.nearblocks.io/address/usdc.tidepool-sandbox.testnet) |
-
-NEAR Intents has no testnet. On testnet the Intents paths run on
-[Tidepool](https://www.usetidepool.tech/docs), a 1Click sandbox with the official
-Intents verifier (`verifier.tidepool-sandbox.testnet`). Mainnet release checks
-are still pending. Deployment and QA records: [docs/DEPLOY.md](docs/DEPLOY.md).
-
-### Run it locally
+## Run it locally
 
 ```bash
 cd web
-cp .env.example .env.local      # server settings: docs/DEPLOY.md
+cp .env.example .env.local      # optional server settings are listed in docs/DEPLOY.md
 npm install
 npm run dev                     # http://localhost:3000
 ```
 
-The demo account and Google sign-in need the relayer settings from
-`docs/DEPLOY.md`; a NEAR wallet works without them.
+`.env.example` already points at the testnet escrow. Set `APP_SECRET` to any
+long random string (it signs host and door-team sessions). Without Upstash
+settings the server keeps check-ins, names and event details in `web/.data/`. The test
+USDC top-up and EVM registration need a relayer account (`RELAYER_ACCOUNT_ID`,
+`RELAYER_PRIVATE_KEY`, see docs/DEPLOY.md); without it, get test USDC from
+Tidepool. Google/email sign-in works on `http://localhost:3000` once
+`NEXT_PUBLIC_FASTAUTH_CLIENT_ID` is set to the shared testnet client from
+docs.auth.near.org. Then follow the steps above on `localhost:3000`.
+
+Without a browser, the contract cycle runs from scripts (they use your own
+testnet accounts from `~/.near-credentials`):
+
+```bash
+cd web
+export EVENTS_CONTRACT=escrow-tp6.tp6-nv1110.testnet HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet
+node scripts/smoke-intents-testnet.mjs   # deposit via 1Click → finalize(attended) → cash out to Base and into Intents
+node scripts/smoke-tickets-testnet.mjs   # paid ticket → host paid at registration → finalize → cancel refunds nothing
+```
+
+These scripts last passed on 2026-11-05 against an older escrow. The current
+escrow was checked with direct transactions on 2026-11-10 (free tier, paid
+creation, deposit, ticket, finalize, withdraw; see docs/DEPLOY.md).
+
+## Rules the escrow enforces
+
+- Free tier for hosts: the escrow pays storage for events up to 50 seats while
+  the host has fewer than 2 open events. Bigger events (up to 300 seats) or more
+  open events cost the host a little NEAR for storage (~0.33 NEAR for 50 seats,
+  ~1.95 NEAR for 300).
+- Deposit mode: the host records who showed up but cannot take the pool. Ticket
+  mode: each ticket goes to the host's balance at registration and is never
+  refunded.
+- The host can cancel a Deposit event and refund everyone at any time; anyone
+  can do it 30 days after the event ended if the host never closed it.
+- A guest always pays for their own seat; only a payment relayed by NEAR
+  Intents names the guest.
+- Each guest's profile shows how many closed events they attended (an on-chain
+  counter, `get_attended_count`).
+- The host is any NEAR account. The door team (co-hosts), check-ins, guest
+  names, profiles, location, description and cover live on the Nearvent server,
+  not in the escrow; only the host can close or cancel.
 
 ## Embed on your website
 
@@ -155,9 +198,11 @@ AI-assisted with Claude, Cursor and Codex, directed and reviewed by the author.
 
 ## Hackathon work
 
-All code here was written during NEAR HACKATHON, starting 2026-11-02. The empty
-baseline is tagged `pre-hackathon` and the submitted state `hackathon-submission`;
-the full diff is `pre-hackathon...hackathon-submission` (compare view on GitHub).
+All code here was written during NEAR HACKATHON (window opened 2026-10-19; the
+first commit is from 2026-11-02). No pre-hackathon code or own older libraries
+are included. The empty baseline is tagged `pre-hackathon` and the submitted
+state `hackathon-submission`; the full diff is
+[`pre-hackathon...hackathon-submission`](https://github.com/AstralEX1/near-events/compare/pre-hackathon...hackathon-submission).
 
 ## License
 

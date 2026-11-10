@@ -15,7 +15,7 @@
   font-family: inherit;
   background: color-mix(in srgb, var(--text) 6%, transparent);
 }
-.lu-rows .nv-approval.sl-toggle:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
+@media (hover: hover) and (pointer: fine) { .lu-rows .nv-approval.sl-toggle:hover { background: color-mix(in srgb, var(--text) 10%, transparent); } }
 .nv-approval .sl-toggle__emblem,
 .nv-approval[data-checked="true"] .sl-toggle__emblem { width: 18px; height: 18px; border: 0; background: none; box-shadow: none; color: var(--muted); }
 .nv-approval[data-checked="true"] .sl-toggle__emblem { color: var(--accent); }

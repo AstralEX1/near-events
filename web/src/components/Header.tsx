@@ -35,7 +35,7 @@ function HeaderContent({ accountId, signOut, path, preview = false }: {
   return (
     <header className="gc-header">
       <div className="gc-header-inner">
-        <Link href="/" className="gc-brand" aria-label="Nearvent home">nearvent</Link>
+        <Link href="/about" className="gc-brand" aria-label="About Nearvent">nearvent</Link>
         <nav aria-label="Main navigation" className="hidden sm:flex items-center gap-1 ml-auto">
           {links.map(([href, label, icon]) => <Link key={href} href={href} className="gc-nav-link" aria-current={path.startsWith(href) ? "page" : undefined}><NavLabel icon={icon} label={label} /></Link>)}
         </nav>
