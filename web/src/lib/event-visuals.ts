@@ -258,7 +258,7 @@ export function resolveEventVisual(config: EventVisualConfig): ResolvedEventVisu
 }
 
 /** Small deterministic PRNG (xorshift32), so the same seed draws the same art for every visitor. */
-function seededRandom(seed: number): () => number {
+export function seededRandom(seed: number): () => number {
   let state = (Math.imul(seed >>> 0, 0x9e3779b1) + 0x6d2b79f5) >>> 0 || 1;
   return () => {
     state ^= state << 13;

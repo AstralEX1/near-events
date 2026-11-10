@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { events, formatUsdc, isTicket, type EventView, type GuestStatus } from "@/lib/near";
-import { Avatar, Cover, StatusPill, shortAccount } from "@/components/ui";
+import { Cover, StatusPill, shortAccount } from "@/components/ui";
+import { ProfileCard } from "@/components/ProfileCard";
+import { attendedCount, getProfiles } from "@/lib/profilesClient";
+import type { Profile as UserProfile } from "@/lib/profilesShared";
 import { Timeline } from "@/components/Timeline";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 
@@ -21,11 +24,13 @@ export default function Profile() {
   const account = decodeURIComponent(useParams<{ account: string }>().account);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [hosting, setHosting] = useState<EventView[]>([]);
-  // On-chain count of finalized events this account was checked in at.
+  // Paid events checked in at (on-chain, after close) plus ended free events joined.
   const [attended, setAttended] = useState<number | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
-    events.attendedCount(account).then(setAttended).catch(() => setAttended(null));
+    attendedCount(account).then(setAttended).catch(() => setAttended(null));
+    getProfiles([account]).then((p) => setProfile(p[account] ?? null)).catch(() => setProfile(null));
   }, [account]);
 
   useEffect(() => {
@@ -47,14 +52,7 @@ export default function Profile() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center gap-4">
-        <Avatar account={account} size={64} />
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold break-all">{shortAccount(account)}</h1>
-          <p className="text-sm text-muted break-all">{account}</p>
-          {attended !== null && <p className="text-sm font-medium mt-1">Attended {attended} event{attended === 1 ? "" : "s"}</p>}
-        </div>
-      </div>
+      <ProfileCard account={account} profile={profile} attended={attended} />
 
       {hosting.length > 0 && (
         <section className="space-y-4">
