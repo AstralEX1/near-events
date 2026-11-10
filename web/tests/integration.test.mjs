@@ -137,3 +137,9 @@ test("flow URLs round-trip into the right step", () => {
   assert.equal(step(new URL(startUrl({ mode: "Deposit", amount: "10", link: LINK }, true), "https://x.example").search), "start-widget");
   assert.equal(integrationUrl(7), "/e/7/manage?tab=integration");
 });
+
+test("a free event with a link imports into the regular create form", () => {
+  const url = formUrl({ mode: "Free", amount: "", link: LINK });
+  assert.equal(url, `/create?mode=Free&import=${encodeURIComponent(LINK)}`);
+  assert.equal(step(url.split("?")[1]), "form");
+});

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { detectEventSource } from "@/lib/eventImport";
 import { formUrl, parseMode, startUrl, validAmount, type JoinMode } from "@/lib/flow";
 
@@ -12,13 +12,13 @@ const CARDS: { mode: JoinMode; title: string; line: string; icon: string[] }[] =
   { mode: "Free", title: "Free", line: "Just RSVP, no crypto", icon: ["M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"] },
 ];
 
-/** The first screen of /create: how guests pay and how much. The small Integrate switch next to Continue adds the event link. */
+/** The first screen of /create: how guests pay and how much. The small Integrate switch under Continue opens the event link field. */
 export function StartStep({ widget: initialWidget, initial }: { widget: boolean; initial: { mode?: string | null; amount?: string | null; link?: string | null } }) {
   const router = useRouter();
   const [widget, setWidget] = useState(initialWidget);
   const [link, setLink] = useState(initial.link ?? "");
-  const cards = widget ? CARDS.filter((card) => card.mode !== "Free") : CARDS;
-  const [mode, setMode] = useState<JoinMode | null>(widget && initial.mode === "Free" ? null : parseMode(initial.mode));
+  const linkInput = useRef<HTMLInputElement>(null);
+  const [mode, setMode] = useState<JoinMode | null>(parseMode(initial.mode));
   const free = mode === "Free";
   const [amount, setAmount] = useState(initial.amount ?? "");
   const source = detectEventSource(link);
@@ -37,29 +37,11 @@ export function StartStep({ widget: initialWidget, initial }: { widget: boolean;
   return (
     <form onSubmit={submit} className="gc-start space-y-7 pb-12">
 
-      <div className="space-y-2"><p className="gc-eyebrow">{widget ? "Integrate" : "Create an event"}</p><h1 className="gc-page-title">How will guests join?</h1><p className="text-muted">{widget ? "Bring your event over. Keep your own website." : "A little commitment, a ticket, or free. You choose."}</p></div>
+      <div className="space-y-2"><p className="gc-eyebrow">{widget ? "Integrate" : "Create an event"}</p><h1 className="gc-page-title">How will guests join?</h1><p className="text-muted">A little commitment, a ticket, or free. You choose.</p></div>
 
-      {widget && (
-        <label className="gc-reveal block space-y-1.5">
-          <span className="flex items-baseline justify-between gap-3" aria-live="polite">
-            <span className="label">Luma or BaliSquad event link</span>
-            {source && <span className="text-sm text-good">✓ {source}</span>}
-            {!source && link.trim() && <span className="text-sm text-warn">Not supported</span>}
-          </span>
-          <input
-            autoFocus
-            className="lu-field w-full px-3 py-2 text-sm"
-            inputMode="url"
-            autoComplete="off"
-            placeholder="https://lu.ma/your-event"
-            value={link}
-            onChange={(e) => setLink(e.target.value)}
-          />
-        </label>
-      )}
 
-      <div role="radiogroup" aria-label="Guests pay" className={`grid gap-3 ${cards.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
-        {cards.map((card) => (
+      <div role="radiogroup" aria-label="Guests pay" className="grid gap-3 grid-cols-3">
+        {CARDS.map((card) => (
           <label
             key={card.mode}
             className="gc-mode-card cursor-pointer p-2 sm:p-3"
@@ -95,26 +77,45 @@ export function StartStep({ widget: initialWidget, initial }: { widget: boolean;
         </span>
       </label>}
 
-      {/* Like Linear's "Create more": a small switch beside the main button, not a banner above the form. */}
-      <div className="flex items-center gap-4">
-        <label className="gc-switch-inline">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={widget}
-            className="gc-switch gc-switch-sm"
-            onClick={() => {
-              setWidget(!widget);
-              if (!widget && mode === "Free") setMode(null);
-              // Refresh and Back keep the chosen flow.
-              window.history.replaceState(null, "", startUrl({ mode: !widget && mode === "Free" ? undefined : mode ?? undefined, amount: amount || undefined, link: !widget ? link.trim() || undefined : undefined }, !widget));
-            }}
-          ><span aria-hidden /></button>
-          <span>Integrate</span>
-        </label>
-        <button className="btn btn-accent flex-1 !py-3 text-base font-medium" disabled={!ready}>
+      <div className="space-y-3">
+        <button className="btn btn-accent w-full !py-3 text-base font-medium" disabled={!ready}>
           {widget ? "Import" : "Continue"}
         </button>
+        {/* Small switch under the main button, bottom right; on, the link field slides out to its left. */}
+        <div className="gc-integrate" data-open={widget}>
+          <div className="gc-integrate-field" inert={!widget}>
+            <div>
+              <span className="lu-field flex items-center gap-2 px-3" aria-live="polite">
+                <input
+                  ref={linkInput}
+                  className="flex-1 min-w-0 bg-transparent py-2 text-sm outline-none"
+                  inputMode="url"
+                  autoComplete="off"
+                  aria-label="Luma or BaliSquad event link"
+                  placeholder="Luma or BaliSquad link"
+                  value={link}
+                  onChange={(e) => setLink(e.target.value)}
+                />
+                {source ? <span className="text-xs text-good shrink-0">✓ {source}</span> : link.trim() ? <span className="text-xs text-warn shrink-0">Not supported</span> : null}
+              </span>
+            </div>
+          </div>
+          <label className="gc-switch-inline">
+            <span>Integrate</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={widget}
+              className="gc-switch gc-switch-sm"
+              onClick={() => {
+                setWidget(!widget);
+                if (!widget) requestAnimationFrame(() => linkInput.current?.focus());
+                // Refresh and Back keep the chosen flow.
+                window.history.replaceState(null, "", startUrl({ mode: mode ?? undefined, amount: amount || undefined, link: !widget ? link.trim() || undefined : undefined }, !widget));
+              }}
+            ><span aria-hidden /></button>
+          </label>
+        </div>
       </div>
     </form>
   );

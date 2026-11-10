@@ -54,7 +54,8 @@ function CreateEvent() {
   const router = useRouter();
   const params = useSearchParams();
   const integrate = params.get("flow") === "widget";
-  const importOnArrival = integrate ? params.get("import") : null;
+  // A link from the start step: Integrate, or a free event brought over from Luma/BaliSquad.
+  const importOnArrival = params.get("import");
   const [form, setForm] = useState({
     title: "",
     location: "",
@@ -164,7 +165,7 @@ function CreateEvent() {
     }
   };
 
-  // Integrate flow: the link came from the start step, so import it right away, once.
+  // The link came from the start step, so import it right away, once.
   const arrivalImportStarted = useRef(false);
   useEffect(() => {
     if (!importOnArrival || arrivalImportStarted.current) return;

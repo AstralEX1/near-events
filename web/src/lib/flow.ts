@@ -44,6 +44,8 @@ const query = (entries: Record<string, string | undefined>) =>
 
 /** The detailed form for this choice. */
 export function formUrl({ mode, amount, link }: Choice): string {
+  // The site button takes payment, so a free event with a link is imported into the regular create form.
+  if (link && mode === "Free") return `/create?${query({ mode, import: link })}`;
   return `/create?${query(link ? { flow: "widget", mode, amount, import: link } : { mode, amount })}`;
 }
 
