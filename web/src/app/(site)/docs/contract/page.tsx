@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { EVENTS_CONTRACT, EXPLORER_URL, USDC_CONTRACT } from "@/lib/config";
+import { EVENTS_CONTRACT, EXPLORER_URL, NETWORK, RPC_URL, USDC_CONTRACT } from "@/lib/config";
 import { Code, Ext, Mono, Next, Section, Stack, Table, Title } from "../parts";
 
 export const metadata: Metadata = { title: "Smart Contract · Nearvent" };
@@ -8,7 +8,31 @@ const REPO = "https://github.com/AstralEX1/near-events";
 const tx = (hash: string) => `${EXPLORER_URL}/txns/${hash}`;
 const acc = (id: string) => `${EXPLORER_URL}/address/${id}`;
 
-export default function ContractDocs() {
+// Real transactions on the escrow this site uses; mainnet gets its own once they exist.
+const PROOF: [string, string][] = NETWORK === "testnet" ? [
+  ["5THM1T3rxJ2Lm2Gnmc4YSaXUgNM87poq4hbhEZuRn6U2", "Guest pays 0.1 USDC"],
+  ["FNzcdnkA5KNVP8C2NXCo2bgjgy73HL9yNFbsfHbn2VmB", "Host closes: the guest came"],
+  ["8shBJSzRK7aKDEHNPupzfvLY8funfvfR1fFbxkZEsp3Y", "The guest withdraws 0.1 USDC"],
+  ["5ovEmf3ue62JSxkNzkY17dXWYdJM8W3pss2jDGSNydQf", "Owner upgrades the code"],
+] : [];
+
+/** The deployed code hash, read from the chain so it always matches the escrow above. */
+async function codeHash(): Promise<string> {
+  try {
+    const res = await fetch(RPC_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: "h", method: "query", params: { request_type: "view_account", finality: "final", account_id: EVENTS_CONTRACT } }),
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(5000),
+    });
+    return (await res.json()).result?.code_hash ?? "unavailable";
+  } catch {
+    return "unavailable";
+  }
+}
+
+export default async function ContractDocs() {
   return (
     <>
       <Title lead="One Rust contract on NEAR holds every deposit and pays out by fixed rules.">Smart Contract</Title>
@@ -19,7 +43,7 @@ export default function ContractDocs() {
           rows={[
             ["Escrow", <Ext key="e" href={acc(EVENTS_CONTRACT)}><Mono>{EVENTS_CONTRACT}</Mono></Ext>],
             ["USDC", <Ext key="u" href={acc(USDC_CONTRACT)}><Mono>{USDC_CONTRACT}</Mono></Ext>],
-            ["Code hash", <Mono key="h">G8ym7g1tSQevzz9qXHynUvRyDHnxG3iBz8zxhdZ8ZUo2</Mono>],
+            ["Code hash", <Mono key="h">{await codeHash()}</Mono>],
           ]}
         />
         <p className="text-sm text-muted">
@@ -68,21 +92,20 @@ export default function ContractDocs() {
           ]}
         />
         <Code>{`near contract call-function as-read-only ${EVENTS_CONTRACT} get_event \\
-  json-args '{"event_id": 0}' network-config testnet now`}</Code>
+  json-args '{"event_id": 0}' network-config ${NETWORK} now`}</Code>
       </Section>
 
       <Section id="limits" title="Limits">
         <p className="text-sm">From 0.1 USDC · up to 300 guests · free up to 50 seats, ending within 60 days · ends within a year.</p>
       </Section>
 
-      <Section id="proof" title="See it on-chain">
-        <ul className="space-y-1 text-sm">
-          <li><Ext href={tx("5THM1T3rxJ2Lm2Gnmc4YSaXUgNM87poq4hbhEZuRn6U2")}>Guest pays 0.1 USDC</Ext></li>
-          <li><Ext href={tx("FNzcdnkA5KNVP8C2NXCo2bgjgy73HL9yNFbsfHbn2VmB")}>Host closes: the guest came</Ext></li>
-          <li><Ext href={tx("8shBJSzRK7aKDEHNPupzfvLY8funfvfR1fFbxkZEsp3Y")}>The guest withdraws 0.1 USDC</Ext></li>
-          <li><Ext href={tx("5ovEmf3ue62JSxkNzkY17dXWYdJM8W3pss2jDGSNydQf")}>Owner upgrades the code</Ext></li>
-        </ul>
-      </Section>
+      {PROOF.length > 0 && (
+        <Section id="proof" title="See it on-chain">
+          <ul className="space-y-1 text-sm">
+            {PROOF.map(([hash, label]) => <li key={hash}><Ext href={tx(hash)}>{label}</Ext></li>)}
+          </ul>
+        </Section>
+      )}
 
       <Section id="build" title="Build and test">
         <Code>{`cd contracts

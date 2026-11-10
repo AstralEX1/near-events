@@ -1,45 +1,15 @@
 import { createHash, createPublicKey, verify, type JsonWebKey } from "node:crypto";
-import { decodeTransaction } from "near-api-js";
-import { EVENTS_CONTRACT, INTENTS_CONTRACT, NETWORK, USDC_CONTRACT } from "@/lib/config";
-import { events } from "@/lib/near";
+import { NETWORK } from "@/lib/config";
 import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { FASTAUTH_CONTRACT, relayer } from "@/lib/relayer";
+import { decodePayload, relayAllowed, type Payload } from "@/lib/relayPolicy";
+import { CONTRACTS, FREE_TIER_ERROR, unpaidBeyondFreeTier } from "@/lib/relayServer";
 
-// The relayer only pays for transactions that call our own contracts.
-const ALLOWED_RECEIVERS = new Set([EVENTS_CONTRACT, USDC_CONTRACT]);
-
-type Tx = ReturnType<typeof decodeTransaction>;
-
-// The relayer pays MPC gas for free-tier events only; a bigger event or a
-// third open one must carry its own storage deposit, or it would just fail.
-async function unpaidBeyondFreeTier(tx: Tx): Promise<boolean> {
-  if (tx.receiverId !== EVENTS_CONTRACT) return false;
-  for (const action of tx.actions) {
-    const call = action.functionCall;
-    if (call?.methodName !== "create_event") continue;
-    const args = JSON.parse(new TextDecoder().decode(call.args));
-    const endsAt = Number(args.metadata?.ends_at);
-    const cost = BigInt(await events.createCost(tx.signerId, Number(args.capacity), Number.isSafeInteger(endsAt) ? endsAt : undefined));
-    if (cost > 0n && BigInt(call.deposit) < cost) return true;
-  }
-  return false;
-}
-
-function allowedSigner(signPayload: unknown): Tx | null {
-  try {
-    if (!Array.isArray(signPayload) || signPayload.length > 8192 || !signPayload.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) return null;
-    const tx = decodeTransaction(Uint8Array.from(signPayload as number[]));
-    const allowed = tx.actions.length > 0 && tx.actions.every((action) => {
-      if (!("functionCall" in action) || !action.functionCall) return false;
-      if (tx.receiverId === INTENTS_CONTRACT) {
-        return ["ft_withdraw", "mt_transfer"].includes(action.functionCall.methodName);
-      }
-      return ALLOWED_RECEIVERS.has(tx.receiverId);
-    });
-    return allowed ? tx : null;
-  } catch {
-    return null;
-  }
+// The payload is a transaction (testnet) or a NEP-366 delegate action (mainnet meta-transaction).
+function allowedPayload(signPayload: unknown): Payload | null {
+  if (!Array.isArray(signPayload) || signPayload.length > 8192 || !signPayload.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) return null;
+  const p = decodePayload(Uint8Array.from(signPayload as number[]));
+  return p && relayAllowed(p, CONTRACTS) ? p : null;
 }
 
 // Match the pinned FastAuth JavascriptProvider's issuer and signing audience.
@@ -89,14 +59,14 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid signature request" }, { status: 400 });
   }
   const { guard_id, verify_payload, sign_payload } = request;
-  const tx = allowedSigner(sign_payload);
+  const tx = allowedPayload(sign_payload);
   if (!tx) {
     return Response.json({ error: "Only Nearvent transactions are relayed" }, { status: 400 });
   }
   const account = tx.signerId;
   try {
     if (await unpaidBeyondFreeTier(tx)) {
-      return Response.json({ error: "Free events are up to 50 seats and 2 open events per host, ending within 60 days. Attach the storage deposit shown on the create page." }, { status: 400 });
+      return Response.json({ error: FREE_TIER_ERROR }, { status: 400 });
     }
   } catch {
     return Response.json({ error: "Could not check the event's storage cost" }, { status: 502 });

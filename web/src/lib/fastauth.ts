@@ -6,10 +6,8 @@
 // sent from the user's own implicit account.
 import type { FastAuthClient, FastAuthSigner } from "@fast-auth-near/browser-sdk";
 import type { JavascriptProvider } from "@fast-auth-near/javascript-provider";
-import { EVENTS_CONTRACT, NETWORK, RPC_URL } from "./config";
+import { EVENTS_CONTRACT, FASTAUTH_CLIENT_ID, FASTAUTH_META_TX, NETWORK, RPC_URL, USDC_CONTRACT } from "./config";
 import type { Call } from "./wallet";
-
-const CLIENT_ID = process.env.NEXT_PUBLIC_FASTAUTH_CLIENT_ID ?? "np8paqIpMWmNbzT4xAvOOapZBjsOpptl";
 const CONTRACTS =
   NETWORK === "mainnet"
     ? { fastAuthContractId: "fast-auth.near", mpcContractId: "v1.signer" }
@@ -41,7 +39,8 @@ export function fastAuthPrepare(): Promise<Base> {
       import("@fast-auth-near/javascript-provider"),
       import("near-api-js-v5"),
     ]);
-    const provider = new JavascriptProvider({ network: NETWORK, clientId: CLIENT_ID });
+    if (!FASTAUTH_CLIENT_ID) throw new Error("Google and email sign-in is not set up yet. Use a wallet.");
+    const provider = new JavascriptProvider({ network: NETWORK, clientId: FASTAUTH_CLIENT_ID });
     const { connection } = await connect({ networkId: NETWORK, nodeUrl: RPC_URL });
     // Types come from separate copies of near-api-js 5; they match at runtime.
     const client = new FastAuthClient(provider, connection as never, CONTRACTS);
@@ -54,7 +53,7 @@ async function openSession(b: Base): Promise<Session> {
   const signer = await b.client.getSigner();
   const publicKey = String(await signer.getPublicKey("ed25519"));
   const accountId = await implicitAccountId(publicKey);
-  // Testnet: the relayer gives a brand-new account a little NEAR for gas.
+  // The relayer creates a brand-new account: 0.5 NEAR for gas on testnet, just its storage on mainnet.
   await fetch("/api/fastauth/fund", { method: "POST", body: JSON.stringify({ accountId }) }).catch(() => {});
   return { ...b, signer, publicKey, accountId };
 }
@@ -133,6 +132,7 @@ export async function fastAuthSend(call: Call): Promise<void> {
   if (!session) throw new Error("Sign in with Google or email first");
   const s = await session;
   if (!s.accountId) throw new Error("Sign in with Google or email again.");
+  if (FASTAUTH_META_TX) return relaySend(s, call);
   const { transactions, utils } = await import("near-api-js-v5");
 
   const key = await rpcQuery<{ nonce: number; block_hash: string }>({
@@ -151,6 +151,54 @@ export async function fastAuthSend(call: Call): Promise<void> {
   );
 
   await s.signer.requestTransactionSignature({ transaction: tx as never });
+  const { FastAuthSignature } = await import("@fast-auth-near/browser-sdk");
+  const signature = FastAuthSignature.fromBase64((await mpcSign(s, "Could not sign the transaction")).signature);
+  const outcome = await s.signer.sendTransaction(tx as never, signature, "ed25519");
+  const status = outcome?.status as { Failure?: unknown } | undefined;
+  if (status?.Failure) throw new Error(`Transaction failed: ${JSON.stringify(status.Failure)}`);
+}
+
+/**
+ * Mainnet: the account holds no NEAR, so the MPC key signs a NEP-366 delegate
+ * action and our relayer wraps it in its own transaction, paying the gas.
+ */
+async function relaySend(s: Session, call: Call): Promise<void> {
+  // A USDC storage registration needs NEAR the account does not have; the relayer pays it instead.
+  if (call.receiverId === USDC_CONTRACT && call.methodName === "storage_deposit") {
+    return relay({ storageFor: (call.args as { account_id: string }).account_id });
+  }
+  const { transactions, utils } = await import("near-api-js-v5");
+  const key = await rpcQuery<{ nonce: number; block_height: number }>({
+    request_type: "view_access_key",
+    finality: "final",
+    account_id: s.accountId,
+    public_key: s.publicKey,
+  });
+  const delegateAction = {
+    senderId: s.accountId,
+    receiverId: call.receiverId,
+    actions: [transactions.functionCall(call.methodName, call.args, call.gas ?? 100_000_000_000_000n, call.deposit ?? 0n)],
+    nonce: BigInt(key.nonce) + 1n,
+    // About ten minutes for the Auth0 popup and the relay.
+    maxBlockHeight: BigInt(key.block_height) + 600n,
+    publicKey: utils.PublicKey.fromString(s.publicKey),
+  };
+  await s.signer.requestDelegateActionSignature({ delegateAction: delegateAction as never });
+  const { signature, payload } = await mpcSign(s, "Could not sign the transaction");
+  const { FastAuthSignature } = await import("@fast-auth-near/browser-sdk");
+  const raw = FastAuthSignature.fromBase64(signature).recover("ed25519");
+  // The relayer sends exactly the bytes the MPC network signed.
+  await relay({ delegate: toB64(Uint8Array.from(payload)), signature: toB64(new Uint8Array(raw)) });
+}
+
+async function relay(body: object): Promise<void> {
+  const res = await fetch("/api/fastauth/relay", { method: "POST", body: JSON.stringify(body) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error ?? "Could not send the transaction");
+}
+
+/** Asks the fast-auth contract (through our relayer) to sign the request the Auth0 popup approved. */
+async function mpcSign(s: Session, failure: string): Promise<{ signature: string; payload: number[] }> {
   const { signatureRequest } = await s.signer.getSignatureRequest();
   const res = await fetch("/api/fastauth/sign", {
     method: "POST",
@@ -162,13 +210,11 @@ export async function fastAuthSend(call: Call): Promise<void> {
     }),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json.error ?? "Could not sign the transaction");
-
-  const { FastAuthSignature } = await import("@fast-auth-near/browser-sdk");
-  const outcome = await s.signer.sendTransaction(tx as never, FastAuthSignature.fromBase64(json.signature), "ed25519");
-  const status = outcome?.status as { Failure?: unknown } | undefined;
-  if (status?.Failure) throw new Error(`Transaction failed: ${JSON.stringify(status.Failure)}`);
+  if (!res.ok) throw new Error(json.error ?? failure);
+  return { signature: json.signature, payload: signatureRequest.signPayload as number[] };
 }
+
+const toB64 = (b: Uint8Array) => btoa(String.fromCharCode(...b));
 
 /**
  * Proves the Google/email account to our server without spending anything:
@@ -190,21 +236,8 @@ export async function fastAuthProve(): Promise<{ transaction: string; signature:
     new Uint8Array(32),
   );
   await s.signer.requestTransactionSignature({ transaction: tx as never });
-  const { signatureRequest } = await s.signer.getSignatureRequest();
-  const res = await fetch("/api/fastauth/sign", {
-    method: "POST",
-    body: JSON.stringify({
-      guard_id: signatureRequest.guardId,
-      verify_payload: signatureRequest.verifyPayload,
-      sign_payload: signatureRequest.signPayload,
-      algorithm: "eddsa",
-    }),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error ?? "Could not sign in");
   const { FastAuthSignature } = await import("@fast-auth-near/browser-sdk");
-  const signature = FastAuthSignature.fromBase64(json.signature).recover("ed25519");
-  const toB64 = (b: Uint8Array) => btoa(String.fromCharCode(...b));
+  const signature = FastAuthSignature.fromBase64((await mpcSign(s, "Could not sign in")).signature).recover("ed25519");
   return { transaction: toB64(tx.encode()), signature: toB64(new Uint8Array(signature)) };
 }
 

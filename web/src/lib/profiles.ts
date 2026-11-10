@@ -1,14 +1,17 @@
 // User profiles on our server: Upstash Redis when hosted, an ignored JSON file under
 // web/.data in local development. Same pattern as eventDetails.ts. Profiles belong to
-// the NEAR account, not to an escrow, so keys are not contract-scoped.
+// the NEAR account, not to an escrow, so keys are not contract-scoped; mainnet keys get
+// their own prefix so testnet usernames never block mainnet ones in a shared database.
 import "server-only";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { NETWORK } from "./config";
 import { redis, usesRedis } from "./eventDetails";
 import type { Profile } from "./profilesShared";
 
-const key = (account: string) => `profile:${account}`;
-const usernameKey = (username: string) => `profile-username:${username}`;
+const NS = NETWORK === "mainnet" ? "mainnet:" : "";
+const key = (account: string) => `${NS}profile:${account}`;
+const usernameKey = (username: string) => `${NS}profile-username:${username}`;
 
 const FILE = path.join(process.cwd(), ".data", "profiles.json");
 type FileStore = { profiles: Record<string, Profile>; usernames: Record<string, string> };

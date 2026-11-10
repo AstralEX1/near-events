@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@/lib/wallet";
-import { HAS_INTENTS, NETWORK } from "@/lib/config";
+import { FASTAUTH_CLIENT_ID, HAS_INTENTS, NETWORK } from "@/lib/config";
 
 /** The ways in: Google/email (no crypto needed), a NEAR wallet, or an EVM wallet via NEAR Intents. */
 export function SignInOptions({ onDone }: { onDone?: () => void }) {
@@ -25,17 +25,19 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
 
   return (
     <div className="space-y-2">
-      <button className="btn btn-primary w-full" disabled={!ready || busy !== null} onClick={run(signInWithEmail, "email")}>
-        {busy === "email" ? "Opening sign-in…" : "Continue with Google or email"}
-      </button>
+      {FASTAUTH_CLIENT_ID && (
+        <button className="btn btn-primary w-full" disabled={!ready || busy !== null} onClick={run(signInWithEmail, "email")}>
+          {busy === "email" ? "Opening sign-in…" : "Continue with Google or email"}
+        </button>
+      )}
       <button
-        className="btn btn-ghost w-full"
+        className={`btn ${FASTAUTH_CLIENT_ID ? "btn-ghost" : "btn-primary"} w-full`}
         disabled={!ready || busy !== null}
         onClick={run(signIn, "wallet")}
       >
         Connect a NEAR wallet
       </button>
-      {/* EVM wallets sign in through NEAR Intents (Tidepool's verifier on testnet). */}
+      {/* EVM wallets sign in through NEAR Intents (intents.near; Tidepool's verifier on testnet). */}
       {HAS_INTENTS && (
         <button className="btn btn-ghost w-full" disabled={!ready || busy !== null} onClick={run(signInWithEvm, "evm")}>
           MetaMask, Rabby or another EVM wallet
@@ -129,7 +131,7 @@ export function SignInMenu() {
             className="fixed inset-x-3 top-[4.25rem] z-50 max-h-[calc(100dvh-5rem)] overflow-y-auto whitespace-normal rounded-2xl card p-4 shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80 sm:max-h-[min(70vh,32rem)]"
           >
             <div id="near-me-signin-title" className="font-semibold mb-1">Welcome to Nearvent</div>
-            <p className="text-xs text-muted mb-3">No wallet? Sign in with Google or email; we create your NEAR account.</p>
+            {FASTAUTH_CLIENT_ID && <p className="text-xs text-muted mb-3">No wallet? Sign in with Google or email; we create your NEAR account.</p>}
             <SignInOptions onDone={close} />
           </div>
         </>

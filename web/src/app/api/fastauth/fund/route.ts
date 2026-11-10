@@ -2,15 +2,17 @@ import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { NETWORK } from "@/lib/config";
 import { accountExists, relayer } from "@/lib/relayer";
 
-// Testnet only: gives a new Google/email or demo implicit account a little NEAR
-// for gas, so they never have to buy NEAR. Mainnet would use meta-transactions.
-// Covers the prepaid gas of the biggest call (closing an event: 300 Tgas ≈ 0.3 NEAR,
-// mostly refunded). 0.05 NEAR could not even send a 100 Tgas call.
-const STARTER_NEAR = 500_000_000_000_000_000_000_000n; // 0.5 NEAR
+// Creates a new Google/email or demo implicit account by sending it NEAR.
+// Testnet: enough for gas on the biggest call (closing an event: 300 Tgas ≈ 0.3 NEAR,
+// mostly refunded; 0.05 NEAR could not even send a 100 Tgas call).
+// Mainnet: only the account's own storage (182 bytes) plus the 1 yoctoNEAR deposits;
+// the relayer pays every transaction's gas (meta-transactions, /api/fastauth/relay).
+const STARTER_NEAR = NETWORK === "mainnet"
+  ? 3_000_000_000_000_000_000_000n // 0.003 NEAR
+  : 500_000_000_000_000_000_000_000n; // 0.5 NEAR
 
 export async function POST(req: Request) {
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
-  if (NETWORK !== "testnet") return Response.json({ error: "Account funding is not available here" }, { status: 403 });
   const { accountId } = await req.json();
   if (typeof accountId !== "string" || !/^[0-9a-f]{64}$/.test(accountId)) {
     return Response.json({ error: "Expected an implicit account id" }, { status: 400 });
