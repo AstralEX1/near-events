@@ -27,12 +27,20 @@ const WASM = process.env.WASM || fail("Set WASM to the escrow-wasm artifact (nea
 const wasm = readFileSync(WASM);
 
 // Prompts; `muted` hides what is typed for the key.
-let rl, muted = false;
+let rl, muted = false, waiting = false, closed = false;
+const cancel = () => fail("\nCancelled; nothing was sent.");
 const ask = async (question, hidden = false) => {
-  rl ??= createInterface({ input: process.stdin, output: new Writable({ write: (c, e, cb) => { if (!muted) process.stdout.write(c, e); cb(); } }), terminal: Boolean(process.stdin.isTTY) });
+  if (!rl) {
+    rl = createInterface({ input: process.stdin, output: new Writable({ write: (c, e, cb) => { if (!muted) process.stdout.write(c, e); cb(); } }), terminal: Boolean(process.stdin.isTTY) });
+    rl.on("SIGINT", cancel); // Ctrl+C
+    rl.on("close", () => { closed = true; if (waiting) cancel(); }); // Ctrl+D, or piped input ended, while a question is open
+  }
+  if (closed) cancel();
   process.stdout.write(question);
   muted = hidden;
+  waiting = true;
   const answer = (await rl.question("")).trim();
+  waiting = false;
   muted = false;
   if (hidden) process.stdout.write("\n");
   return answer;
