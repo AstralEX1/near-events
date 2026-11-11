@@ -417,7 +417,9 @@ EVM host's `auth_call`s went through the app's `/api/intents/execute` route; it
 passed. The site switched: Vercel Production/Preview `NEXT_PUBLIC_EVENTS_CONTRACT`
 = tp7, main `19403d4` deployed, www.nearvent.site serves tp7 and `/e/4`.
 
-Not covered: UI for EVM hosts (contract and relayer only), mainnet.
+Not covered: mainnet. The UI for EVM hosts came later (2026-11-11, branch
+`claude/evm-host`): on tp7 a stub EVM wallet created event 32 from `/create` and
+cancelled it from Manage through localhost:3000.
 
 ## Meta-transaction testnet check (2026-11-10, Claude)
 
