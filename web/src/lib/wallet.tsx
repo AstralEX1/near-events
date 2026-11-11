@@ -302,7 +302,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");
       return proveWallet(c, accountId);
     }
-    throw new Error("Door check-in needs a NEAR wallet or a Google/email account.");
+    throw new Error("This needs a NEAR wallet or a Google/email account. EVM wallets can register for paid events and withdraw.");
   }, [kind, accountId]);
 
   return (

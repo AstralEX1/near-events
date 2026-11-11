@@ -46,7 +46,8 @@ function MyEvents({ accountId }: { accountId: string }) {
         const now = Date.now();
         const [all, free] = await Promise.all([
           events.list(),
-          staffToken()
+          // EVM wallets have no sign-in token, so they cannot join free events: nothing to load.
+          kind === "evm" ? Promise.resolve([]) : staffToken()
             .then((token) => fetch("/api/free-events?mine=1", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }))
             .then(async (r) => r.ok ? (await r.json()).events as (FreeEvent & { going: boolean })[] : Promise.reject(new Error()))
             .catch((): (FreeEvent & { going: boolean })[] => {
@@ -75,7 +76,7 @@ function MyEvents({ accountId }: { accountId: string }) {
     if (results[2].status === "rejected") { setInIntents(null); issues.push("Your payment balance is unavailable."); }
     if (results[3].status === "rejected") { setMine(null); issues.push("Your events could not be loaded."); }
     setLoadErrors(issues);
-  }, [accountId, staffToken]);
+  }, [accountId, kind, staffToken]);
 
   useEffect(() => { void load(); }, [load]);
 
