@@ -64,20 +64,31 @@ read-only checks; no mainnet transaction has been sent.
 (`cargo near build reproducible-wasm --manifest-path contracts/events/Cargo.toml`).
 Record the commit, the artifact SHA-256 and the NEAR code hash here.
 
-**3. Deploy** (one transaction creates, deploys, initialises and deletes the key):
+**3. Deploy** (two transactions: create the sub-account, then deploy + init + delete its key):
 
 ```bash
 cd web
-NETWORK=mainnet CONFIRM_MAINNET=yes DEPLOYER=<deployer>.near NEW_ACCOUNT=escrow \
-  OWNER=<ledger>.near RELAYER_ACCOUNT=<relayer>.near WASM=<path>/near_events.wasm NEAR_AMOUNT=8 \
-  node scripts/deploy-escrow.mjs
+NETWORK=mainnet CONFIRM_MAINNET=yes DEPLOYER=<deployer>.near RELAYER_ACCOUNT=<relayer>.near \
+  WASM=<path>/near_events.wasm node scripts/deploy-escrow.mjs
 ```
 
-`NEAR_AMOUNT`: the code (285,919 bytes) locks about 2.9 NEAR; the rest is the
-free-tier pool (a free 50-seat event reserves 0.287 NEAR while open, so 5 NEAR
-covers about 17 open free events). The script then checks the code hash,
-`get_config` and the empty key list, and registers the escrow's USDC storage
-(0.0125 NEAR from the deployer).
+The owner defaults to the deployer (`OWNER=` to change it; it cannot be changed after
+the deploy without a code upgrade, and neither can the relayer). Without a key file in
+`~/.near-credentials/mainnet/` the script asks for the deployer's private key or seed
+phrase (hidden, never saved). Before sending anything it checks that the accounts exist,
+that the key is a full-access key of the deployer and that the balance covers the code; it
+then shows a summary and waits for a typed `yes`. If the second transaction fails, it
+deletes the new account and the NEAR goes back to the deployer (checked on testnet
+2026-11-11: a failing `new` cost about 0.01 NEAR in gas).
+
+NEAR in the escrow: the code (306,474 bytes at `0361b38`) locks about 3.07 NEAR; the
+rest is the free-tier pool (a free 50-seat event reserves 0.287 NEAR while open, so 5 NEAR
+covers about 17 open free events; NEAR sent to the escrow later adds to it). The script
+suggests up to 8 NEAR. It then checks the code hash, `get_config` and the empty key list,
+and registers the escrow's USDC storage (0.0125 NEAR from the deployer).
+
+Testnet dry run of this exact WASM (2026-11-11): `dry-ok1111.tp6guest2-nv1110.testnet`
+with 3.2 NEAR, key entered at the prompt; `check-release.mjs` passed.
 
 **4. Check** (read-only):
 
