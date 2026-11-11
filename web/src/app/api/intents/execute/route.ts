@@ -1,11 +1,10 @@
 import { baseDecode } from "near-api-js";
-import { secp256k1 } from "@noble/curves/secp256k1.js";
-import { keccak_256 } from "@noble/hashes/sha3.js";
 import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "@/lib/config";
 import { relayer } from "@/lib/relayer";
 import { events, MAX_CAPACITY } from "@/lib/near";
 import { cleanGuestName, setGuestName } from "@/lib/guestNames";
+import { erc191Signer } from "@/lib/erc191";
 
 // Submits a signed intent to intents.near; the relayer pays the gas.
 // Only three shapes are relayed: a registration (one `ft_withdraw` of USDC to
@@ -61,14 +60,7 @@ export async function POST(req: Request) {
       || Object.keys(intent.tokens).join() !== `nep141:${USDC_CONTRACT}`
       || !positiveAmount(intent.tokens[`nep141:${USDC_CONTRACT}`])) throw new Error();
 
-    const bytes = Buffer.from(signed.payload, "utf8");
-    const digest = keccak_256(Buffer.concat([Buffer.from(`\x19Ethereum Signed Message:\n${bytes.length}`), bytes]));
-    const signature = baseDecode(signed.signature.slice("secp256k1:".length));
-    if (signature.length !== 65 || signature[64] > 1) throw new Error();
-    const key = secp256k1.Signature.fromBytes(signature.subarray(0, 64), "compact")
-      .addRecoveryBit(signature[64]).recoverPublicKey(digest).toBytes(false);
-    const recovered = Buffer.from(keccak_256(key.subarray(1)).subarray(12)).toString("hex");
-    if (`0x${recovered}` !== signer) throw new Error();
+    if (erc191Signer(signed.payload, baseDecode(signed.signature.slice("secp256k1:".length))) !== signer) throw new Error();
   } catch {
     return Response.json({ error: "Invalid Nearvent intent or signature" }, { status: 400 });
   }
@@ -109,6 +101,12 @@ export async function POST(req: Request) {
     });
     const status = outcome.status as { Failure?: unknown };
     if (status.Failure) return Response.json({ error: "Intent rejected", detail: status.Failure }, { status: 502 });
+    // `auth_call` runs the escrow's `on_auth` detached: the transaction succeeds even when the escrow refuses.
+    const refused = hostAction && outcome.receipts_outcome.map((r) => r.outcome.status as { Failure?: unknown }).find((s) => s.Failure);
+    if (refused) {
+      const reason = JSON.stringify(refused.Failure).match(/panicked: ([^"\\]+)/)?.[1];
+      return Response.json({ error: reason ? `The escrow refused: ${reason}` : "The escrow refused this action" }, { status: 409 });
+    }
     // EVM guests have no staff token; the registration they just signed is their proof for the display name.
     const name = registration && cleanGuestName(signed.name);
     if (name) await setGuestName(registration!.eventId, signer, name).catch(() => {});

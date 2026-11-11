@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, usdc, type EventView } from "@/lib/near";
 import { HAS_INTENTS } from "@/lib/config";
 import { CashOut } from "@/components/CashOut";
-import { useWallet } from "@/lib/wallet";
+import { savedStaffToken, useWallet } from "@/lib/wallet";
 import { oneClickStatus } from "@/lib/oneclickClient";
 import { intentsUsdcBalance } from "@/lib/intents";
 import { Avatar, shortAccount } from "@/components/ui";
@@ -46,8 +46,8 @@ function MyEvents({ accountId }: { accountId: string }) {
         const now = Date.now();
         const [all, free] = await Promise.all([
           events.list(),
-          // EVM wallets have no sign-in token, so they cannot join free events: nothing to load.
-          kind === "evm" ? Promise.resolve([]) : staffToken()
+          // EVM wallets sign for a token only when they host or RSVP; don't open the wallet just to list.
+          kind === "evm" && !savedStaffToken(accountId) ? Promise.resolve([]) : staffToken()
             .then((token) => fetch("/api/free-events?mine=1", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }))
             .then(async (r) => r.ok ? (await r.json()).events as (FreeEvent & { going: boolean })[] : Promise.reject(new Error()))
             .catch((): (FreeEvent & { going: boolean })[] => {

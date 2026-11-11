@@ -118,6 +118,24 @@ export async function transferFromIntents(address: string, depositAddress: strin
   await signAndRelay(address, { intent: "transfer", receiver_id: depositAddress, tokens: { [`nep141:${USDC_CONTRACT}`]: amount } });
 }
 
+/**
+ * A host action (create_event, finalize or cancel) as an Intents `auth_call`: one signature, no gas.
+ * The escrow's `on_auth` runs it as this account; no NEAR can ride along, so only free-tier events.
+ */
+export async function hostFromIntents(address: string, msg: Record<string, unknown>): Promise<void> {
+  await signAndRelay(address, { intent: "auth_call", contract_id: EVENTS_CONTRACT, msg: JSON.stringify(msg) });
+}
+
+/** ERC-191 `personal_sign` of `text` by the wallet; returns the 0x signature. */
+export async function personalSign(address: string, text: string): Promise<string> {
+  const hexMessage = "0x" + Array.from(new TextEncoder().encode(text), (b) => b.toString(16).padStart(2, "0")).join("");
+  return (await ethereum()
+    .request({ method: "personal_sign", params: [hexMessage, address] })
+    .catch((e) => {
+      throw walletError(e);
+    })) as string;
+}
+
 /** Signs one intent with the EVM wallet (ERC-191); our relayer submits it to intents.near. */
 async function signAndRelay(address: string, intent: Record<string, unknown>, name?: string): Promise<void> {
   const payload = JSON.stringify({
@@ -127,12 +145,7 @@ async function signAndRelay(address: string, intent: Record<string, unknown>, na
     nonce: await nonce(),
     intents: [intent],
   });
-  const hexMessage = "0x" + Array.from(new TextEncoder().encode(payload), (b) => b.toString(16).padStart(2, "0")).join("");
-  const sigHex = (await ethereum()
-    .request({ method: "personal_sign", params: [hexMessage, address] })
-    .catch((e) => {
-      throw walletError(e);
-    })) as string;
+  const sigHex = await personalSign(address, payload);
   const sig = Uint8Array.from(sigHex.slice(2).match(/../g)!.map((h) => parseInt(h, 16)));
   if (sig[64] >= 27) sig[64] -= 27; // The verifier expects v in {0, 1}.
 
