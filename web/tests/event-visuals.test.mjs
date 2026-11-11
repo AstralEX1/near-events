@@ -54,7 +54,8 @@ test("saved legacy themes resolve exactly as before the Nearvent collection", ()
     bitcoin: "56ad08c1012d2e972dcd59632a653c3c221ba0dd23f246d33fa2b5007e0526cf",
     base: "bc24c1721d2b1ee6f6399def0b34af91cef2cb203d5e24c107968bca03f5d936",
     solana: "a2006665845a13bd833c5f317fd8e2781155daca94dffbdf4331087d692ab6ba",
-    paradise: "63a1d42d6b40a3ce615bb4e8cbb23d4c0febc4bf575927141d84f7f57400c5f3",
+    // Re-recorded 2026-11-11: Paradise went from 6 to 62 photos, picked by seed bits 16-31 instead of 8-11.
+    paradise: "45f900f5b5e162f9196dd61a8a38bf4cb770c3b983f840d879bc22d4a7053851",
     codex: "003aea0dcd11f85ac0f1c0039f6f3dbdb8df03e65f3c5a82000eaaf02d3192cb",
     grok: "ca5da53a974e826b0e86e1414eff691612141321ff99db38767de8b76326171a",
     hermes: "1eb670b77779d4adc31c9e0599af5d50ce3f60184ec907fe368354a5c7c0e105",
@@ -169,4 +170,12 @@ test("generated art is stable per seed and Regenerate changes only the art bits"
   }
   assert.notEqual(meshGradient(1, ["red"]), meshGradient(2, ["red"]));
   assert.ok(!meshGradient(0, ["red", "blue"]).includes("NaN"));
+});
+
+test("every Paradise photo can be picked and exists on disk", async () => {
+  const { existsSync } = await import("node:fs");
+  const photos = new Set();
+  for (let k = 0; k < 200; k++) photos.add(resolveEventVisual({ themeId: "paradise", seed: (k << 16) >>> 0 }).backgroundAsset);
+  assert.ok(photos.size >= 60, `only ${photos.size} photos`);
+  for (const photo of photos) assert.ok(existsSync(new URL(`../public${photo}`, import.meta.url)), photo);
 });

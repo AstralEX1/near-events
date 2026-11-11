@@ -585,9 +585,10 @@ function ImportSummary({ form, when, visual, imported, busy, error, note, onSubm
 }) {
   const start = fromEpoch(when.start, when.tz);
   return (
-    <form onSubmit={onSubmit} className="max-w-xl mx-auto space-y-5 pb-16">
+    <form onSubmit={onSubmit} className="gc-create-form max-w-xl mx-auto space-y-5">
       <div className="flex gap-4 items-center">
-        <EventPoster title={form.title} visual={visual} coverUrl={safeImageUrl(form.cover_url)} className="w-24 h-24 rounded-xl shrink-0 [&>span]:hidden" />
+        {/* Thumbnail only: the theme label and title would be unreadable at this size. */}
+        <EventPoster title={form.title} visual={visual} coverUrl={safeImageUrl(form.cover_url)} className="w-24 h-24 rounded-xl shrink-0 [&>div.relative]:hidden [&>span]:hidden" />
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2"><span className="text-sm text-good font-medium">✓ Imported from {imported}</span>{visibility}</div>
           <h1 className="text-2xl font-semibold tracking-tight break-words">{form.title}</h1>

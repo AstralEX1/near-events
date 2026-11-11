@@ -128,7 +128,7 @@ export function EventPoster({ title, visual, coverUrl = null, className = "" }: 
   return (
     <div className={`relative isolate overflow-hidden text-white ${className}`} style={{ containerType: "inline-size", backgroundColor: dark, backgroundImage, backgroundSize, backgroundPosition, backgroundRepeat }}>
       {icon && !safeCover && <img src={icon} alt="" aria-hidden="true" className="pointer-events-none absolute -bottom-[8%] -right-[8%] h-[62%] w-[62%] object-contain opacity-[0.16]" />}
-      <div className="relative flex items-center gap-2 px-[7%] pt-[7%] text-[clamp(0.48rem,1.5vw,0.72rem)] font-semibold uppercase tracking-[0.18em] text-white/80">
+      <div className="relative flex items-center gap-2 px-[7%] pt-[7%] text-[clamp(0.4rem,4.5cqw,0.72rem)] font-semibold uppercase tracking-[0.18em] text-white/80">
         {icon ? <img src={icon} alt="" aria-hidden="true" className="h-5 w-5 object-contain" /> : <span className="leading-none">{mark}</span>}
         <span className="leading-none">{theme.name}</span>
       </div>

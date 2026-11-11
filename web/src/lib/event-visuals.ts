@@ -60,6 +60,62 @@ const PARADISE_BACKGROUNDS = [
   "/event-themes/paradise/canggu-nomad.jpg",
   "/event-themes/paradise/canggu-surf.jpg",
   "/event-themes/paradise/canggu-coworking.png",
+  "/event-themes/paradise/ubud-tegallalang-rice-terraces.jpg",
+  "/event-themes/paradise/ubud-rice-terraces-at-dawn.jpg",
+  "/event-themes/paradise/ubud-green-terraces.jpg",
+  "/event-themes/paradise/canggu-rice-fields-at-sunrise.jpg",
+  "/event-themes/paradise/ubud-house-in-the-jungle.jpg",
+  "/event-themes/paradise/jungle-from-above.jpg",
+  "/event-themes/paradise/jungle-road-through-palm-trees.jpg",
+  "/event-themes/paradise/canggu-fields-and-palm-trees.jpg",
+  "/event-themes/paradise/ubud-green-field.jpg",
+  "/event-themes/paradise/temple-ulun-danu-bratan-at-golden-hour.jpg",
+  "/event-themes/paradise/temple-ulun-danu-bratan.jpg",
+  "/event-themes/paradise/temple-tanah-lot-at-golden-hour.jpg",
+  "/event-themes/paradise/temple-balinese-split-gate.jpg",
+  "/event-themes/paradise/temple-lake-temple.jpg",
+  "/event-themes/paradise/temple-in-the-trees.jpg",
+  "/event-themes/paradise/temple-rock-arch-temple-at-sunset.jpg",
+  "/event-themes/paradise/penida-beach.jpg",
+  "/event-themes/paradise/penida-beach-from-above.jpg",
+  "/event-themes/paradise/penida-island-ridge.jpg",
+  "/event-themes/paradise/penida-coast-from-above.jpg",
+  "/event-themes/paradise/uluwatu-rocks.jpg",
+  "/event-themes/paradise/uluwatu-cliffs-and-blue-sea.jpg",
+  "/event-themes/paradise/uluwatu-ocean-cliff.jpg",
+  "/event-themes/paradise/uluwatu-beach-from-above.jpg",
+  "/event-themes/paradise/uluwatu-rocks-at-sunset.jpg",
+  "/event-themes/paradise/uluwatu-high-cliff-view.jpg",
+  "/event-themes/paradise/uluwatu-beach-and-cliff-from-above.jpg",
+  "/event-themes/paradise/penida-rocks-in-a-blue-sea.jpg",
+  "/event-themes/paradise/penida-green-headland.jpg",
+  "/event-themes/paradise/canggu-surfer-at-sunset.jpg",
+  "/event-themes/paradise/canggu-surfer-walking-at-sunset.jpg",
+  "/event-themes/paradise/beach-palm-silhouette-on-the-beach.jpg",
+  "/event-themes/paradise/beach-sunset.jpg",
+  "/event-themes/paradise/sunset-and-mountain.jpg",
+  "/event-themes/paradise/sunset-boat-at-sunset.jpg",
+  "/event-themes/paradise/seminyak-waves-at-sunset.jpg",
+  "/event-themes/paradise/surf-session.jpg",
+  "/event-themes/paradise/surf-paddling-out.jpg",
+  "/event-themes/paradise/beach-with-palms.jpg",
+  "/event-themes/paradise/villa-pool-facing-the-ocean.jpg",
+  "/event-themes/paradise/batur-volcano-above-the-clouds.jpg",
+  "/event-themes/paradise/batur-volcano-at-sunset.jpg",
+  "/event-themes/paradise/waterfall-jungle-waterfall.jpg",
+  "/event-themes/paradise/waterfall-long-exposure.jpg",
+  "/event-themes/paradise/waterfall-forest-waterfall.jpg",
+  "/event-themes/paradise/waterfall-green-waterfall.jpg",
+  "/event-themes/paradise/villa-pool-in-the-trees.jpg",
+  "/event-themes/paradise/cafe-rustic-cafe.jpg",
+  "/event-themes/paradise/cafe-patio-by-the-water.jpg",
+  "/event-themes/paradise/cafe-wicker-chairs.jpg",
+  "/event-themes/paradise/villa-from-above.jpg",
+  "/event-themes/paradise/gili-white-sand-beach.jpg",
+  "/event-themes/paradise/gili-island-coast-from-above.jpg",
+  "/event-themes/paradise/gili-beach-from-above.jpg",
+  "/event-themes/paradise/gili-boats-from-above.jpg",
+  "/event-themes/paradise/ubud-scooter-ride.jpg",
 ] as const;
 const AI_TEXTURE_SHEET = "/event-themes/ai/ai-brand-panels.png";
 const AI_PANEL_POSITION: Partial<Record<EventThemeId, string>> = {
@@ -207,11 +263,9 @@ function withSeedField(seed: number, shift: number, modulus: number, target: num
 export function withVisualOptions(config: EventVisualConfig, options: { variant?: number; layout?: number; font?: number }): EventVisualConfig {
   const seed = config.seed >>> 0;
   const font = options.font ?? (seed >>> 12) % FONTS.length;
-  const photo = (seed >>> 8) % PARADISE_BACKGROUNDS.length;
   const layout = options.layout ?? (seed >>> 4) % EVENT_LAYOUTS.length;
   const variant = options.variant ?? seed % 3;
   let next = withSeedField(seed, 12, FONTS.length, font);
-  next = withSeedField(next, 8, PARADISE_BACKGROUNDS.length, photo);
   next = withSeedField(next, 4, EVENT_LAYOUTS.length, layout);
   next = withSeedField(next, 0, 3, variant);
   return { themeId: config.themeId, seed: next };
@@ -238,7 +292,8 @@ export function resolveEventVisual(config: EventVisualConfig): ResolvedEventVisu
   const layout = EVENT_LAYOUTS[(safeSeed >>> 4) % 3];
   const font = (safeSeed >>> 12) % FONTS.length;
   const aiPanel = AI_PANEL_POSITION[theme.id] ?? null;
-  const paradiseImage = theme.id === "paradise" ? PARADISE_BACKGROUNDS[(safeSeed >>> 8) % PARADISE_BACKGROUNDS.length] : null;
+  // The photo comes from the art bits (16-31), which colour, font and title position never touch.
+  const paradiseImage = theme.id === "paradise" ? PARADISE_BACKGROUNDS[(safeSeed >>> 16) % PARADISE_BACKGROUNDS.length] : null;
   return {
     config: { themeId: theme.id, seed: safeSeed },
     theme,
