@@ -42,7 +42,7 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
         Connect a NEAR wallet
       </button>
       {/* EVM wallets sign in through NEAR Intents (intents.near; Tidepool's verifier on testnet). */}
-      {/* Several EVM options (two extensions, or one plus WalletConnect): one button each, like the NEAR Intents app. */}
+      {/* Several extensions (EIP-6963): one button each, like the NEAR Intents app. */}
       {HAS_INTENTS &&
         (evm.length > 1 ? (
           evm.map((w) => (

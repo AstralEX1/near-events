@@ -42,5 +42,3 @@ export const FASTAUTH_CLIENT_ID: string | null =
  * and our relayer pays the gas. Testnet accounts get 0.5 NEAR and pay their own.
  */
 export const FASTAUTH_META_TX = MAINNET;
-/** WalletConnect (Reown) project id: EVM wallet apps on phones. Without it only browser-extension wallets work. */
-export const WALLETCONNECT_PROJECT_ID: string | null = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || null;

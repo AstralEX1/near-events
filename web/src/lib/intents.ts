@@ -5,10 +5,8 @@
 // They never hold NEAR: they sign intents with their wallet (ERC-191) and our
 // relayer submits them to intents.near, paying the gas.
 import { baseEncode } from "near-api-js";
-import type EthereumProvider from "@walletconnect/ethereum-provider";
-import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT, WALLETCONNECT_PROJECT_ID } from "./config";
+import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "./config";
 import { events, view } from "./near";
-import { EVM_CHAIN_IDS } from "./oneclickClient";
 import type { Call } from "./wallet";
 
 interface Eip1193 {
@@ -25,9 +23,7 @@ if (typeof window !== "undefined") {
   window.dispatchEvent(new Event("eip6963:requestProvider"));
 }
 
-/** A wallet app on a phone, paired through WalletConnect: QR code on a computer, wallet list on a phone. */
-export const WALLETCONNECT = "walletconnect";
-/** The wallet this browser signed in with: WALLETCONNECT, an extension's rdns, or "injected" (`window.ethereum`). */
+/** The wallet this browser signed in with: an extension's rdns, or "injected" (`window.ethereum`). */
 const WALLET_KEY = "near-events:evm-wallet";
 
 export interface EvmWallet {
@@ -38,32 +34,11 @@ export interface EvmWallet {
 
 const injected = () => (window as unknown as { ethereum?: Eip1193 }).ethereum;
 
-/** Wallets to offer at sign-in: each extension (or the one `window.ethereum`), then WalletConnect when it is set up. */
+/** Wallets to offer at sign-in: each extension, or the one `window.ethereum`. */
 export function evmWallets(): EvmWallet[] {
   const list: EvmWallet[] = [...extensions.values()].map(({ info }) => ({ id: info.rdns, name: info.name, icon: info.icon }));
   if (!list.length && injected()) list.push({ id: "injected", name: "Browser wallet" });
-  if (WALLETCONNECT_PROJECT_ID) list.push({ id: WALLETCONNECT, name: "WalletConnect" });
   return list;
-}
-
-let wc: Promise<EthereumProvider> | null = null;
-// Same setup as the NEAR Intents app (wagmi's walletConnect connector): Reown's own QR / wallet-list modal.
-function walletConnect(): Promise<EthereumProvider> {
-  wc ??= import("@walletconnect/ethereum-provider")
-    .then(({ EthereumProvider }) =>
-      EthereumProvider.init({
-        projectId: WALLETCONNECT_PROJECT_ID!,
-        optionalChains: Object.values(EVM_CHAIN_IDS) as [number, ...number[]],
-        showQrModal: true,
-        qrModalOptions: { themeVariables: { "--wcm-accent-color": "#d61f69", "--wcm-z-index": "1000" } },
-        metadata: { name: "Nearvent", description: "Events with a USDC deposit", url: location.origin, icons: [`${location.origin}/apple-icon.png`] },
-      }),
-    )
-    .catch((e) => {
-      wc = null;
-      throw e;
-    });
-  return wc;
 }
 
 function savedWallet(): string | null {
@@ -75,12 +50,7 @@ function savedWallet(): string | null {
 }
 
 /** The one EIP-1193 provider every EVM call goes through: the wallet picked at sign-in. */
-async function ethereum(id = savedWallet()): Promise<Eip1193> {
-  if (id === WALLETCONNECT) {
-    const p = await walletConnect();
-    if (!p.session) throw new Error("Your wallet app is no longer connected. Sign out and connect it again.");
-    return p;
-  }
+function ethereum(id = savedWallet()): Eip1193 {
   const eth = (id && extensions.get(id)?.provider) || injected();
   if (!eth) throw new Error("No EVM wallet found. Install MetaMask, Rabby or another browser wallet.");
   return eth;
@@ -104,17 +74,10 @@ let connecting: Promise<string> | null = null;
 export function connectEvm(id = "injected"): Promise<string> {
   connecting ??= (async () => {
     try {
-      let address: string | undefined;
-      if (id === WALLETCONNECT) {
-        const p = await walletConnect();
-        if (!p.session) await p.connect(); // opens Reown's modal; rejects if the guest closes it
-        address = p.accounts[0];
-      } else {
-        const eth = await ethereum(id);
-        // Already approved for this site: no pop-up at all.
-        [address] = ((await eth.request({ method: "eth_accounts" }).catch(() => [])) as string[]) ?? [];
-        address ??= ((await eth.request({ method: "eth_requestAccounts" })) as string[])[0];
-      }
+      const eth = ethereum(id);
+      // Already approved for this site: no pop-up at all.
+      let [address] = ((await eth.request({ method: "eth_accounts" }).catch(() => [])) as string[]) ?? [];
+      address ??= ((await eth.request({ method: "eth_requestAccounts" })) as string[])[0];
       if (!address) throw new Error("Wallet returned no address");
       try {
         localStorage.setItem(WALLET_KEY, id);
@@ -131,16 +94,15 @@ export function connectEvm(id = "injected"): Promise<string> {
 
 export async function evmAccount(): Promise<string | null> {
   try {
-    const [address] = (await (await ethereum()).request({ method: "eth_accounts" })) as string[];
+    const [address] = (await ethereum().request({ method: "eth_accounts" })) as string[];
     return address?.toLowerCase() ?? null;
   } catch {
     return null;
   }
 }
 
-/** Sign-out: ends a WalletConnect session so the next sign-in can pick another wallet (extensions stay approved). */
-export async function disconnectEvm(): Promise<void> {
-  if (savedWallet() === WALLETCONNECT) await (await walletConnect()).disconnect().catch(() => {});
+/** Sign-out: forget the picked wallet so the next sign-in can pick another (extensions stay approved). */
+export function disconnectEvm(): void {
   try {
     localStorage.removeItem(WALLET_KEY);
   } catch {}
@@ -148,7 +110,7 @@ export async function disconnectEvm(): Promise<void> {
 
 /** Sends one transaction from the EVM wallet on `chainId` (switching network first); returns its hash. */
 export async function sendFromEvm(chainId: number, tx: object): Promise<string> {
-  const eth = await ethereum();
+  const eth = ethereum();
   try {
     await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: `0x${chainId.toString(16)}` }] });
     return (await eth.request({ method: "eth_sendTransaction", params: [tx] })) as string;
@@ -226,7 +188,7 @@ export async function hostFromIntents(address: string, msg: Record<string, unkno
 /** ERC-191 `personal_sign` of `text` by the wallet; returns the 0x signature. */
 export async function personalSign(address: string, text: string): Promise<string> {
   const hexMessage = "0x" + Array.from(new TextEncoder().encode(text), (b) => b.toString(16).padStart(2, "0")).join("");
-  return (await (await ethereum())
+  return (await ethereum()
     .request({ method: "personal_sign", params: [hexMessage, address] })
     .catch((e) => {
       throw walletError(e);

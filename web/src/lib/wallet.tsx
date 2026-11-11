@@ -221,7 +221,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch {}
     if (kind === "demo") demoLogout();
     else if (kind === "email") await fastAuthLogout();
-    else if (kind === "evm") await disconnectEvm();
+    else if (kind === "evm") disconnectEvm();
     else await connector.current?.disconnect().catch(() => {});
     remember(null, null);
     if (kind === "demo") window.location.reload(); // back to the real events
