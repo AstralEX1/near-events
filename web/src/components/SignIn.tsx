@@ -3,12 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@/lib/wallet";
 import { FASTAUTH_CLIENT_ID, HAS_INTENTS } from "@/lib/config";
+import { evmWallets, type EvmWallet } from "@/lib/intents";
 
 /** The ways in: Google/email (no crypto needed), a NEAR wallet, or an EVM wallet via NEAR Intents. */
 export function SignInOptions({ onDone }: { onDone?: () => void }) {
   const { ready, signIn, signInWithEmail, signInWithEvm, signInWithDemo } = useWallet();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Read after mount: extensions announce themselves only in the browser.
+  const [evm, setEvm] = useState<EvmWallet[]>([]);
+  useEffect(() => setEvm(evmWallets()), []);
 
   const run = (fn: () => Promise<void>, label: string) => async () => {
     setBusy(label);
@@ -38,11 +42,21 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
         Connect a NEAR wallet
       </button>
       {/* EVM wallets sign in through NEAR Intents (intents.near; Tidepool's verifier on testnet). */}
-      {HAS_INTENTS && (
-        <button className="btn btn-ghost w-full" disabled={!ready || busy !== null} onClick={run(signInWithEvm, "evm")}>
-          MetaMask, Rabby or another EVM wallet
-        </button>
-      )}
+      {/* Several EVM options (two extensions, or one plus WalletConnect): one button each, like the NEAR Intents app. */}
+      {HAS_INTENTS &&
+        (evm.length > 1 ? (
+          evm.map((w) => (
+            <button key={w.id} className="btn btn-ghost w-full" disabled={!ready || busy !== null} onClick={run(() => signInWithEvm(w.id), w.id)}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- the wallet's own data-URI icon */}
+              {w.icon && <img src={w.icon} alt="" className="mr-2 inline h-4 w-4 align-[-2px]" />}
+              {w.name}
+            </button>
+          ))
+        ) : (
+          <button className="btn btn-ghost w-full" disabled={!ready || busy !== null} onClick={run(() => signInWithEvm(evm[0]?.id), "evm")}>
+            MetaMask, Rabby or another EVM wallet
+          </button>
+        ))}
       {/* Demo mode: made-up events and money in this browser, no server and no chain. */}
       <button className="btn btn-ghost w-full" disabled={!ready || busy !== null} onClick={run(signInWithDemo, "demo")}>
         {busy === "demo" ? "Setting up…" : "Try with a demo account"}

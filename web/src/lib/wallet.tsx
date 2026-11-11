@@ -5,7 +5,7 @@ import type { NearConnector } from "@hot-labs/near-connect";
 import { EVENTS_CONTRACT, NETWORK } from "./config";
 import { STAFF_MESSAGE, evmStaffMessage } from "./staffShared";
 import { useRouter } from "next/navigation";
-import { connectEvm, evmAccount, hostFromIntents, personalSign } from "./intents";
+import { connectEvm, disconnectEvm, evmAccount, hostFromIntents, personalSign } from "./intents";
 import { FREE_MAX_CAPACITY, FREE_MAX_DAYS, FREE_MAX_EVENTS } from "./near";
 import { RETURN_KEY, fastAuthEnsure, fastAuthLogin, fastAuthLogout, fastAuthPrepare, fastAuthProve, fastAuthRestore, fastAuthSend } from "./fastauth";
 import { demoLogin, demoLogout, demoRestore, demoSend } from "./demoBackend";
@@ -49,8 +49,8 @@ interface WalletState {
   signIn: () => Promise<void>;
   /** Google / email / passkey via NEAR Auth. */
   signInWithEmail: () => Promise<void>;
-  /** EVM wallet; the account is the wallet's NEAR Intents account (mainnet). */
-  signInWithEvm: () => Promise<void>;
+  /** EVM wallet (one of `evmWallets()`); the account is the wallet's NEAR Intents account. */
+  signInWithEvm: (wallet?: string) => Promise<void>;
   /** Demo mode: made-up events and money kept in this browser; nothing reaches the server or the chain. */
   signInWithDemo: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -205,8 +205,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     remember("email", id);
   }, []);
 
-  const signInWithEvm = useCallback(async () => {
-    remember("evm", await connectEvm());
+  const signInWithEvm = useCallback(async (wallet?: string) => {
+    remember("evm", await connectEvm(wallet));
   }, []);
 
   const signInWithDemo = useCallback(async () => {
@@ -221,6 +221,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch {}
     if (kind === "demo") demoLogout();
     else if (kind === "email") await fastAuthLogout();
+    else if (kind === "evm") await disconnectEvm();
     else await connector.current?.disconnect().catch(() => {});
     remember(null, null);
     if (kind === "demo") window.location.reload(); // back to the real events
