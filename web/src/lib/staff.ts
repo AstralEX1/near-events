@@ -7,6 +7,7 @@
 // - NEAR wallet: a NEP-413 signed message, made with a full-access key of the account.
 // - Google/email (NEAR Auth): a transaction signed by the account's MPC key and
 //   never sent. These accounts are implicit, so the id is the public key.
+// - EVM wallet (NEAR Intents account, the 0x address): an ERC-191 `personal_sign`.
 import "server-only";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { JsonRpcProvider, baseDecode, decodeTransaction } from "near-api-js";
@@ -14,7 +15,8 @@ import { verifyMessage } from "near-api-js/nep413";
 import { EVENTS_CONTRACT, RPC_URL } from "./config";
 import { events } from "./near";
 import { getCohosts } from "./cohosts";
-import { STAFF_MESSAGE, STAFF_PROOF_METHOD } from "./staffShared";
+import { STAFF_MESSAGE, STAFF_PROOF_METHOD, evmStaffMessage } from "./staffShared";
+import { erc191Signer } from "./erc191";
 
 // Stay signed in like Luma/Unlock sessions instead of re-signing every 12 h. Signing out drops it locally.
 const TOKEN_TTL_S = 30 * 24 * 60 * 60;
@@ -98,4 +100,21 @@ export async function verifyMpcProof(p: MpcProof): Promise<string> {
   const hash = createHash("sha256").update(raw).digest();
   if (!key.verify(hash, new Uint8Array(Buffer.from(p.signature, "base64")))) throw new Error("Bad signature");
   return tx.signerId;
+}
+
+export interface EvmProof {
+  address: string;
+  /** ms timestamp inside the signed message. */
+  at: number;
+  /** 0x hex from `personal_sign`. */
+  signature: string;
+}
+
+export function verifyEvmProof(p: EvmProof): string {
+  if (!/^0x[0-9a-f]{40}$/.test(p.address) || !Number.isSafeInteger(p.at) || !/^0x[0-9a-f]{130}$/i.test(p.signature)) throw new Error("Bad proof");
+  if (Math.abs(Date.now() - p.at) > PROOF_MAX_AGE_MS) throw new Error("Sign-in expired, try again");
+  const signature = Buffer.from(p.signature.slice(2), "hex");
+  if (signature[64] >= 27) signature[64] -= 27;
+  if (erc191Signer(evmStaffMessage(p.address, p.at), signature) !== p.address) throw new Error("Bad signature");
+  return p.address;
 }

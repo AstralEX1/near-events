@@ -3,9 +3,10 @@
 import { createContext, startTransition, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { NearConnector } from "@hot-labs/near-connect";
 import { EVENTS_CONTRACT, NETWORK } from "./config";
-import { STAFF_MESSAGE } from "./staffShared";
+import { STAFF_MESSAGE, evmStaffMessage } from "./staffShared";
 import { useRouter } from "next/navigation";
-import { connectEvm, evmAccount } from "./intents";
+import { connectEvm, evmAccount, hostFromIntents, personalSign } from "./intents";
+import { FREE_MAX_CAPACITY, FREE_MAX_DAYS, FREE_MAX_EVENTS } from "./near";
 import { RETURN_KEY, fastAuthEnsure, fastAuthLogin, fastAuthLogout, fastAuthPrepare, fastAuthProve, fastAuthRestore, fastAuthSend } from "./fastauth";
 import { demoLogin, demoLogout, demoRestore, demoSend } from "./demoBackend";
 
@@ -58,7 +59,8 @@ interface WalletState {
   /**
    * A server token for signed-in saves (free events, RSVPs, names, door check-in).
    * NEAR wallets sign one message during sign-in; Google/email proves once with an
-   * unsent transaction. The token is reused for 11 hours.
+   * unsent transaction; EVM wallets sign one message the first time it is needed.
+   * The token is reused for 30 days.
    */
   staffToken: () => Promise<string>;
 }
@@ -241,7 +243,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         for (const call of calls) await fastAuthSend(call);
         return;
       }
-      if (kind === "evm") throw new Error("EVM wallets can register and withdraw. Hosting an event needs a NEAR account: sign out and sign in with Google or a NEAR wallet.");
+      // EVM wallets act on the escrow through NEAR Intents (`auth_call` → `on_auth`); the relayer pays the gas.
+      if (kind === "evm") {
+        for (const call of calls) {
+          if (call.receiverId !== EVENTS_CONTRACT || !["create_event", "finalize", "cancel"].includes(call.methodName)) {
+            throw new Error("EVM wallets can't do this here. Sign in with Google or a NEAR wallet.");
+          }
+          if (call.methodName === "create_event" && (call.deposit ?? 0n) > 0n) {
+            throw new Error(`EVM wallets can create free-tier events only: up to ${FREE_MAX_CAPACITY} seats, ${FREE_MAX_EVENTS} in 30 days, ending within ${FREE_MAX_DAYS} days.`);
+          }
+          await hostFromIntents(accountId, { action: call.methodName, ...call.args });
+        }
+        return;
+      }
 
       const c = connector.current;
       if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");
@@ -302,7 +316,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");
       return proveWallet(c, accountId);
     }
-    throw new Error("This needs a NEAR wallet or a Google/email account. EVM wallets can register for paid events and withdraw.");
+    if (kind === "evm") {
+      const at = Date.now();
+      const signature = await personalSign(accountId, evmStaffMessage(accountId, at));
+      return exchangeProof({ evm: { address: accountId, at, signature } }, accountId);
+    }
+    throw new Error("Sign out and sign in again.");
   }, [kind, accountId]);
 
   return (

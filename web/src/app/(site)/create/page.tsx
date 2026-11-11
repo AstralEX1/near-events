@@ -49,7 +49,7 @@ function CreateRoute() {
 
 /** Create an event with its public details and escrow options. */
 function CreateEvent() {
-  const { accountId, send, staffToken } = useWallet();
+  const { accountId, kind, send, staffToken } = useWallet();
   // Host's own cover photo as a JPEG data URL; uploaded after the event is created.
   const [photo, setPhoto] = useState<string | null>(null);
   const router = useRouter();
@@ -204,7 +204,7 @@ function CreateEvent() {
   }, [free, accountId, seats, seatsOk, endsAt]);
   const costNote = storageCost !== "0" && (
     <p className="text-sm text-muted">
-      Created at your expense: ~{formatNear(storageCost)} NEAR (storage). Free events are up to {FREE_MAX_CAPACITY} seats, {FREE_MAX_EVENTS} per 30 days, ending within {FREE_MAX_DAYS} days.
+      {kind === "evm" ? "EVM wallets can create free-tier events only." : `Created at your expense: ~${formatNear(storageCost)} NEAR (storage).`} Free events are up to {FREE_MAX_CAPACITY} seats, {FREE_MAX_EVENTS} per 30 days, ending within {FREE_MAX_DAYS} days.
     </p>
   );
 
