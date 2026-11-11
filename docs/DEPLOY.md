@@ -14,7 +14,8 @@ documented here.
 
 Everything below that spends real NEAR or USDC is Alex's to run: the deploy,
 funding the accounts and the paid checks. Claude prepared the code, scripts and
-read-only checks; no mainnet transaction has been sent.
+read-only checks. Alex ran the escrow deploy on 2026-11-11 (step 3); the relayer,
+the site switch and the paid checks are still open.
 
 **What is ready (2026-11-10).**
 - `web/src/lib/config.ts`: with `NEXT_PUBLIC_NETWORK=mainnet` the app uses native
@@ -89,6 +90,18 @@ and registers the escrow's USDC storage (0.0125 NEAR from the deployer).
 
 Testnet dry run of this exact WASM (2026-11-11): `dry-ok1111.tp6guest2-nv1110.testnet`
 with 3.2 NEAR, key entered at the prompt; `check-release.mjs` passed.
+
+**Mainnet deploy (2026-11-11, run by Alex).** `escrow.lold.near`, owner and deployer
+`lold.near`, relayer `event_relayer.near` (not funded yet). WASM: CI `escrow-wasm` artifact
+of `0361b38` (run 42952342637), SHA-256
+`64e50a1a50efb49ab093715d3d1066f40da22855d25d89432b697f902f5d0693`, NEAR code hash
+`7nrLLgzcUP1NUyUcKACekuq1EoEXWe5jW5a314HiVjm4`. 5.26 NEAR in the escrow (code storage
+306,795 B ≈ 3.07 NEAR, ≈ 2.19 NEAR free-tier pool). Transactions: create
+[`7kTGjWvnBGepRahJ3bPxziKpPA3sojG7Siavy6MG1qdo`](https://nearblocks.io/txns/7kTGjWvnBGepRahJ3bPxziKpPA3sojG7Siavy6MG1qdo),
+deploy + `new` + delete key
+[`Br4HMemQfN4WhqoVDchoPQ66XeWcis7onxxJB1gXeGt6`](https://nearblocks.io/txns/Br4HMemQfN4WhqoVDchoPQ66XeWcis7onxxJB1gXeGt6).
+`check-release.mjs` passed every check except the relayer balance (0 NEAR); whitelist mode
+is off and the code is not frozen.
 
 **4. Check** (read-only):
 
