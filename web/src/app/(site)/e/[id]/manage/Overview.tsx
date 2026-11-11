@@ -542,7 +542,7 @@ function HostsSection({ event, isHost, doorTeam, onSave, onGuests }: {
       {editing && (
         <div className="card p-3 sm:p-4 space-y-2">
           <label className="block space-y-1 text-sm">
-            <span>NEAR accounts that can check guests in, separated by commas</span>
+            <span>NEAR accounts or 0x addresses that can check guests in, separated by commas</span>
             <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="alice.near, bob.near" />
           </label>
           {error && <p role="alert" className="text-sm text-warn break-words">{error}</p>}

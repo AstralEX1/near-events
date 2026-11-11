@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     if (!event) return Response.json({ error: "Event not found" }, { status: 404 });
     if (event.host !== accountId) return Response.json({ error: "Only the event host can change the door team" }, { status: 403 });
     const cohosts = normalizeCohosts(body.cohosts, event.host);
-    if (!cohosts) return Response.json({ error: "Use up to 10 NEAR accounts" }, { status: 400 });
+    if (!cohosts) return Response.json({ error: "Use up to 10 NEAR accounts or 0x addresses" }, { status: 400 });
     await saveCohosts(body.eventId!, cohosts);
     return Response.json({ ok: true, cohosts });
   } catch {

@@ -25,6 +25,7 @@ function walletError(e: unknown): Error {
   if (code === -32002)
     return new Error("Your wallet already has a request open. Click the wallet icon in your browser, finish or close it, then try again.");
   if (code === 4001) return new Error("You declined in your wallet. Try again when ready.");
+  if (code === 4902) return new Error("Your wallet doesn't have this network yet. Add it in the wallet, or pick a token on another network.");
   return e instanceof Error ? e : new Error(String((e as { message?: string })?.message ?? e));
 }
 
@@ -57,6 +58,17 @@ export async function evmAccount(): Promise<string | null> {
     return address?.toLowerCase() ?? null;
   } catch {
     return null;
+  }
+}
+
+/** Sends one transaction from the EVM wallet on `chainId` (switching network first); returns its hash. */
+export async function sendFromEvm(chainId: number, tx: object): Promise<string> {
+  const eth = ethereum();
+  try {
+    await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: `0x${chainId.toString(16)}` }] });
+    return (await eth.request({ method: "eth_sendTransaction", params: [tx] })) as string;
+  } catch (e) {
+    throw walletError(e);
   }
 }
 

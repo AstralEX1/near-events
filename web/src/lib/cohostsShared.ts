@@ -26,5 +26,5 @@ export function cohostsProblem(text: string): string | null {
   const list = splitCohosts(text);
   if (list.length > MAX_COHOSTS) return `Up to ${MAX_COHOSTS} people can be on the door team.`;
   const bad = list.find((a) => !ACCOUNT_ID.test(a));
-  return bad ? `${bad.slice(0, 40)} is not a NEAR account.` : null;
+  return bad ? `${bad.slice(0, 40)} is not a NEAR account or 0x address.` : null;
 }

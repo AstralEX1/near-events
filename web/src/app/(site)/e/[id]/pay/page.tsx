@@ -7,10 +7,8 @@ import { events, formatUsdc, isTicket, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT, LIVE_EVENT_SWAPS } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import type { OneClickToken } from "@/lib/oneclick";
-import { nep141Contract, oneClickQuote, oneClickTokens, payDepositAddress, USDC_ASSET, waitForSwap, type Quote } from "@/lib/oneclickClient";
-
-
-import { confirmRegistration, intentsUsdcBalance, registerFromIntents, withdrawIntentsCall } from "@/lib/intents";
+import { EVM_CHAIN_IDS, evmDepositTx, nep141Contract, oneClickQuote, oneClickTokens, payDepositAddress, USDC_ASSET, waitForSwap, type Quote } from "@/lib/oneclickClient";
+import { confirmRegistration, intentsUsdcBalance, registerFromIntents, sendFromEvm, withdrawIntentsCall } from "@/lib/intents";
 import { embedReturnPath } from "@/lib/embed";
 import { guestNamesApi } from "@/lib/guestNamesClient";
 
@@ -86,6 +84,9 @@ export default function PayFromAnyChain() {
   const token = useMemo(() => tokens.find((t) => t.assetId === assetId), [tokens, assetId]);
   // A NEP-141 token on NEAR can be paid from the signed-in NEAR wallet in one confirmation.
   const fromWallet = !!accountId && kind !== "evm" && token?.blockchain === "near" && !!nep141Contract(assetId);
+  // An EVM wallet pays tokens on EVM chains itself, and its own address takes any refund.
+  const evmChain = accountId && kind === "evm" ? EVM_CHAIN_IDS[token?.blockchain ?? ""] : undefined;
+  const ownRefund = fromWallet || !!evmChain;
 
   useEffect(() => {
     if (!quote?.depositAddress || !accountId) return;
@@ -149,7 +150,7 @@ export default function PayFromAnyChain() {
         depositType: "ORIGIN_CHAIN",
         destinationAsset: USDC_ASSET,
         amount: event.deposit,
-        refundTo: fromWallet ? accountId : refundTo.trim() || "0x0000000000000000000000000000000000000000",
+        refundTo: ownRefund ? accountId : refundTo.trim() || "0x0000000000000000000000000000000000000000",
         refundType: "ORIGIN_CHAIN",
         recipient: accountId,
         recipientType: "INTENTS",
@@ -211,13 +212,13 @@ export default function PayFromAnyChain() {
             ))}
           </select>
         </label>
-        {live && !fromWallet && (
+        {live && !ownRefund && (
           <label className="block space-y-1.5">
             <span className="label">Your {token?.blockchain} address for refunds</span>
             <input className="input font-mono text-sm" value={refundTo} onChange={(e) => setRefundTo(e.target.value)} placeholder="0x…" />
           </label>
         )}
-        <button className="btn btn-primary w-full" disabled={busy || !assetId || !!quote?.depositAddress || (live && (!canRegister || (!!accountId && !fromWallet && !refundTo.trim())))} onClick={getQuote}>
+        <button className="btn btn-primary w-full" disabled={busy || !assetId || !!quote?.depositAddress || (live && (!canRegister || (!!accountId && !ownRefund && !refundTo.trim())))} onClick={getQuote}>
           {!accountId ? "Sign in first" : busy ? "Getting quote…" : live ? "Get deposit address" : "Get quote"}
         </button>
 
@@ -232,7 +233,7 @@ export default function PayFromAnyChain() {
                 <div className="text-muted">Send exactly {quote.amountInFormatted} {token?.symbol} on {token?.blockchain} to:</div>
                 <div className="font-mono break-all text-text">{quote.depositAddress}</div>
                 {quote.depositMemo && <div className="text-muted">Memo: <span className="font-mono">{quote.depositMemo}</span></div>}
-                {fromWallet && !walletSent && !quote.depositMemo && (!status || status === "PENDING_DEPOSIT") && (
+                {ownRefund && !walletSent && !quote.depositMemo && (!status || status === "PENDING_DEPOSIT") && (
                   <button
                     className="btn btn-accent w-full my-2"
                     disabled={busy}
@@ -240,7 +241,8 @@ export default function PayFromAnyChain() {
                       setBusy(true);
                       setError(null);
                       try {
-                        await send(payDepositAddress(nep141Contract(assetId)!, quote.depositAddress!, quote.amountIn));
+                        if (evmChain) await sendFromEvm(evmChain, evmDepositTx(accountId!, token!, quote.depositAddress!, quote.amountIn));
+                        else await send(payDepositAddress(nep141Contract(assetId)!, quote.depositAddress!, quote.amountIn));
                         setWalletSent(true);
                         try { sessionStorage.setItem(paymentKey, JSON.stringify({ quote, assetId, sent: true })); } catch { /* Optional. */ }
                       } catch (e) {
@@ -250,7 +252,7 @@ export default function PayFromAnyChain() {
                       }
                     }}
                   >
-                    Send from my NEAR wallet
+                    {evmChain ? "Send from my wallet" : "Send from my NEAR wallet"}
                   </button>
                 )}
                 <button className="btn btn-ghost" onClick={() => { setError(null); setTracking((n) => n + 1); }}>Check payment</button>

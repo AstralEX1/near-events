@@ -534,7 +534,7 @@ function CreateEvent() {
                 value={splitCohosts(form.cohosts).length ? `${splitCohosts(form.cohosts).length} people` : "Just you"}
                 title="Door team"
                 attention={!!doorTeamProblem}
-                help="NEAR accounts that can check guests in, separated by commas. You can change this later in Manage."
+                help="NEAR accounts or 0x addresses that can check guests in, separated by commas. You can change this later in Manage."
               >
                 <input className="input" value={form.cohosts} onChange={(e) => set("cohosts")(e.target.value)} placeholder="alice.near, bob.near" />
               </OptionRow>}
@@ -639,7 +639,7 @@ function SignInDialog({ onClose }: { onClose: () => void }) {
             <Icon d="M10 17l5-5-5-5M15 12H3M14 3h5a2 2 0 012 2v14a2 2 0 01-2 2h-5" size={18} />
           </div>
           <div className="text-lg font-semibold">Sign in to create</div>
-          <p className="text-sm text-muted">Your event stays filled in. A NEAR wallet or Google/email both work.</p>
+          <p className="text-sm text-muted">Your event stays filled in. A NEAR wallet, Google/email or an EVM wallet all work.</p>
         </div>
         <SignInOptions />
         <p className="text-[11px] text-muted/80">Free up to {FREE_MAX_CAPACITY} seats and {FREE_MAX_EVENTS} events per 30 days.</p>
