@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, startTransition, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { NearConnector } from "@hot-labs/near-connect";
 import { EVENTS_CONTRACT, NETWORK } from "./config";
 import { STAFF_MESSAGE } from "./staffShared";
@@ -154,15 +154,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       } catch {}
       fastAuthPrepare().catch(() => {});
       const returningFromAuth0 = new URLSearchParams(window.location.search).has("code");
+      // A transition lets the page finish hydrating before the restored account re-renders it
+      // (an urgent update here breaks hydration of the signed-out server HTML).
+      const restore = (k: Kind, id: string) => startTransition(() => remember(k, id));
       if (saved === "demo") {
         const id = demoRestore();
-        if (!cancelled && id) remember("demo", id);
+        if (!cancelled && id) restore("demo", id);
       } else if (saved === "evm") {
         const id = await evmAccount();
-        if (!cancelled && id) remember("evm", id);
+        if (!cancelled && id) restore("evm", id);
       } else if (saved === "email" || returningFromAuth0) {
         const id = await fastAuthRestore();
-        if (!cancelled && id) remember("email", id);
+        if (!cancelled && id) restore("email", id);
         const back = returningFromAuth0 ? sessionStorage.getItem(RETURN_KEY) : null;
         if (back) {
           sessionStorage.removeItem(RETURN_KEY);
@@ -172,12 +175,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         try {
           const wallet = await c.wallet();
           const accounts = await wallet.getAccounts();
-          if (!cancelled && accounts[0]) remember("wallet", accounts[0].accountId);
+          if (!cancelled && accounts[0]) restore("wallet", accounts[0].accountId);
         } catch {
           // Not signed in yet.
         }
       }
-      if (!cancelled) setReady(true);
+      if (!cancelled) startTransition(() => setReady(true));
     })();
     return () => {
       cancelled = true;
