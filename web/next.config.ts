@@ -19,6 +19,10 @@ const nextConfig: NextConfig = {
       { source: "/:path*", headers: [{ key: "Content-Security-Policy", value: "frame-ancestors 'self'" }] },
       { source: "/embed/e/:id", headers: [{ key: "Content-Security-Policy", value: "frame-ancestors *" }] },
       { source: "/embed.js", headers: [{ key: "Access-Control-Allow-Origin", value: "*" }] },
+      {
+        source: "/landing/meetup/:file(balisquad-[a-z0-9-]+\\.[0-9a-f]{12}\\.mp4)",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
     ];
   },
 };

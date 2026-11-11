@@ -206,12 +206,14 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .strip-btn:disabled { opacity: .35; cursor: default; }
 .strip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (hover: none) { .strip-nav { display: none; } }
-/* photos run from the text column to the screen edge; swipe on phones, arrows on desktop */
+/* Media runs from the text column to the screen edge. */
 .strip { --pad: max(20px, calc((100% - 1160px) / 2 + 20px)); position: relative; display: flex; gap: 12px; margin-top: clamp(28px, 4vw, 48px); padding-inline: var(--pad); scroll-padding-inline: var(--pad); overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; }
 .strip::-webkit-scrollbar { display: none; }
 .strip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.strip img { flex: none; height: clamp(220px, 34vw, 440px); width: auto; border-radius: 20px; scroll-snap-align: start; background: var(--soft); }
-@media (max-width: 860px) { .strip img { border-radius: 16px; } }
+.strip > * { flex: none; height: clamp(152px, 28vw, 360px); width: auto; border-radius: 20px; scroll-snap-align: start; background: var(--soft); }
+.strip video { aspect-ratio: 16 / 9; }
+.strip video.conversation { aspect-ratio: 4 / 3; scroll-snap-align: center; }
+@media (max-width: 860px) { .strip > * { border-radius: 16px; } }
 
 
 /* ---------- INTEGRATE ---------- */
@@ -290,35 +292,95 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <a class="more" href="https://balisquad.com/event/bukitsocial-z3CmSN" target="_blank" rel="noreferrer">See the event on BaliSquad →</a>
       </div>
       <div class="strip-nav">
-        <button class="strip-btn" type="button" aria-label="Previous photos">←</button>
-        <button class="strip-btn" type="button" aria-label="Next photos">→</button>
+        <button class="strip-btn" type="button" aria-label="Previous meetup media">←</button>
+        <button class="strip-btn" type="button" aria-label="Next meetup media">→</button>
       </div>
     </div>
-    <div class="strip reveal" tabindex="0" role="region" aria-label="Photos from the BaliSquad meetup">
+    <div class="strip reveal" tabindex="0" role="region" aria-label="BaliSquad meetup gallery">
+      <video data-src="/landing/meetup/balisquad-speaker.280d30243e92.mp4" poster="/landing/meetup/balisquad-speaker.webp" aria-label="Close-up of the speaker at the BaliSquad meetup" width="1920" height="1080" preload="none" muted playsinline loop></video>
       <img src="/landing/photos/balisquad-room.webp" alt="Guests at the BaliSquad AI Coworking Meetup in Uluwatu" width="1174" height="880" decoding="async" />
-      <img src="/landing/photos/balisquad-stage.webp" alt="The host shows the live Nearvent guest list on the big screen" width="1365" height="768" decoding="async" />
-      <img src="/landing/photos/balisquad-rsvp.webp" alt="Registering on a phone with a 0.5 USDC deposit" width="768" height="735" loading="lazy" decoding="async" />
-      <img src="/landing/photos/balisquad-phone.webp" alt="Joining the event from a phone" width="1365" height="768" loading="lazy" decoding="async" />
-      <img src="/landing/photos/balisquad-done.webp" alt="The wallet confirms the deposit: All Done" width="768" height="870" loading="lazy" decoding="async" />
-      <img src="/landing/photos/balisquad-pass.webp" alt="The QR pass: You're on the list" width="768" height="855" loading="lazy" decoding="async" />
-      <img src="/landing/photos/balisquad-door.webp" alt="Scanning a guest's QR pass at the door" width="1365" height="768" loading="lazy" decoding="async" />
-      <img src="/landing/photos/balisquad-scan.webp" alt="Guests check in by showing a QR pass to the host's laptop camera" width="1365" height="768" loading="lazy" decoding="async" />
-      <img src="/landing/photos/balisquad-guest.webp" alt="A guest shows a QR pass" width="1365" height="768" loading="lazy" decoding="async" />
-      <img src="/landing/photos/balisquad-list.webp" alt="The host's guest list on a laptop" width="1365" height="768" loading="lazy" decoding="async" />
+      <video data-src="/landing/meetup/balisquad-meetup-laptop.7aa6a8ad3ab1.mp4" poster="/landing/meetup/balisquad-meetup-laptop.webp" aria-label="Participants working on laptops at the BaliSquad meetup" width="1920" height="1080" preload="none" muted playsinline loop></video>
+      <video data-src="/landing/meetup/balisquad-discussion.d9165c8ab77d.mp4" poster="/landing/meetup/balisquad-discussion.webp" aria-label="Participants talking around the meetup table" width="1920" height="1080" preload="none" muted playsinline loop></video>
+      <video class="conversation" data-src="/landing/meetup/balisquad-table-chat.e9d3a37a4d87.mp4" poster="/landing/meetup/balisquad-table-chat.webp" aria-label="Two participants talking across the meetup table" width="1440" height="1080" preload="none" muted playsinline loop></video>
+      <video data-src="/landing/meetup/balisquad-qr-demo.a445be2ca406.mp4" poster="/landing/meetup/balisquad-qr-demo.webp" aria-label="A participant shows a QR pass during the meetup" width="1920" height="1080" preload="none" muted playsinline loop></video>
     </div>
     <script>
       (() => {
         const strip = document.querySelector('.strip'), [prev, next] = document.querySelectorAll('.strip-btn');
-        // next: start at the first photo cut off on the right; prev: go back about one screen
-        const go = dir => {
-          const imgs = [...strip.querySelectorAll('img')], pad = parseFloat(getComputedStyle(strip).paddingLeft), x = strip.scrollLeft;
-          const to = dir > 0 ? imgs.find(i => i.offsetLeft + i.offsetWidth > x + strip.clientWidth - 1)
-                             : imgs.find(i => i.offsetLeft - pad >= x - (strip.clientWidth - 2 * pad) - 1);
-          strip.scrollTo({ left: to ? to.offsetLeft - pad : 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        const cards = [...strip.children], motion = matchMedia('(prefers-reduced-motion: reduce)');
+        const snapLeft = (card, pad) => card.matches('video.conversation')
+          ? card.offsetLeft + (card.offsetWidth - strip.clientWidth) / 2
+          : card.offsetLeft - pad;
+        let nearby = false, inView = false, playing = null, advanceTimer, settleTimer;
+        const nextClip = card => cards.slice(cards.indexOf(card) + 1).find(item => item.tagName === 'VIDEO');
+        const warm = video => {
+          if (!video || video.src) return;
+          video.preload = 'auto';
+          video.src = video.dataset.src;
         };
-        const sync = () => { prev.disabled = strip.scrollLeft < 4; next.disabled = strip.scrollLeft + strip.clientWidth > strip.scrollWidth - 4; };
+        const setPlayback = video => {
+          if (video === playing) return;
+          playing?.pause();
+          playing = video;
+          if (!video) return;
+          warm(video);
+          video.play().then(() => {
+            if (playing === video) warm(nextClip(video));
+          }).catch(() => {});
+        };
+        // Next starts at the first card cut off on the right. Previous goes back about one screen.
+        const go = dir => {
+          const pad = parseFloat(getComputedStyle(strip).paddingLeft), x = strip.scrollLeft;
+          const to = dir > 0 ? cards.find(i => i.offsetLeft > x + pad + 1 && i.offsetLeft + i.offsetWidth > x + strip.clientWidth - 1)
+                             : cards.find(i => i.offsetLeft - pad >= x - (strip.clientWidth - 2 * pad) - 1);
+          strip.scrollTo({ left: to ? snapLeft(to, pad) : dir > 0 ? strip.scrollWidth : 0, behavior: motion.matches ? 'auto' : 'smooth' });
+        };
+        const sync = () => {
+          prev.disabled = strip.scrollLeft < 4;
+          next.disabled = strip.scrollLeft + strip.clientWidth > strip.scrollWidth - 4;
+          if (settleTimer !== undefined) return;
+          const canLoad = !document.hidden && !motion.matches;
+          const canAnimate = inView && canLoad;
+          if (canAnimate) {
+            const center = strip.scrollLeft + strip.clientWidth / 2;
+            const distance = card => Math.abs(card.offsetLeft + card.offsetWidth / 2 - center);
+            const focused = cards.reduce((closest, card) => distance(card) < distance(closest) ? card : closest);
+            setPlayback(focused.tagName === 'VIDEO' ? focused : null);
+            if (!playing) warm(nextClip(focused));
+          } else {
+            setPlayback(null);
+            if (nearby && canLoad) warm(nextClip());
+          }
+          clearTimeout(advanceTimer);
+          if (canAnimate && (!prev.disabled || !next.disabled)) {
+            advanceTimer = setTimeout(() => {
+              const pad = parseFloat(getComputedStyle(strip).paddingLeft);
+              const left = cards.map(card => snapLeft(card, pad)).find(position => position > strip.scrollLeft + 1);
+              strip.scrollTo({ left: next.disabled ? 0 : (left ?? strip.scrollWidth), behavior: 'smooth' });
+            }, 15000);
+          }
+        };
+        new IntersectionObserver(([entry]) => {
+          inView = entry.intersectionRatio >= 0.5;
+          sync();
+        }, { threshold: 0.5 }).observe(strip);
+        new IntersectionObserver(([entry]) => {
+          nearby = entry.isIntersecting;
+          sync();
+        }, { root: document, rootMargin: '320px 0px' }).observe(strip);
+        motion.addEventListener('change', sync);
+        document.addEventListener('visibilitychange', sync);
         prev.onclick = () => go(-1); next.onclick = () => go(1);
-        strip.addEventListener('scroll', sync, { passive: true }); addEventListener('resize', sync); addEventListener('load', sync); sync();
+        strip.addEventListener('scroll', () => {
+          setPlayback(null);
+          clearTimeout(advanceTimer);
+          clearTimeout(settleTimer);
+          settleTimer = setTimeout(() => {
+            settleTimer = undefined;
+            sync();
+          }, 140);
+        }, { passive: true });
+        addEventListener('resize', sync); addEventListener('load', sync); sync();
       })();
     </script>
   </section>
