@@ -34,7 +34,8 @@ the site switch and the paid checks are still open.
   testnet client does not work on mainnet).
 - 1Click: `https://1click.chaindefuser.com`; `ONECLICK_API_KEY` is sent as
   `Authorization: Bearer` (without a key 1Click adds 0.25% per quote).
-- Demo account and test USDC faucet are testnet-only and switch off by themselves.
+- The test USDC faucet is testnet-only and switches off by itself. The demo account
+  runs only in the browser on made-up data, so it works on mainnet as well.
 - Off-chain data (event details, free events, check-ins, door team, guest names,
   visuals) is keyed by escrow id, so it never mixes with testnet; profile keys get
   a `mainnet:` prefix. Still use a separate Upstash database for mainnet.
