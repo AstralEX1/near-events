@@ -11,7 +11,6 @@ import { view } from "@/lib/near";
 
 /** NEP-145 registration on the USDC contract: 0.00125 NEAR, paid by the relayer. */
 const STORAGE_DEPOSIT = 1_250_000_000_000_000_000_000n;
-const DEMO_USDC = 2_000_000n; // 2 USDC
 const usdcOf = (account_id: string) => view<string>("ft_balance_of", { account_id }, USDC_CONTRACT).then(BigInt);
 
 async function relayerWithUsdc(amount: bigint) {
@@ -61,7 +60,7 @@ async function fundNearAccount(accountId: string, limit: bigint) {
 export async function POST(req: Request) {
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
   if (NETWORK !== "testnet") return Response.json({ error: "Faucet is not available here" }, { status: 403 });
-  const { accountId, demo } = await req.json();
+  const { accountId } = await req.json();
   if (typeof accountId !== "string") return Response.json({ error: "Bad request" }, { status: 400 });
   try {
     if (/^0x[0-9a-f]{40}$/.test(accountId)) {
@@ -72,7 +71,7 @@ export async function POST(req: Request) {
     if (!/^[a-z0-9._-]{2,64}$/.test(accountId)) return Response.json({ error: "Bad request" }, { status: 400 });
     if (await paidRequestLimited(req, "faucet", accountId)) return Response.json({ error: "Faucet quota unavailable or exceeded" }, { status: 429 });
     // Demo accounts only play with 0.1 USDC deposits; 2 USDC keeps the faucet going for more of them.
-    return Response.json(await fundNearAccount(accountId, demo === true ? DEMO_USDC : TEST_EVM_FAUCET_LIMIT));
+    return Response.json(await fundNearAccount(accountId, TEST_EVM_FAUCET_LIMIT));
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 502 });
   }

@@ -2,7 +2,7 @@ import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { NETWORK } from "@/lib/config";
 import { accountExists, relayer } from "@/lib/relayer";
 
-// Creates a new Google/email or demo implicit account by sending it NEAR.
+// Creates a new Google/email implicit account by sending it NEAR.
 // Testnet: enough for gas on the biggest call (closing an event: 300 Tgas ≈ 0.3 NEAR,
 // mostly refunded; 0.05 NEAR could not even send a 100 Tgas call).
 // Mainnet: only the account's own storage (182 bytes); the relayer pays every

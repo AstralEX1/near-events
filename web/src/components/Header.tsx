@@ -19,17 +19,17 @@ function NavLabel({ icon, label }: { icon: string[]; label: string }) {
 }
 
 export function Header() {
-  const { accountId, signOut } = useWallet();
+  const { accountId, kind, signOut } = useWallet();
   const path = usePathname() || "/";
-  return <HeaderContent accountId={accountId} signOut={signOut} path={path} />;
+  return <HeaderContent accountId={accountId} signOut={signOut} path={path} demo={kind === "demo"} />;
 }
 
 export function HeaderPreview({ path = "/e/4", accountId = null }: { path?: string; accountId?: string | null }) {
   return <HeaderContent accountId={accountId} path={path} preview />;
 }
 
-function HeaderContent({ accountId, signOut, path, preview = false }: {
-  accountId: string | null; signOut?: () => void; path: string; preview?: boolean;
+function HeaderContent({ accountId, signOut, path, preview = false, demo = false }: {
+  accountId: string | null; signOut?: () => void; path: string; preview?: boolean; demo?: boolean;
 }) {
   const account = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
@@ -44,6 +44,7 @@ function HeaderContent({ accountId, signOut, path, preview = false }: {
     <header className="gc-header">
       <div className="gc-header-inner">
         <Link href="/about" className="gc-brand" aria-label="About Nearvent">nearvent</Link>
+        {demo && <span className="gc-demo" data-tooltip="Made-up events and money, kept in this browser. Nothing is sent anywhere.">Demo</span>}
         <nav aria-label="Main navigation" className="hidden sm:flex items-center gap-1 ml-auto">
           {links.map(([href, label, icon]) => <Link key={href} href={href} className="gc-nav-link" aria-current={path.startsWith(href) ? "page" : undefined}><NavLabel icon={icon} label={label} /></Link>)}
         </nav>
@@ -52,7 +53,7 @@ function HeaderContent({ accountId, signOut, path, preview = false }: {
             <summary aria-label="Your account"><Avatar account={accountId} size={26} /><span className="hidden md:inline">My Profile</span></summary>
             <div className="gc-account-panel">
               <Link href="/profile"><NavLabel icon={USER} label="My Profile" /></Link>
-              {!preview && <button type="button" onClick={signOut}>Sign Out</button>}
+              {!preview && <button type="button" onClick={signOut}>{demo ? "Exit Demo" : "Sign Out"}</button>}
             </div>
           </details>
         ) : preview ? <span className="btn btn-primary ml-auto sm:ml-0">Sign In</span> : <div className="ml-auto sm:ml-0"><SignInMenu /></div>}

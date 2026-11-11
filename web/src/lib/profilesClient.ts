@@ -34,5 +34,6 @@ export async function uploadAvatar(file: File, token: string): Promise<string> {
   const r = await fetch("/api/covers", { method: "POST", headers: { "Content-Type": "image/jpeg", Authorization: `Bearer ${token}` }, body: blob });
   const json = await r.json().catch(() => ({}));
   if (!r.ok || typeof json.url !== "string") throw new Error(json.error ?? "Could not upload the photo");
-  return new URL(json.url).pathname;
+  // Demo mode keeps the photo in the browser as a data: URL.
+  return json.url.startsWith("data:") ? json.url : new URL(json.url).pathname;
 }

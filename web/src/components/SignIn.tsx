@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@/lib/wallet";
-import { FASTAUTH_CLIENT_ID, HAS_INTENTS, NETWORK } from "@/lib/config";
+import { FASTAUTH_CLIENT_ID, HAS_INTENTS } from "@/lib/config";
 
 /** The ways in: Google/email (no crypto needed), a NEAR wallet, or an EVM wallet via NEAR Intents. */
 export function SignInOptions({ onDone }: { onDone?: () => void }) {
@@ -43,12 +43,10 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
           MetaMask, Rabby or another EVM wallet
         </button>
       )}
-      {/* Demo account: a key in this browser plus test money from our relayer; the site asks before each transaction. */}
-      {NETWORK === "testnet" && (
-        <button className="btn btn-ghost w-full" disabled={!ready || busy !== null} onClick={run(signInWithDemo, "demo")}>
-          {busy === "demo" ? "Setting up…" : "Try with a demo account"}
-        </button>
-      )}
+      {/* Demo mode: made-up events and money in this browser, no server and no chain. */}
+      <button className="btn btn-ghost w-full" disabled={!ready || busy !== null} onClick={run(signInWithDemo, "demo")}>
+        {busy === "demo" ? "Setting up…" : "Try with a demo account"}
+      </button>
       {error && <p className="text-xs text-warn break-words">{error}</p>}
     </div>
   );

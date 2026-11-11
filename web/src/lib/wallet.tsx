@@ -7,7 +7,7 @@ import { STAFF_MESSAGE } from "./staffShared";
 import { useRouter } from "next/navigation";
 import { connectEvm, evmAccount } from "./intents";
 import { RETURN_KEY, fastAuthEnsure, fastAuthLogin, fastAuthLogout, fastAuthPrepare, fastAuthProve, fastAuthRestore, fastAuthSend } from "./fastauth";
-import { demoLogin, demoLogout, demoProof, demoRestore, demoSend } from "./demoWallet";
+import { demoLogin, demoLogout, demoRestore, demoSend } from "./demoBackend";
 
 /** Implicit NEAR accounts from Google/email login are a 64-char hex id. */
 const isImplicit = (id: string) => /^[0-9a-f]{64}$/i.test(id);
@@ -50,7 +50,7 @@ interface WalletState {
   signInWithEmail: () => Promise<void>;
   /** EVM wallet; the account is the wallet's NEAR Intents account (mainnet). */
   signInWithEvm: () => Promise<void>;
-  /** Demo account: a key kept in this browser, topped up with test money (testnet only). */
+  /** Demo mode: made-up events and money kept in this browser; nothing reaches the server or the chain. */
   signInWithDemo: () => Promise<void>;
   signOut: () => Promise<void>;
   /** Signs and sends calls, one transaction each, in order. */
@@ -206,7 +206,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const signInWithDemo = useCallback(async () => {
     await connector.current?.disconnect().catch(() => {});
-    remember("demo", await demoLogin());
+    remember("demo", demoLogin());
+    window.location.reload(); // every page re-reads from the demo data
   }, []);
 
   const signOut = useCallback(async () => {
@@ -217,13 +218,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else if (kind === "email") await fastAuthLogout();
     else await connector.current?.disconnect().catch(() => {});
     remember(null, null);
+    if (kind === "demo") window.location.reload(); // back to the real events
   }, [kind, accountId]);
 
   const send = useCallback(
     async (calls: Call[]) => {
       if (!accountId) throw new Error("Sign in first.");
 
-      // Demo account: auto-sign, no prompt.
+      // Demo mode: changes the made-up data in this browser, no prompt.
       if (kind === "demo") {
         for (const call of calls) await demoSend(call);
         return;
@@ -285,13 +287,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const staffToken = useCallback(async () => {
     if (!accountId) throw new Error("Sign in first.");
+    if (kind === "demo") return "demo"; // the demo's fake server trusts the demo account
     const saved = savedStaffToken(accountId);
     if (saved) return saved;
 
     if (kind === "email" || (kind == null && isImplicit(accountId))) {
       return exchangeProof({ mpc: await fastAuthProve() }, accountId);
     }
-    if (kind === "demo") return exchangeProof(await demoProof(), accountId);
     if (kind === "wallet") {
       const c = connector.current;
       if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");

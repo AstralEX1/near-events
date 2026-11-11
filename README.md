@@ -36,7 +36,8 @@ demo and for development.
 | NEAR Intents, 1Click | `intents.near`, `1click.chaindefuser.com` | the [Tidepool](https://www.usetidepool.tech/docs) sandbox (official verifier code), since Intents has no testnet |
 | Google/email (NEAR Auth) | `fast-auth.near`; needs our own Auth0 client (application sent 2026-11-09) | shared client, `localhost:3000` only |
 | Gas for Google/email users | relayer pays (meta-transactions) | relayer gives 0.5 NEAR once |
-| Demo account, test USDC faucet | no | yes |
+| Demo account (made-up data in the browser) | yes | yes |
+| Test USDC faucet | no | yes |
 
 - Hosted site: [www.nearvent.site](https://www.nearvent.site) (Vercel + Upstash
   Redis), still on testnet until the mainnet escrow is deployed; demo event:
@@ -51,25 +52,21 @@ demo and for development.
   JWT keys, 1Click token list and a dry quote. No mainnet transaction was sent.
 - Older testnet escrows (`tp3`–`tp6`) keep their test data on chain but the app does not read them.
 
-## Try it in two minutes (testnet, no wallet)
+## Try it in two minutes (no wallet)
 
 Open **[www.nearvent.site](https://www.nearvent.site)** → **Sign In** → **Try with a
-demo account**. You get a fresh NEAR account with a little NEAR for gas and
-2 test USDC. Every action signs on its own (no wallet, no popups), and each one
-is a real NEAR transaction you can open in the explorer.
+demo account**. The site switches to a demo with made-up events, guests and
+50 demo USDC. Everything stays in your browser: no server, no blockchain,
+nothing to pay. **Exit Demo** in the account menu clears it.
 
-1. **Create Event** → **Stake to RSVP** → 0.1 USDC → **Create Event** → the event is on-chain.
-2. Open the event link in a private window, take another demo account, press
-   **Register** → you appear under "Going" with a QR pass.
-3. Back as the host: **Manage → Guests → Check in** → saved on our server, no
-   transaction per guest.
-4. **Close event & pay out** → one transaction sends the list of who came; the
-   escrow splits the pool.
-5. As the guest, press **Withdraw** → the deposit plus the no-shows' share
-   leaves the escrow.
+1. **Explore** → *NEAR Builders Night* → **Register** → you appear under "Going" with a QR pass.
+2. **My Events** → *Sunset Builders Meetup* (yours, it just ended) → **Manage → Guests** → check a few guests in.
+3. **Close event & pay out** → the pool is split among the guests who came.
+4. *AI Coworking Morning* (you went) → **Withdraw** your share.
+5. **Create Event** → Stake to RSVP, Ticket or Free → it shows up in Explore.
 
-A NEAR testnet wallet or MetaMask works the same way, with the wallet asking
-before each transaction. Free mode: on `/create` pick Free → `/f/<id>` with a
+For real transactions, sign in with a NEAR testnet wallet or MetaMask; the
+wallet asks before each one. Free mode: on `/create` pick Free → `/f/<id>` with a
 one-click RSVP. User docs: [www.nearvent.site/docs](https://www.nearvent.site/docs),
 smart contract: [/docs/contract](https://www.nearvent.site/docs/contract).
 

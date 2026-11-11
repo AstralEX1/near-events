@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { NETWORK } from "@/lib/config";
 import { Faq, Next, Section, Shot, Stack, Title } from "./parts";
 
 export default function DocsHome() {
@@ -7,16 +6,13 @@ export default function DocsHome() {
     <>
       <Title lead="Guests put down a small deposit. Those who show up split it.">How Nearvent Works</Title>
 
-      {/* The demo account exists only on testnet. */}
-      {NETWORK === "testnet" && (
-        <div className="card bg-accent-soft border-transparent px-5 py-4 mb-12 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="font-medium">Try it now, no wallet needed</div>
-            <div className="text-sm text-muted">Sign In → Try with a demo account. Test money included.</div>
-          </div>
-          <Link href="/create" className="btn btn-primary">Create Event</Link>
+      <div className="card bg-accent-soft border-transparent px-5 py-4 mb-12 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-medium">Try it now, no wallet needed</div>
+          <div className="text-sm text-muted">Sign In → Try with a demo account. Made-up events and money, all in your browser.</div>
         </div>
-      )}
+        <Link href="/create" className="btn btn-primary">Create Event</Link>
+      </div>
 
       <Section id="flow" title="Four steps">
         <div className="space-y-12">
