@@ -14,8 +14,8 @@ documented here.
 
 Everything below that spends real NEAR or USDC is Alex's to run: the deploy,
 funding the accounts and the paid checks. Claude prepared the code, scripts and
-read-only checks. Alex ran the escrow deploy on 2026-11-11 (step 3); the relayer,
-the site switch and the paid checks are still open.
+read-only checks. Alex ran the escrow deploy on 2026-11-11 (step 3) and Production was
+switched to mainnet the same day (step 5); the paid checks and the whitelist are still open.
 
 **What is ready (2026-11-10).**
 - `web/src/lib/config.ts`: with `NEXT_PUBLIC_NETWORK=mainnet` the app uses native
@@ -118,6 +118,25 @@ mainnet relayer account and key, a new `APP_SECRET`, a separate Upstash database
 `ONECLICK_API_KEY`. Keep Preview on testnet so preview deployments never move real
 money. Redeploy. For NEAR Auth, the Auth0 callback, origin and logout URL is
 `https://www.nearvent.site`.
+
+**Switched 2026-11-11.** Production variables: `NEXT_PUBLIC_NETWORK=mainnet`,
+`NEXT_PUBLIC_EVENTS_CONTRACT=escrow.lold.near`, `RELAYER_ACCOUNT_ID=event_relayer.near` (set by
+Claude); `RELAYER_PRIVATE_KEY` and `ONECLICK_API_KEY` (set by Alex). Kept on purpose: the shared
+Upstash database (keys carry the escrow id; profiles get `mainnet:`), the existing Production
+rate-limit Redis and `APP_SECRET` (staff tokens only prove an account; host rights are read
+from the mainnet escrow). Checked after the build of `9151916`: pages answer 200,
+`/docs/contract` shows `escrow.lold.near` and the code hash, the feed is empty, no console
+errors, `/api/oneclick/tokens` lists 229 mainnet tokens and a dry quote through
+`/api/oneclick/quote` returned 1 USDC ≈ 0.00049 ETH on Base. Not checked: the relayer key
+(only a relayed action proves it; `smoke-meta-tx.mjs` costs about 0.01 NEAR).
+
+Whitelist (owner, same key prompt as the deploy):
+
+```bash
+cd web
+NETWORK=mainnet OWNER=lold.near EVENTS_CONTRACT=escrow.lold.near node scripts/escrow-owner.mjs add <host>.near
+NETWORK=mainnet OWNER=lold.near EVENTS_CONTRACT=escrow.lold.near node scripts/escrow-owner.mjs mode on
+```
 
 **6. Release checks with small real amounts (Alex, about 2 USDC).**
 - `NETWORK=mainnet APP_URL=https://www.nearvent.site EVENTS_CONTRACT=… node scripts/smoke-meta-tx.mjs`:

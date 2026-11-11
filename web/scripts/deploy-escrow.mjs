@@ -10,41 +10,17 @@
 // Nothing is sent before read-only checks pass; mainnet also needs CONFIRM_MAINNET=yes and a typed "yes".
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { createInterface } from "node:readline/promises";
-import { Writable } from "node:stream";
-import { parseSeedPhrase } from "near-seed-phrase";
 import { actions, baseEncode, Account, JsonRpcProvider, KeyPair, parseNearAmount } from "near-api-js";
+import { accountKey, ask, closePrompts, credPath as cred, fail } from "./keyPrompt.mjs";
 
-const fail = (msg) => { console.error(msg); process.exit(1); };
 const network = process.env.NETWORK ?? "testnet";
 const mainnet = network === "mainnet";
 if (!["testnet", "mainnet"].includes(network)) fail("NETWORK is testnet or mainnet");
 if (mainnet && process.env.CONFIRM_MAINNET !== "yes") fail("Mainnet deploy spends real NEAR: set CONFIRM_MAINNET=yes");
 const WASM = process.env.WASM || fail("Set WASM to the escrow-wasm artifact (near_events.wasm)");
 const wasm = readFileSync(WASM);
-
-// Prompts; `muted` hides what is typed for the key.
-let rl, muted = false, waiting = false, closed = false;
-const cancel = () => fail("\nCancelled; nothing was sent.");
-const ask = async (question, hidden = false) => {
-  if (!rl) {
-    rl = createInterface({ input: process.stdin, output: new Writable({ write: (c, e, cb) => { if (!muted) process.stdout.write(c, e); cb(); } }), terminal: Boolean(process.stdin.isTTY) });
-    rl.on("SIGINT", cancel); // Ctrl+C
-    rl.on("close", () => { closed = true; if (waiting) cancel(); }); // Ctrl+D, or piped input ended, while a question is open
-  }
-  if (closed) cancel();
-  process.stdout.write(question);
-  muted = hidden;
-  waiting = true;
-  const answer = (await rl.question("")).trim();
-  waiting = false;
-  muted = false;
-  if (hidden) process.stdout.write("\n");
-  return answer;
-};
 
 const DEPLOYER = process.env.DEPLOYER || await ask("Deployer account (also the owner): ");
 const RELAYER = process.env.RELAYER_ACCOUNT || await ask("Relayer account: ");
@@ -53,7 +29,7 @@ const id = `${process.env.NEW_ACCOUNT || "escrow"}.${DEPLOYER}`;
 const USDC = process.env.USDC_CONTRACT ?? (mainnet ? "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1" : fail("Set USDC_CONTRACT"));
 const intents = process.env.INTENTS_CONTRACT || (mainnet ? "intents.near" : null);
 const provider = new JsonRpcProvider({ url: mainnet ? "https://rpc.mainnet.fastnear.com" : "https://test.rpc.fastnear.com" });
-const credPath = (account) => `${homedir()}/.near-credentials/${network}/${account}.json`;
+const credPath = (account) => cred(network, account);
 
 // ---------------------------------------------------------------- read-only checks
 const show = (yocto) => (Number(yocto) / 1e24).toFixed(4);
@@ -67,14 +43,7 @@ const deployerState = await viewAccount(DEPLOYER) ?? fail(`${DEPLOYER} does not 
 for (const account of new Set([RELAYER, OWNER])) if (!(await viewAccount(account))) fail(`${account} does not exist on ${network}: check the spelling, it is written into the contract for good`);
 if (await viewAccount(id)) fail(`${id} already exists; pick another NEW_ACCOUNT`);
 
-const secret = existsSync(credPath(DEPLOYER))
-  ? JSON.parse(readFileSync(credPath(DEPLOYER), "utf8")).private_key
-  : await ask(`Private key (ed25519:...) or seed phrase of ${DEPLOYER} (hidden, not saved): `, true);
-if (!secret) fail("No deployer key");
-let deployerKey;
-try { deployerKey = KeyPair.fromString(/\s/.test(secret) ? parseSeedPhrase(secret).secretKey : secret); } catch { fail("That is not a NEAR private key or seed phrase"); }
-const access = await provider.viewAccessKey({ accountId: DEPLOYER, publicKey: deployerKey.getPublicKey().toString() }).catch(() => null);
-if (access?.permission !== "FullAccess") fail(`This key is not a full-access key of ${DEPLOYER}`);
+const deployerKey = await accountKey(provider, network, DEPLOYER);
 
 // Storage costs 1e19 yocto per byte; 2 KB covers the account and the initial state.
 const minStake = BigInt(wasm.length + 2000) * 10n ** 19n;
@@ -91,7 +60,7 @@ console.log(`\n${network}: create ${id} with ${show(amount)} NEAR from ${DEPLOYE
   owner ${OWNER}, relayer ${RELAYER}, USDC ${USDC}, intents ${intents}
   code ${WASM} (${wasm.length} bytes, hash ${baseEncode(createHash("sha256").update(wasm).digest())})`);
 if (mainnet && (await ask('Type "yes" to deploy with real NEAR: ')) !== "yes") fail("Cancelled; nothing was sent.");
-rl?.close();
+closePrompts();
 
 // ---------------------------------------------------------------- deploy
 const deployer = new Account(DEPLOYER, provider, deployerKey.toString());
