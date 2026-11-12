@@ -18,6 +18,7 @@ export default function SiteLayout({ children }: LayoutProps<"/">) {
           <Link href="/docs">Docs</Link>
           <Link href="/demo">Demo</Link>
           <Link href="/video">Video</Link>
+          <Link href="/brand">Brand</Link>
         </div>
         <AppearancePicker />
       </footer>
