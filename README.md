@@ -6,6 +6,8 @@
 
 **▶ [Watch the 30-second product video with sound (MP4, 1080p)](showcase/nearvent-showcase.mp4)**
 
+**👆 [Try the demo yourself: www.nearvent.site/demo](https://www.nearvent.site/demo)** (no wallet, made-up events and 50 demo USDC in your browser)
+
 ## For judges
 
 - **What it is:** RSVP to a meetup with a small USDC deposit; the guests who
