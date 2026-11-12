@@ -53,8 +53,5 @@ If the site sets one, allow: `script-src`, `frame-src` and `connect-src` for `ht
 ## Read-only API
 `GET https://NEARVENT-HOST/api/embed/EVENT_ID` → `{ id, title, starts_at, ends_at, status, deposit_usdc, mode, going, capacity, full }` (CORS open). `mode` is `Deposit` or `Ticket`; `deposit_usdc` is the price in both.
 
-## For hosts
-- Create and manage events from the Telegram bot: /new, deposit notifications, guest list, check-in, payouts and refunds (each confirmed by the host).
-
 ## Verify
 Run the site, open the page, confirm the deposit box or button renders and that clicking Pay deposit opens the Nearvent window. Report which files changed.

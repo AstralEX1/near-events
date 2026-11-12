@@ -19,7 +19,7 @@ export function DocsNav() {
               <Link
                 href={p.href}
                 aria-current={active ? "page" : undefined}
-                className={`block whitespace-nowrap rounded-full px-3 py-1.5 text-sm md:rounded-xl ${active ? "bg-accent-soft text-accent font-medium" : "text-muted hover:text-text"}`}
+                className={`block whitespace-nowrap md:whitespace-normal rounded-full px-3 py-1.5 text-sm md:rounded-xl ${active ? "bg-accent-soft text-accent font-medium" : "text-muted hover:text-text"}`}
               >
                 {p.label}
               </Link>

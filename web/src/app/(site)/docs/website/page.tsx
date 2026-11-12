@@ -1,10 +1,32 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Snippet } from "@/components/Snippet";
 import { Code, Section, Steps, Title } from "../parts";
 
-export const metadata: Metadata = { title: "Your Website · Nearvent" };
+export const metadata: Metadata = { title: "Integrate Into Your Website · Nearvent" };
 
 const SITE = "https://www.nearvent.site";
+
+// Short on purpose: the agent reads the details (per-stack placement, attributes) from llms.txt.
+const PROMPT = `Add a Nearvent registration button to this website.
+
+Context
+- Nearvent runs event sign-up with a USDC deposit or ticket; checkout is hosted on ${SITE}.
+- My event ID: EVENT_ID
+- Guide for coding agents: ${SITE}/llms.txt (read it first).
+
+Task
+1. Find the page that shows this event. If it is unclear which one, ask me before editing.
+2. Load ${SITE}/embed.js once on that page (async), the way this stack adds third-party scripts.
+3. Place <near-event event="EVENT_ID" mode="button"></near-event> where guests sign up.
+4. Match the site's colors and corners with the accent and radius attributes.
+
+Rules
+- Load embed.js from ${SITE}; never copy or edit it.
+- No packages, API keys or backend changes; none are needed.
+- If the site sets a Content-Security-Policy, allow ${SITE}.
+
+Done when the page runs locally and a click on the button opens Nearvent checkout. Reply with the files you changed.`;
 
 export default function WebsiteDocs() {
   return (
@@ -21,6 +43,11 @@ export default function WebsiteDocs() {
             ["Paste it", "Any site with custom HTML: Webflow, Framer, WordPress, Tilda."],
           ]}
         />
+      </Section>
+
+      <Section id="ai" title="Or let your AI agent do it">
+        <p className="text-sm text-muted">Paste into Claude Code, Cursor or Codex and put your event number in place of EVENT_ID.</p>
+        <Snippet title="AI prompt" code={PROMPT} long />
       </Section>
 
       <Section id="button" title="The button">

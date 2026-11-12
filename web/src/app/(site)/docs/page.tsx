@@ -9,9 +9,9 @@ export default function DocsHome() {
       <div className="card bg-accent-soft border-transparent px-5 py-4 mb-12 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="font-medium">Try it now, no wallet needed</div>
-          <div className="text-sm text-muted">Sign In → Try with a demo account. Made-up events and money, all in your browser.</div>
+          <div className="text-sm text-muted">Made-up events and money, all in your browser.</div>
         </div>
-        <Link href="/create" className="btn btn-primary">Create Event</Link>
+        <Link href="/demo" className="btn btn-primary">Try Demo</Link>
       </div>
 
       <Section id="flow" title="Four steps">
