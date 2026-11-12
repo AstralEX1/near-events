@@ -42,6 +42,12 @@ their value; guests pay no gas; hosts create events for free; the same escrow
 also sells tickets and runs free RSVPs; hosts import an existing Luma event by
 its link, and a two-line button adds registration to their own website.
 
+**Business model.** Guests never pay Nearvent a fee; hosts and venues do. For
+now everything is free so we can bring hosts in. Next: a monthly plan for
+communities that run regular events and a small fee on paid tickets. We will
+also test sponsored placement of events in Explore. We are checking these
+options with event hosts in Bali, where we run our first events.
+
 **How NEAR fits in.**
 - A Rust escrow contract on NEAR holds the deposits. The host records who came
   and the contract splits the pool among them; the host has no way to withdraw
@@ -139,8 +145,6 @@ docs.auth.near.org. Then follow the steps above on `localhost:3000`.
 Without a browser or any account, `cargo test --locked -p near-events-sandbox`
 (see [Build and test](#build-and-test)) runs the whole money cycle on a local
 NEAR sandbox: deposit event with no-shows, ticket event, upgrade and freeze.
-Release checks with real testnet transactions are in `web/scripts/` and
-[docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Rules the escrow enforces
 
