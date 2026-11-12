@@ -1,0 +1,24 @@
+/* SL UI Light / Dark sized for the header and drawn with the app tokens (they flip with the theme). */
+.nv-theme.ld,
+.nv-theme.ld[data-on="true"] {
+  --plate: var(--surface);
+  --well: color-mix(in srgb, var(--text) 10%, var(--surface));
+  --fi: var(--text);
+  --hint: var(--muted);
+  --edge: var(--border);
+  margin-inline: 0;
+}
+.nv-theme .ld-plate { padding: 3px; border-radius: 999px; box-shadow: 0 0 0 1px var(--edge); }
+.nv-theme .ld-seg { width: 76px; height: 34px; }
+.nv-theme .ld-seg > i { border-radius: 999px; }
+.nv-theme .ld-switch:focus-visible { outline-color: var(--accent); border-radius: 999px; }
+
+/* Until the controller mounts, follow the theme the head script set, so dark pages don't flash the light state. */
+.nv-theme:not([data-ready]) * { transition: none !important; }
+:root[data-theme="dark"] .nv-theme:not([data-ready]) .ld-seg > i { translate: 100% 0; }
+:root[data-theme="dark"] .nv-theme:not([data-ready]) .ld-seg > .night { color: var(--fi); }
+:root[data-theme="dark"] .nv-theme:not([data-ready]) .ld-seg > .day { color: var(--hint); }
+
+/* The theme switch's circle reveal (AppearancePicker): no default crossfade under it. */
+::view-transition-old(root),
+::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
