@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Icon } from "@/components/EventSections";
 import { Snippet } from "@/components/Snippet";
 import { Code, Section, Steps, Title } from "../parts";
 
 export const metadata: Metadata = { title: "Integrate · Nearvent" };
 
 const SITE = "https://www.nearvent.site";
+// Lucide "bot" and "arrow-up-right".
+const BOT = ["M12 8V4H8", "M6 8h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z", "M2 14h2", "M20 14h2", "M15 13v2", "M9 13v2"];
+const ARROW = ["M7 7h10v10", "M7 17 17 7"];
 
 // Short on purpose: the agent reads the details (per-stack placement, attributes) from llms.txt.
 const PROMPT = `Add a Nearvent registration button to this website.
@@ -48,6 +52,14 @@ export default function WebsiteDocs() {
       <Section id="ai" title="Or let your AI agent do it">
         <p className="text-sm text-muted">Paste into Claude Code, Cursor or Codex and put your event number in place of EVENT_ID.</p>
         <Snippet title="AI prompt" code={PROMPT} long />
+        <a href={`${SITE}/llms.txt`} target="_blank" rel="noreferrer" className="card flex items-center gap-4 px-5 py-4 transition-colors hover:border-accent">
+          <span className="w-10 h-10 shrink-0 rounded-full bg-accent-soft text-accent flex items-center justify-center"><Icon paths={BOT} /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-medium">Guide for AI agents</span>
+            <span className="block text-sm text-muted">Every stack, option and event in one file: <span className="font-mono text-[0.9em] text-text">llms.txt</span></span>
+          </span>
+          <span className="text-accent"><Icon paths={ARROW} size={18} /></span>
+        </a>
       </Section>
 
       <Section id="button" title="The button">
