@@ -6,13 +6,41 @@
 
 **▶ [Watch the 30-second product video with sound (MP4, 1080p)](showcase/nearvent-showcase.mp4)**
 
+## For judges
+
+- **What it is:** RSVP to a meetup with a small USDC deposit; the guests who
+  come split the no-shows' deposits.
+- **Try it, no wallet, 2 minutes:** [www.nearvent.site/demo](https://www.nearvent.site/demo),
+  then the five steps in [Try it in two minutes](#try-it-in-two-minutes-no-wallet).
+- **Live app:** [www.nearvent.site](https://www.nearvent.site) on NEAR mainnet,
+  escrow [`escrow.lold.near`](https://nearblocks.io/address/escrow.lold.near)
+  ([how to check its code](#networks-2026-11-12)).
+- **Check without a browser:** `cargo test --locked -p near-events-sandbox`
+  runs the full money cycle on a local NEAR sandbox ([Build and test](#build-and-test)).
+- **Track: Real-World Money** (also Social Money). Its three hints in the code:
+  stablecoins (USDC deposits and payouts, `contracts/events/src/lib.rs`), NEAR
+  Intents (pay from and withdraw to other chains through 1Click,
+  `web/src/app/api/oneclick/`, `web/src/app/api/intents/`), meta-transactions
+  (NEP-366, our relayer pays the gas, `web/src/app/api/fastauth/relay/`).
+- **Built during the hackathon:** all of it, see [Hackathon work](#hackathon-work).
+
 **Problem.** Free meetups lose many of their RSVPs to no-shows: an RSVP costs
 nothing, so hosts over-book, order the wrong amount of food and can't plan the room.
 
 **Product.** Nearvent is a Kickback-style event app on NEAR. In Deposit mode
 every guest puts down the same small USDC deposit. Guests who show up get it
 back plus an equal share of the no-shows' deposits. Hosts can also sell paid
-tickets or run free RSVP events. No platform fee, and creating an event is free.
+tickets or run free RSVP events. Creating an event is free.
+
+**What is new compared to Kickback.** Kickback (2018–2023) ran on Ethereum:
+deposits in ETH, every guest needed ETH for gas, and each event was a new
+contract the host paid to deploy. To serve Solana or Base users, someone would
+have to build the same app again for each ecosystem. Nearvent is one app for
+all of them: through NEAR Intents a guest pays from the chain they already use
+and takes the payout back to any chain. Deposits are in USDC, so they keep
+their value; guests pay no gas; hosts create events for free; the same escrow
+also sells tickets and runs free RSVPs; hosts import an existing Luma event by
+its link, and a two-line button adds registration to their own website.
 
 **How NEAR fits in.**
 - A Rust escrow contract on NEAR holds the deposits. The host records who came
@@ -25,10 +53,6 @@ tickets or run free RSVP events. No platform fee, and creating an event is free.
   one intent; Google/email accounts (NEAR Auth) sign NEP-366 meta-transactions
   (on mainnet once NEAR Auth issues our client id); our relayer pays the gas in
   both cases. Hosts need no NEAR to create a small event.
-
-Hackathon tracks: Real-World Money (USDC deposits, NEAR Intents, gasless
-onboarding) and Social Money (guests who come share the no-shows' deposits;
-attendance is counted on chain).
 
 ## Networks (2026-11-12)
 
@@ -115,21 +139,8 @@ docs.auth.near.org. Then follow the steps above on `localhost:3000`.
 Without a browser or any account, `cargo test --locked -p near-events-sandbox`
 (see [Build and test](#build-and-test)) runs the whole money cycle on a local
 NEAR sandbox: deposit event with no-shows, ticket event, upgrade and freeze.
-
-On testnet the cycle also runs from scripts. They need your own testnet
-accounts in `~/.near-credentials` holding test USDC
-(`usdc.tidepool-sandbox.testnet`):
-
-```bash
-cd web
-export EVENTS_CONTRACT=escrow-tp7.tp7-nv1110.testnet HOST_ACCOUNT=<you>.testnet GUEST_ACCOUNT=<friend>.testnet
-node scripts/smoke-intents-testnet.mjs   # deposit via 1Click → finalize(attended) → cash out to Base and into Intents
-node scripts/smoke-tickets-testnet.mjs   # paid ticket → host paid at registration → finalize → cancel refunds nothing
-```
-
-These scripts last passed on 2026-11-05 against an older escrow. The current
-escrow was checked with direct transactions on 2026-11-10 (free tier, paid
-creation, deposit, ticket, finalize, withdraw; see docs/DEPLOY.md).
+Release checks with real testnet transactions are in `web/scripts/` and
+[docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Rules the escrow enforces
 
@@ -179,6 +190,14 @@ creation, deposit, ticket, finalize, withdraw; see docs/DEPLOY.md).
 - **The owner (`lold.near` on mainnet)** has no method that moves balances, but
   until `freeze` it can replace the code, so until then guests trust the owner
   too.
+
+## Current limits
+
+- **Google/email sign-in on mainnet** is built and was tested on testnet. It
+  appears on www.nearvent.site once NEAR Auth approves our application
+  (submitted 2026-11-09).
+- **The escrow is not frozen yet.** We plan upgrades, so the owner keeps the
+  right to replace the code; `freeze` makes it immutable and cannot be undone.
 
 ## Embed on your website
 
