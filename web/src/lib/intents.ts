@@ -4,7 +4,6 @@
 // Nearvent account is their NEAR Intents account: the lowercase 0x address.
 // They never hold NEAR: they sign intents with their wallet (ERC-191) and our
 // relayer submits them to intents.near, paying the gas.
-import { baseEncode } from "near-api-js";
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "./config";
 import { events, view } from "./near";
 import type { Call } from "./wallet";
@@ -207,6 +206,8 @@ async function signAndRelay(address: string, intent: Record<string, unknown>, na
   const sigHex = await personalSign(address, payload);
   const sig = Uint8Array.from(sigHex.slice(2).match(/../g)!.map((h) => parseInt(h, 16)));
   if (sig[64] >= 27) sig[64] -= 27; // The verifier expects v in {0, 1}.
+  // Loaded here, not at the top: this file ships on every page and near-api-js is ~480 KB.
+  const { baseEncode } = await import("near-api-js");
 
   const res = await fetch("/api/intents/execute", {
     method: "POST",

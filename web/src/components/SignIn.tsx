@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode 
 import { useWallet } from "@/lib/wallet";
 import { FASTAUTH_CLIENT_ID, HAS_INTENTS } from "@/lib/config";
 import { evmWallets, type EvmWallet } from "@/lib/intents";
+import { fastAuthPrepare } from "@/lib/fastauth";
 
 const ICON = "h-10 w-10 shrink-0 rounded-full";
 const EthMark = () => <span className={`${ICON} grid place-items-center bg-[var(--accent-soft)] p-2.5`}><img src="/event-themes/marks/ethereum.svg" alt="" className="h-full" /></span>;
@@ -27,7 +28,11 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
   const [step, setStep] = useState<"chain" | "evm">("chain");
   // Read after mount: extensions announce themselves (EIP-6963) only in the browser.
   const [evm, setEvm] = useState<EvmWallet[]>([]);
-  useEffect(() => setEvm(evmWallets()), []);
+  useEffect(() => {
+    setEvm(evmWallets());
+    // Load the Google SDK only once sign-in options are on screen, so the click can open its popup at once.
+    if (FASTAUTH_CLIENT_ID) fastAuthPrepare().catch(() => {});
+  }, []);
   const off = !ready || busy !== null;
 
   const run = (fn: () => Promise<void>, label: string) => async () => {

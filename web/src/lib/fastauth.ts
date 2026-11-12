@@ -34,12 +34,13 @@ let session: Promise<Session> | null = null;
  */
 export function fastAuthPrepare(): Promise<Base> {
   base ??= (async () => {
+    // Checked before the imports: the SDKs are ~500 KB of JS.
+    if (!FASTAUTH_CLIENT_ID) throw new Error("Google and email sign-in is not set up yet. Use a wallet.");
     const [{ FastAuthClient }, { JavascriptProvider }, { connect }] = await Promise.all([
       import("@fast-auth-near/browser-sdk"),
       import("@fast-auth-near/javascript-provider"),
       import("near-api-js-v5"),
     ]);
-    if (!FASTAUTH_CLIENT_ID) throw new Error("Google and email sign-in is not set up yet. Use a wallet.");
     const provider = new JavascriptProvider({ network: NETWORK, clientId: FASTAUTH_CLIENT_ID });
     const { connection } = await connect({ networkId: NETWORK, nodeUrl: RPC_URL });
     // Types come from separate copies of near-api-js 5; they match at runtime.

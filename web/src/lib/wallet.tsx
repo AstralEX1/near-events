@@ -7,7 +7,7 @@ import { STAFF_MESSAGE, evmStaffMessage } from "./staffShared";
 import { useRouter } from "next/navigation";
 import { connectEvm, disconnectEvm, evmAccount, hostFromIntents, personalSign } from "./intents";
 import { FREE_MAX_CAPACITY, FREE_MAX_DAYS, FREE_MAX_EVENTS } from "./near";
-import { RETURN_KEY, fastAuthEnsure, fastAuthLogin, fastAuthLogout, fastAuthPrepare, fastAuthProve, fastAuthRestore, fastAuthSend } from "./fastauth";
+import { RETURN_KEY, fastAuthEnsure, fastAuthLogin, fastAuthLogout, fastAuthProve, fastAuthRestore, fastAuthSend } from "./fastauth";
 import { demoLogin, demoLogout, demoRestore, demoSend } from "./demoBackend";
 
 /** Implicit NEAR accounts from Google/email login are a 64-char hex id. */
@@ -154,7 +154,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       try {
         saved = localStorage.getItem(KIND_KEY);
       } catch {}
-      fastAuthPrepare().catch(() => {});
       const returningFromAuth0 = new URLSearchParams(window.location.search).has("code");
       // A transition lets the page finish hydrating before the restored account re-renders it
       // (an urgent update here breaks hydration of the signed-out server HTML).
