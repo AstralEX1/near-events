@@ -1,6 +1,6 @@
 # Demo video script (about 2 minutes)
 
-Record on https://www.nearvent.site with Sign In → **Try with a demo account**.
+Record on https://www.nearvent.site/demo (same as Sign In → **Try with a demo account**).
 The demo runs in the browser on made-up data (50 demo USDC, a past event with a
 payout, your just-ended event to check in and close, upcoming Deposit / Ticket /
 Free events) and touches no server, relayer or chain. The old testnet demo `/e/4`

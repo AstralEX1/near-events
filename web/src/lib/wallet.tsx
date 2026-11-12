@@ -52,7 +52,7 @@ interface WalletState {
   /** EVM wallet (one of `evmWallets()`); the account is the wallet's NEAR Intents account. */
   signInWithEvm: (wallet?: string) => Promise<void>;
   /** Demo mode: made-up events and money kept in this browser; nothing reaches the server or the chain. */
-  signInWithDemo: () => Promise<void>;
+  signInWithDemo: (next?: string) => Promise<void>;
   signOut: () => Promise<void>;
   /** Signs and sends calls, one transaction each, in order. */
   send: (calls: Call[]) => Promise<void>;
@@ -209,10 +209,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     remember("evm", await connectEvm(wallet));
   }, []);
 
-  const signInWithDemo = useCallback(async () => {
+  const signInWithDemo = useCallback(async (next?: string) => {
     await connector.current?.disconnect().catch(() => {});
     remember("demo", demoLogin());
-    window.location.reload(); // every page re-reads from the demo data
+    // A full load: every page re-reads from the demo data.
+    if (next) window.location.replace(next);
+    else window.location.reload();
   }, []);
 
   const signOut = useCallback(async () => {

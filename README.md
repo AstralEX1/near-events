@@ -77,8 +77,8 @@ USDC since 2026-11-11. Testnet stays for development and Vercel preview builds.
 
 ## Try it in two minutes (no wallet)
 
-Open **[www.nearvent.site](https://www.nearvent.site)** → **Sign In** → **Try with a
-demo account**. The site switches to a demo with made-up events, guests and
+Open **[www.nearvent.site/demo](https://www.nearvent.site/demo)** (or **Sign In** →
+**Try with a demo account**). The site switches to a demo with made-up events, guests and
 50 demo USDC. Everything stays in your browser: no server, no blockchain,
 nothing to pay. **Exit Demo** in the account menu clears it.
 
