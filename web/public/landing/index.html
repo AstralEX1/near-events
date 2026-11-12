@@ -184,7 +184,9 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .bar { height: 18px; border-radius: 999px; background: var(--soft); overflow: hidden; }
 .bar i { display: block; height: 100%; border-radius: 999px; transition: width 1.4s cubic-bezier(.2,.7,.2,1); }
 .bar.free i { background: var(--bad); width: 50%; }
-.stat-line { font-size: clamp(26px, 3.4vw, 40px); font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; }
+.stat { display: flex; flex-direction: column; gap: 6px; }
+.stat b { font-family: var(--mono); font-size: clamp(56px, 8vw, 96px); font-weight: 600; letter-spacing: -0.05em; line-height: 1; }
+.stat span { font-size: clamp(17px, 1.6vw, 20px); font-weight: 600; color: var(--muted); }
 .bars-q { font-size: clamp(24px, 3vw, 32px); font-weight: 750; letter-spacing: -0.03em; line-height: 1.1; }
 .bar-lab span small { display: block; font-size: 13px; font-weight: 500; color: var(--muted); }
 .bar-lab b em { font-style: normal; font-size: 16px; font-weight: 500; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
@@ -202,6 +204,17 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 
 /* ---------- LIVE (BaliSquad) ---------- */
 .live { border-bottom: 1px solid var(--line); }
+.demo { border-bottom: 1px solid var(--line); }
+.demo-head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 24px; margin-bottom: clamp(28px, 4vw, 48px); }
+.demo-head .txt { display: flex; flex-direction: column; gap: 14px; }
+.demo-video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 20px; border: 1px solid var(--line); background: var(--soft); }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+/* RSVP explained on hover, keyboard focus and tap; same grey bubble as the app's tooltips. */
+.tip { position: relative; text-decoration: underline dotted; text-underline-offset: .18em; text-decoration-thickness: 1px; cursor: help; }
+.tip::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 6px); z-index: 5; width: max-content; max-width: min(300px, 80vw); padding: 4px 8px; border-radius: 4px; background: rgba(97,97,97,.92); color: #fff; font: 500 11px/1.4 var(--font); letter-spacing: 0; text-align: left; white-space: normal; pointer-events: none; opacity: 0; transform: translateX(calc(-50% + var(--x, 0px))) scale(.97); transition: opacity 125ms var(--ease-out), transform 125ms var(--ease-out); }
+.tip:hover::after, .tip:focus::after { opacity: 1; transform: translateX(calc(-50% + var(--x, 0px))); }
+.tip:focus { outline: none; }
+.tip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .live-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
 .strip-nav { display: flex; gap: 8px; flex-shrink: 0; }
 .strip-btn { appearance: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: 600 18px var(--font); cursor: pointer; transition: background .15s ease, opacity .15s ease; }
@@ -283,13 +296,34 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       <a class="btn btn-light" href="/create">Create Event</a>
       <div class="demo-col">
         <a class="btn btn-ghost" href="/demo">Try Demo</a>
-        <a class="watch" href="/video">▶ Watch Video · 0:30</a>
+        <a class="watch" href="#demo" target="_self">▶ Watch Video · 0:30</a>
       </div>
     </div>
   </div>
 </div>
 
 <main>
+  <section class="demo" id="demo">
+    <div class="wrap">
+      <div class="demo-head reveal">
+        <div class="txt"><span class="eyebrow">Demo</span><h2 class="h2">See it in 30 seconds.</h2></div>
+        <a class="btn btn-dark" href="/demo">Try Demo</a>
+      </div>
+      <video class="demo-video" src="/video/nearvent-showcase.mp4" poster="/video/nearvent-showcase.jpg" width="1920" height="1080" preload="none" muted loop playsinline controls aria-label="Nearvent in 30 seconds: find an event, register with a deposit, check in, get paid"></video>
+    </div>
+    <script>
+      // Plays muted while in view; controls let people turn the sound on.
+      (() => {
+        const video = document.querySelector('.demo-video');
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        new IntersectionObserver(([entry]) => {
+          if (entry.isIntersecting) video.play().catch(() => {});
+          else video.pause();
+        }, { threshold: 0.5 }).observe(video);
+      })();
+    </script>
+  </section>
+
   <section class="live" id="live">
     <div class="wrap live-head">
       <div class="txt reveal">
@@ -422,12 +456,12 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     <div class="wrap">
       <div class="head reveal">
         <span class="eyebrow">How it works</span>
-        <h2 class="h2">Add a little friction.</h2>
-        <p class="lead">To RSVP to a free event, you put down a deposit. Show up and you get it back. No-show — it’s taken and split among who came.</p>
+        <h2 class="h2">Put skin in the game.</h2>
+        <p class="lead">To <abbr class="tip" tabindex="0" data-tip="RSVP, from French “répondez s’il vous plaît”, means telling the host you’re coming.">RSVP</abbr> to a free event, you put down a deposit. Show up and you get it back. No-show — it’s taken and split among who came.</p>
       </div>
 
       <div class="why reveal">
-        <article><picture class="why-art theme-art"><source srcset="/landing/illustrations/qr-event-pass-dark.png" media="(prefers-color-scheme: dark)" /><img src="/landing/illustrations/qr-event-pass.png" alt="" width="1536" height="1024" loading="lazy" decoding="async" /></picture><strong>Filters before RSVP</strong><span>Only people willing to put skin in the game take a seat.</span></article>
+        <article><picture class="why-art theme-art"><source srcset="/landing/illustrations/qr-event-pass-dark.png" media="(prefers-color-scheme: dark)" /><img src="/landing/illustrations/qr-event-pass.png" alt="" width="1536" height="1024" loading="lazy" decoding="async" /></picture><strong>Filters before <abbr class="tip" tabindex="0" data-tip="RSVP, from French “répondez s’il vous plaît”, means telling the host you’re coming.">RSVP</abbr></strong><span>Only people who mean it take a seat.</span></article>
         <article><picture class="why-art theme-art"><source srcset="/landing/illustrations/commitment-pass-dark.png" media="(prefers-color-scheme: dark)" /><img src="/landing/illustrations/commitment-pass.png" alt="" width="1536" height="1024" loading="lazy" decoding="async" /></picture><strong>Loss aversion after</strong><span>Once the deposit is in, skipping the night actually costs something.</span></article>
         <article><picture class="why-art theme-art"><source srcset="/landing/illustrations/door-check-in-dark.png" media="(prefers-color-scheme: dark)" /><img src="/landing/illustrations/door-check-in.png" alt="" width="1536" height="1024" loading="lazy" decoding="async" /></picture><strong>No-shows pay the room</strong><span>Who comes gets their money back plus a share of what the absentees left.</span></article>
       </div>
@@ -436,7 +470,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <div class="step reveal">
           <span class="num">1</span>
           <div class="txt">
-            <h3>Everyone deposits a small amount when they RSVP</h3>
+            <h3>Everyone deposits a small amount when they <abbr class="tip" tabindex="0" data-tip="RSVP, from French “répondez s’il vous plaît”, means telling the host you’re coming.">RSVP</abbr></h3>
             <p>Everyone deposits a small amount of USDC when they RSVP — the host sets it, e.g. 10 USDC — which is refunded after check-in. Pay from any chain or sign in with Google.</p>
           </div>
           <div class="shot">
@@ -508,8 +542,8 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
   <section>
     <div class="wrap nos">
       <div class="bars reveal" id="bars">
-        <p class="stat-line" style="color:#e5484d">Before: 20 signed up,<br>10 arrived.</p>
-        <p class="stat-line" style="color:#30a46c">After: 20 signed up,<br>18 arrived.</p>
+        <p class="stat"><b style="color:#e5484d">10/20</b><span>showed up before</span></p>
+        <p class="stat"><b style="color:#30a46c">18/20</b><span>showed up with a deposit</span></p>
         <p class="src"><a href="https://medium.com/noblocknoparty/how-blockparty-can-decrease-no-shows-at-your-next-event-5e5895f1a23f" target="_blank" rel="noreferrer">Kickback data</a></p>
       </div>
       <div class="quote reveal">
@@ -569,7 +603,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       <div class="faq-list">
         <details><summary>Will guests need a crypto wallet?</summary><p>No. Guests can sign in with Google or email. People who have a NEAR wallet can use it too.</p></details>
         <details><summary>What blockchain is this on?</summary><p>NEAR. Guests pay in USDC from any chain, and NEAR Intents moves it to NEAR for them.</p></details>
-        <details><summary>Can I charge for tickets?</summary><p>Yes. Choose Ticket instead of Stake to RSVP. The money goes to you when you close the event.</p></details>
+        <details><summary>Can I charge for tickets?</summary><p>Yes. Choose Ticket instead of Stake to <abbr class="tip" tabindex="0" data-tip="RSVP, from French “répondez s’il vous plaît”, means telling the host you’re coming.">RSVP</abbr>. The money goes to you when you close the event.</p></details>
         <details><summary>What happens to no-show deposits?</summary><p>Guests who were checked in at the door share them. No platform fee.</p></details>
       </div>
     </div>
@@ -611,6 +645,16 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     });
   }
 
+  // Keep each RSVP bubble inside the screen: shift it from the word's center when it would cross an edge.
+  document.querySelectorAll('.tip').forEach(function (el) {
+    function place() {
+      var r = el.getBoundingClientRect(), half = Math.min(300, innerWidth * .8) / 2, c = r.left + r.width / 2;
+      el.style.setProperty('--x', Math.min(Math.max(0, half + 12 - c), innerWidth - 12 - half - c) + 'px');
+    }
+    el.addEventListener('mouseenter', place);
+    el.addEventListener('focus', place);
+  });
+
   // QR pattern for the door-pass mock
   var qr = document.getElementById('qr'), N = 21;
   for (var r = 0; r < N; r++) for (var c = 0; c < N; c++) {
@@ -646,6 +690,11 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 })();
 </script>
 
-<script>// Light is the default: match illustrations to the chosen theme instead of the OS setting.
-if(document.documentElement.dataset.theme)document.querySelectorAll('source[media*="prefers-color-scheme: dark"]').forEach(function(el){if(document.documentElement.dataset.theme==='dark')el.removeAttribute('media');else el.remove()})</script>
+<script>// Light is the default: match illustrations to the chosen theme instead of the OS setting,
+// and follow the app header's theme button live (the storage event reaches this iframe).
+(function(){var root=document.documentElement,dark=document.querySelectorAll('source[media*="prefers-color-scheme: dark"]');
+function apply(){var t;try{t=localStorage.getItem('near-me:appearance')}catch(e){}
+if(t==='system')delete root.dataset.theme;else root.dataset.theme=t==='dark'?'dark':'light';
+dark.forEach(function(el){el.media=!root.dataset.theme?'(prefers-color-scheme: dark)':root.dataset.theme==='dark'?'all':'not all'})}
+apply();addEventListener('storage',function(e){if(e.key==='near-me:appearance')apply()})})()</script>
 </body></html>

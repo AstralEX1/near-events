@@ -8,6 +8,7 @@ import { Avatar } from "./ui";
 import { SignInMenu } from "./SignIn";
 import { Icon } from "./EventSections";
 import { Logo } from "./Logo";
+import { AppearancePicker } from "./AppearancePicker";
 
 // Lucide paths (ISC).
 const COMPASS = ["M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20", "m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"];
@@ -49,15 +50,17 @@ function HeaderContent({ accountId, signOut, path, preview = false, demo = false
         <nav aria-label="Main navigation" className="hidden sm:flex items-center gap-1 ml-auto">
           {links.map(([href, label, icon]) => <Link key={href} href={href} className="gc-nav-link" aria-current={path.startsWith(href) ? "page" : undefined}><NavLabel icon={icon} label={label} /></Link>)}
         </nav>
+        {/* On phones the nav moves to the tab bar, so the theme button takes the push to the right. */}
+        <div className="ml-auto sm:ml-0"><AppearancePicker /></div>
         {accountId ? (
-          <details ref={account} key={`account:${path}`} className="gc-account ml-auto sm:ml-0" onKeyDown={(event) => { if (event.key === "Escape") event.currentTarget.open = false; }}>
+          <details ref={account} key={`account:${path}`} className="gc-account" onKeyDown={(event) => { if (event.key === "Escape") event.currentTarget.open = false; }}>
             <summary aria-label="Your account"><Avatar account={accountId} size={26} /><span className="hidden md:inline">My Profile</span></summary>
             <div className="gc-account-panel">
               <Link href="/profile"><NavLabel icon={USER} label="My Profile" /></Link>
               {!preview && <button type="button" onClick={signOut}>{demo ? "Exit Demo" : "Sign Out"}</button>}
             </div>
           </details>
-        ) : preview ? <span className="btn btn-primary ml-auto sm:ml-0">Sign In</span> : <div className="ml-auto sm:ml-0"><SignInMenu /></div>}
+        ) : preview ? <span className="btn btn-primary">Sign In</span> : <SignInMenu />}
       </div>
     </header>
     {/* Phones: the same three places as a bottom tab bar, within thumb reach. Outside the header,

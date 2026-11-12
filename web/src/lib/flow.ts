@@ -20,9 +20,9 @@ interface Params {
 
 /** How each mode works, shown as a hover hint wherever guests' payment is picked. */
 export const MODE_HINTS: Record<JoinMode, string> = {
-  Deposit: "Guests put down a deposit. Come and get it back plus a share of the no-shows' deposits; miss it and it goes to those who came.",
+  Deposit: "Guests put down a deposit when they RSVP (say they're coming). Come and get it back plus a share of the no-shows' deposits; miss it and it goes to those who came.",
   Ticket: "Guests pay to register. The money is yours right away; tickets aren't refunded.",
-  Free: "Guests just RSVP. No money, nothing on chain.",
+  Free: "Guests just RSVP (say they're coming). No money, nothing on chain.",
 };
 
 export function parseMode(value: string | null | undefined): JoinMode | null {

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { AppearancePicker } from "@/components/AppearancePicker";
 import { Header } from "@/components/Header";
 
 // The full site: header and footer. Embeds under /embed render without them.
@@ -20,7 +19,6 @@ export default function SiteLayout({ children }: LayoutProps<"/">) {
           <Link href="/video">Video</Link>
           <Link href="/brand">Brand</Link>
         </div>
-        <AppearancePicker />
       </footer>
     </>
   );

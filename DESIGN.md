@@ -321,7 +321,7 @@ effects; don't drop the square; no busy photos behind it; don't write
   **Ticket**, **Free**, **Going**, **I was there**, **check-in**, **QR pass**,
   **host**, **door team**, **USDC**.
 - UI and docs are in English. Landing copy examples: "You never know who
-  will show up." / "Add a little friction." / "Your next event
+  will show up." / "Put skin in the game." / "Your next event
   starts here."
 
 ## Imagery

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Header } from "@/components/Header";
+import { PauseOnLeave } from "@/components/PauseOnLeave";
 
 export const metadata: Metadata = { title: "Nearvent — Events people actually show up to." };
 
@@ -11,7 +12,7 @@ export default function AboutPage() {
       <Suspense fallback={<div className="h-[76px] border-b border-border" />}>
         <Header />
       </Suspense>
-      <iframe src="/landing/index.html" title="About Nearvent" className="flex-1 w-full border-0 block" />
+      <PauseOnLeave><iframe src="/landing/index.html" title="About Nearvent" className="flex-1 w-full border-0 block" /></PauseOnLeave>
     </div>
   );
 }

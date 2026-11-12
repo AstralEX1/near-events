@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PauseOnLeave } from "@/components/PauseOnLeave";
 
 export const metadata: Metadata = {
   title: "Video · Nearvent",
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function VideoPage() {
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <PauseOnLeave className="mx-auto max-w-4xl space-y-6">
       <h1 className="text-3xl font-semibold tracking-tight">Nearvent in 30 Seconds</h1>
       {/* Web copy of showcase/nearvent-showcase.mp4 (re-encoded to ~4.6 MB). */}
       <video
@@ -23,6 +24,6 @@ export default function VideoPage() {
         preload="metadata"
       />
       <Link href="/demo" className="btn btn-primary">Try Demo</Link>
-    </div>
+    </PauseOnLeave>
   );
 }
