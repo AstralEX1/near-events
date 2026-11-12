@@ -10,8 +10,8 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/p/:id", destination: "/embed/e/:id/join", permanent: false },
-      // The site opens on Explore; the logo leads to the landing at /about.
-      { source: "/", destination: "/events", permanent: false },
+      // The site opens on the landing (/about); Explore is at /events.
+      { source: "/", destination: "/about", permanent: false },
     ];
   },
   async headers() {
