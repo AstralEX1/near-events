@@ -7,6 +7,7 @@ import { useWallet } from "@/lib/wallet";
 import { Avatar } from "./ui";
 import { SignInMenu } from "./SignIn";
 import { Icon } from "./EventSections";
+import { Logo } from "./Logo";
 
 // Lucide paths (ISC).
 const COMPASS = ["M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20", "m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"];
@@ -43,7 +44,7 @@ function HeaderContent({ accountId, signOut, path, preview = false, demo = false
     <>
     <header className="gc-header">
       <div className="gc-header-inner">
-        <Link href="/about" className="gc-brand" aria-label="About Nearvent">nearvent</Link>
+        <Link href="/about" className="gc-brand" aria-label="About Nearvent"><Logo /></Link>
         {demo && <span className="gc-demo" data-tooltip="Made-up events and money, kept in this browser. Nothing is sent anywhere.">Demo</span>}
         <nav aria-label="Main navigation" className="hidden sm:flex items-center gap-1 ml-auto">
           {links.map(([href, label, icon]) => <Link key={href} href={href} className="gc-nav-link" aria-current={path.startsWith(href) ? "page" : undefined}><NavLabel icon={icon} label={label} /></Link>)}
