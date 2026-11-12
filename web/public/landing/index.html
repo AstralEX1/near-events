@@ -86,9 +86,6 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .hero h1 em { font-style: normal; background: linear-gradient(90deg, #ffb3d2, #ffd23f); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .hero .lead { color: rgba(255,255,255,.86); }
 .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
-.demo-col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.hero .watch { font-size: 14px; color: rgba(255,255,255,.78); text-decoration: none; }
-.hero .watch:hover { color: #fff; }
 
 /* ---------- PROBLEM ---------- */
 .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
@@ -294,36 +291,11 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     <p class="lead">Guests leave a small deposit when they sign up. Come, and you get it back with a share of what the no-shows left behind.</p>
     <div class="ctas">
       <a class="btn btn-light" href="/create">Create Event</a>
-      <div class="demo-col">
-        <a class="btn btn-ghost" href="/demo">Try Demo</a>
-        <a class="watch" href="#demo" target="_self">▶ Watch Video · 0:30</a>
-      </div>
     </div>
   </div>
 </div>
 
 <main>
-  <section class="demo" id="demo">
-    <div class="wrap">
-      <div class="demo-head reveal">
-        <div class="txt"><span class="eyebrow">Demo</span><h2 class="h2">See it in 30 seconds.</h2></div>
-        <a class="btn btn-dark" href="/demo">Try Demo</a>
-      </div>
-      <video class="demo-video" src="/video/nearvent-showcase.mp4" poster="/video/nearvent-showcase.jpg" width="1920" height="1080" preload="none" muted loop playsinline controls aria-label="Nearvent in 30 seconds: find an event, register with a deposit, check in, get paid"></video>
-    </div>
-    <script>
-      // Plays muted while in view; controls let people turn the sound on.
-      (() => {
-        const video = document.querySelector('.demo-video');
-        if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-        new IntersectionObserver(([entry]) => {
-          if (entry.isIntersecting) video.play().catch(() => {});
-          else video.pause();
-        }, { threshold: 0.5 }).observe(video);
-      })();
-    </script>
-  </section>
-
   <section class="live" id="live">
     <div class="wrap live-head">
       <div class="txt reveal">
@@ -421,6 +393,31 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
           }, 140);
         }, { passive: true });
         addEventListener('resize', sync); addEventListener('load', sync); sync();
+      })();
+    </script>
+  </section>
+
+  <section class="demo" id="demo">
+    <div class="wrap">
+      <div class="demo-head reveal">
+        <div class="txt"><span class="eyebrow">Demo</span><h2 class="h2">See it in 30 seconds.</h2></div>
+        <a class="btn btn-dark" href="/demo">Try Demo</a>
+      </div>
+      <video class="demo-video" src="/video/nearvent-showcase-720.mp4" poster="/video/nearvent-showcase.jpg" width="1280" height="720" preload="none" muted loop playsinline controls aria-label="Nearvent in 30 seconds: find an event, register with a deposit, check in, get paid"></video>
+    </div>
+    <script>
+      // Plays muted while in view; controls let people turn the sound on.
+      // Loads a screen ahead so playback never starts mid-scroll, and pauses only once fully out of view.
+      (() => {
+        const video = document.querySelector('.demo-video');
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        new IntersectionObserver(([entry]) => {
+          if (entry.isIntersecting) video.preload = 'auto';
+        }, { rootMargin: '100% 0px' }).observe(video);
+        new IntersectionObserver(([entry]) => {
+          if (entry.intersectionRatio >= 0.4) video.play().catch(() => {});
+          else if (!entry.isIntersecting) video.pause();
+        }, { threshold: [0, 0.4] }).observe(video);
       })();
     </script>
   </section>
