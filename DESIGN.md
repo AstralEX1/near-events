@@ -178,6 +178,9 @@ In code always use the variable (`var(--accent)`) or the Tailwind alias
 - Logo pink `#ff3d8b` is for the n-square and big poster blocks (the `/brand`
   hero); text on it is white or ink at 24px and up. For text and buttons
   use `--accent` (`#d61f69`): it passes contrast.
+- Sun on the landing: a highlighter block behind one or two heading words
+  (ink text in both themes), at most two per page; now "show up" and
+  "starts here." Thin section rules on the landing are accent pink. (2026-11-12, Claude)
 - Checked contrast (WCAG): ink on blush 17.4:1, muted on blush 5.8:1,
   white on accent 4.9:1, accent on blush 4.7:1, dark accent on dark bg 7.1:1.
   White on logo pink is 3.3:1, so it is only for the icon.
