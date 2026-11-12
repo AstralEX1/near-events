@@ -11,7 +11,10 @@ export default function DocsHome() {
           <div className="font-medium">Try it now, no wallet needed</div>
           <div className="text-sm text-muted">Made-up events and money, all in your browser.</div>
         </div>
-        <Link href="/demo" className="btn btn-primary">Try Demo</Link>
+        <div className="flex flex-col items-center gap-1.5">
+          <Link href="/demo" className="btn btn-primary">Try Demo</Link>
+          <Link href="/video" className="text-xs text-muted hover:text-text">▶ Watch Video · 0:30</Link>
+        </div>
       </div>
 
       <Section id="flow" title="Four steps">

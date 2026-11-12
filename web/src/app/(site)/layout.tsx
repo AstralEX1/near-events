@@ -17,6 +17,7 @@ export default function SiteLayout({ children }: LayoutProps<"/">) {
           <span>Nearvent · no platform fee</span>
           <Link href="/docs">Docs</Link>
           <Link href="/demo">Demo</Link>
+          <Link href="/video">Video</Link>
         </div>
         <AppearancePicker />
       </footer>

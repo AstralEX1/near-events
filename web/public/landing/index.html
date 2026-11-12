@@ -86,6 +86,9 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .hero h1 em { font-style: normal; background: linear-gradient(90deg, #ffb3d2, #ffd23f); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .hero .lead { color: rgba(255,255,255,.86); }
 .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+.demo-col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.hero .watch { font-size: 14px; color: rgba(255,255,255,.78); text-decoration: none; }
+.hero .watch:hover { color: #fff; }
 
 /* ---------- PROBLEM ---------- */
 .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
@@ -278,7 +281,10 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     <p class="lead">Guests leave a small deposit when they sign up. Come, and you get it back with a share of what the no-shows left behind.</p>
     <div class="ctas">
       <a class="btn btn-light" href="/create">Create Event</a>
-      <a class="btn btn-ghost" href="/demo">Try Demo</a>
+      <div class="demo-col">
+        <a class="btn btn-ghost" href="/demo">Try Demo</a>
+        <a class="watch" href="/video">▶ Watch Video · 0:30</a>
+      </div>
     </div>
   </div>
 </div>
