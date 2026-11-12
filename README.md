@@ -1,5 +1,7 @@
 # Nearvent: show up, split the pool
 
+[![Verify Nearvent](https://github.com/AstralEX1/near-events/actions/workflows/verify.yml/badge.svg)](https://github.com/AstralEX1/near-events/actions/workflows/verify.yml)
+
 <a href="showcase/nearvent-showcase.mp4"><img src="showcase/preview.webp" alt="Nearvent in 30 seconds: discover an event, create one with a USDC deposit, register and get a QR pass, check guests in, close the event and withdraw the payout" width="100%"></a>
 
 **▶ [Watch the 30-second product video with sound (MP4, 1080p)](showcase/nearvent-showcase.mp4)**
@@ -20,8 +22,9 @@ tickets or run free RSVP events. No platform fee, and creating an event is free.
   from another chain through 1Click and withdraw to any chain or to an Intents
   account.
 - Nobody needs NEAR for gas. An EVM wallet (MetaMask etc.) registers by signing
-  one intent; Google/email accounts (NEAR Auth) sign NEP-366 meta-transactions;
-  our relayer pays the gas in both cases. Hosts need no NEAR to create a small event.
+  one intent; Google/email accounts (NEAR Auth) sign NEP-366 meta-transactions
+  (on mainnet once NEAR Auth issues our client id); our relayer pays the gas in
+  both cases. Hosts need no NEAR to create a small event.
 
 Hackathon tracks: Real-World Money (USDC deposits, NEAR Intents, gasless
 onboarding) and Social Money (guests who come share the no-shows' deposits;
@@ -49,6 +52,19 @@ USDC since 2026-11-11. Testnet stays for development and Vercel preview builds.
   so the account has no access keys. The owner can still `upgrade` the code until
   the one-way `freeze`; `get_config` shows `frozen`, the owner and the whitelist
   and sponsored modes (both off). Evidence in [docs/DEPLOY.md](docs/DEPLOY.md#mainnet-release).
+- Same code as this repo, with one catch: the mainnet WASM was built by CI in
+  our private workspace repo at commit `0361b388…`, and cargo-near writes that
+  commit into the contract's NEP-330 metadata (`contract_source_metadata`). That
+  commit is not in this repo, so a rebuild here differs only in that embedded
+  commit hash. To check, build here and swap the hash back:
+
+  ```bash
+  cd contracts && cargo near build reproducible-wasm --manifest-path events/Cargo.toml
+  perl -pe "s/$(git rev-parse HEAD)/0361b388eb9ea8dbd15b29108b49837621782946/g" \
+    target/near/near_events/near_events.wasm | shasum -a 256
+  # 64e50a1a50efb49ab093715d3d1066f40da22855d25d89432b697f902f5d0693
+  # = SHA-256 of the code on escrow.lold.near (base58: 7nrLLgzc…iVjm4)
+  ```
 - Testnet escrow: same rules, CI reproducible WASM of `96cb1ee` (code hash
   `571uYapS2GwgvfAXrzAcHaLgpb1s1gScUbSb35ESWztE`). Free and paid creation,
   deposit, ticket, finalize and withdraw ran there with real transactions
@@ -65,7 +81,7 @@ demo account**. The site switches to a demo with made-up events, guests and
 50 demo USDC. Everything stays in your browser: no server, no blockchain,
 nothing to pay. **Exit Demo** in the account menu clears it.
 
-1. **Explore** → *NEAR Builders Night* → **Register** → you appear under "Going" with a QR pass.
+1. **Explore** → *NEAR Builders Night* → type a name in **Your name** → **Register** → you appear under "Going" with a QR pass.
 2. **My Events** → *Sunset Builders Meetup* (yours, it just ended) → **Manage → Guests** → check a few guests in.
 3. **Close event & pay out** → the pool is split among the guests who came.
 4. *AI Coworking Morning* (you went) → **Withdraw** your share.
@@ -95,8 +111,13 @@ Tidepool. Google/email sign-in works on `http://localhost:3000` once
 `NEXT_PUBLIC_FASTAUTH_CLIENT_ID` is set to the shared testnet client from
 docs.auth.near.org. Then follow the steps above on `localhost:3000`.
 
-Without a browser, the contract cycle runs from scripts (they use your own
-testnet accounts from `~/.near-credentials`):
+Without a browser or any account, `cargo test --locked -p near-events-sandbox`
+(see [Build and test](#build-and-test)) runs the whole money cycle on a local
+NEAR sandbox: deposit event with no-shows, ticket event, upgrade and freeze.
+
+On testnet the cycle also runs from scripts. They need your own testnet
+accounts in `~/.near-credentials` holding test USDC
+(`usdc.tidepool-sandbox.testnet`):
 
 ```bash
 cd web
@@ -138,10 +159,14 @@ creation, deposit, ticket, finalize, withdraw; see docs/DEPLOY.md).
 
 - **The host decides who came.** `finalize` counts only accounts registered for
   that event, but a host who registers extra accounts of their own and marks
-  only those as present takes the real guests' deposits. Guests trust the host
-  as they trust any meetup organiser; profiles show how many events a person
-  hosted, how many guests came and how many events they attended. With the
-  whitelist mode on (off now), only hosts the owner verified can create events.
+  only those as present takes the real guests' deposits. For now this rests on
+  trusted hosts, as with any meetup: guests already trust the organiser with
+  the venue and the list. Profiles show how many events a person hosted, how
+  many guests came and how many events they attended, and with the whitelist
+  mode on (off now) only hosts the owner verified can create events. If hosts
+  ever need to be trustless, the next step is an attendance oracle (for example
+  check-ins signed by guests' own wallets at the door) so the host no longer
+  writes the list alone.
 - **The host cannot withdraw the pool.** The escrow credits USDC only as shares
   to attended guests, refunds, the rounding remainder (to the host) and, in
   Ticket mode, the ticket price to the host at registration. Each account can
@@ -230,14 +255,19 @@ instructions explain how to move to this storage layout.
 
 ## Build and test
 
+Needs Node 22 (`web/.nvmrc`), Rust 1.97.1 and cargo-near 0.22.0, the same as CI
+(`.github/workflows/verify.yml`); the reproducible build also needs Docker.
+
 ```bash
 cd contracts
-cargo test --locked -p near-events -p test-usdc
-cargo test --locked -p near-events-sandbox
+cargo test --locked -p near-events -p test-usdc   # unit tests
+cargo test --locked -p near-events-sandbox        # full cycles on a local sandbox
 cargo near build non-reproducible-wasm --locked --manifest-path events/Cargo.toml
+cd ../web
+npm ci && npm test && npm run build               # web tests and production build
 ```
 
-Use the last command for local development. For a release, build the committed
+Use the `cargo near build` command for local development. For a release, build the committed
 snapshot using `cargo near build reproducible-wasm --manifest-path events/Cargo.toml`
 and verify its hash against the deployed account. See [deployment and release checks](docs/DEPLOY.md).
 
@@ -246,7 +276,10 @@ and verify its hash against the deployed account. See [deployment and release ch
 Rust `near-sdk` 5.29.1 and `near-contract-standards`, `cargo-near`; Next.js 16,
 React 19, Tailwind CSS 4; `near-api-js` 7 (and 5 for FastAuth);
 `@hot-labs/near-connect` (wallets); `@fast-auth-near/*` (FastAuth, Google/email
-sign-in); NEAR Intents and the 1Click API.
+sign-in); NEAR Intents and the 1Click API; Upstash Redis and Vercel for the
+off-chain parts. UI: SL UI Library components (MIT, vendored in
+`web/src/components/sl-ui/`), the Geist font. Photos and brand marks are credited
+in `web/public/event-themes/ATTRIBUTION.md` and `web/public/landing/MEDIA.md`.
 
 **AI disclosure:** the contract, web app, scripts and documentation were
 AI-assisted with Claude, Cursor and Codex, directed and reviewed by the author.
@@ -258,6 +291,11 @@ first commit is from 2026-11-02). No pre-hackathon code or own older libraries
 are included. The empty baseline is tagged `pre-hackathon` and the submitted
 state `hackathon-submission`; the full diff is
 [`pre-hackathon...hackathon-submission`](https://github.com/AstralEX1/near-events/compare/pre-hackathon...hackathon-submission).
+
+This repository is a code-only export of our private workspace, which also
+holds AI notes and planning. Each sync is one commit, so the history here is
+coarse. Working names during the hackathon were Near Events and Near Me; they
+remain in some code strings, account names and the deployed contract's messages.
 
 ## License
 
