@@ -309,8 +309,8 @@ text the name is written **Nearvent** (one word, capital N).
 - Product words (use exactly): **Nearvent**, **deposit**, **Stake to RSVP**,
   **Ticket**, **Free**, **Going**, **I was there**, **check-in**, **QR pass**,
   **host**, **door team**, **USDC**.
-- UI and docs are in English. Landing copy examples: "Clicking "Going" is
-  free. So nobody means it." / "Add a little friction." / "Your next event
+- UI and docs are in English. Landing copy examples: "You never know who
+  will show up." / "Add a little friction." / "Your next event
   starts here."
 
 ## Imagery
