@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Snippet } from "@/components/Snippet";
 import { Code, Section, Steps, Title } from "../parts";
 
-export const metadata: Metadata = { title: "Integrate Into Your Website · Nearvent" };
+export const metadata: Metadata = { title: "Integrate · Nearvent" };
 
 const SITE = "https://www.nearvent.site";
 
