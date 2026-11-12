@@ -202,9 +202,9 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 /* ---------- LIVE (BaliSquad) ---------- */
 .live { border-bottom: 1px solid var(--line); }
 .demo { border-bottom: 1px solid var(--line); }
-.demo-head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 24px; margin-bottom: clamp(28px, 4vw, 48px); }
-.demo-head .txt { display: flex; flex-direction: column; gap: 14px; }
-.demo-video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 20px; border: 1px solid var(--line); background: var(--soft); }
+.demo-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; margin-bottom: clamp(28px, 4vw, 48px); }
+.demo-video { display: block; width: 100%; max-width: 812px; margin: 0 auto; height: auto; aspect-ratio: 16 / 9; border-radius: 20px; border: 1px solid var(--line); background: var(--soft); }
+.demo-cta { display: flex; justify-content: center; margin-top: 28px; }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 /* RSVP explained on hover, keyboard focus and tap; same grey bubble as the app's tooltips. */
 .tip { position: relative; text-decoration: underline dotted; text-underline-offset: .18em; text-decoration-thickness: 1px; cursor: help; }
@@ -399,11 +399,9 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 
   <section class="demo" id="demo">
     <div class="wrap">
-      <div class="demo-head reveal">
-        <div class="txt"><span class="eyebrow">Demo</span><h2 class="h2">See it in 30 seconds.</h2></div>
-        <a class="btn btn-dark" href="/demo">Try Demo</a>
-      </div>
+      <div class="demo-head reveal"><span class="eyebrow">Demo</span><h2 class="h2">See it in 30 seconds.</h2></div>
       <video class="demo-video" src="/video/nearvent-showcase-720.mp4" poster="/video/nearvent-showcase.jpg" width="1280" height="720" preload="none" muted loop playsinline controls aria-label="Nearvent in 30 seconds: find an event, register with a deposit, check in, get paid"></video>
+      <div class="demo-cta"><a class="btn btn-dark" href="/demo">Try Demo</a></div>
     </div>
     <script>
       // Plays muted while in view; controls let people turn the sound on.
