@@ -14,7 +14,8 @@ tickets or run free RSVP events. No platform fee, and creating an event is free.
 
 **How NEAR fits in.**
 - A Rust escrow contract on NEAR holds the deposits. The host records who came
-  but cannot take the pool; the contract splits it.
+  and the contract splits the pool among them; the host has no way to withdraw
+  it directly (see [Trust model](#trust-model)).
 - Payments and payouts go through NEAR Intents (`intents.near`): a guest can pay
   from another chain through 1Click and withdraw to any chain or to an Intents
   account.
@@ -22,34 +23,39 @@ tickets or run free RSVP events. No platform fee, and creating an event is free.
   one intent; Google/email accounts (NEAR Auth) sign NEP-366 meta-transactions;
   our relayer pays the gas in both cases. Hosts need no NEAR to create a small event.
 
-Hackathon track: Real-World Money (USDC deposits, NEAR Intents, gasless onboarding).
+Hackathon tracks: Real-World Money (USDC deposits, NEAR Intents, gasless
+onboarding) and Social Money (guests who come share the no-shows' deposits;
+attendance is counted on chain).
 
-## Networks (2026-11-10)
+## Networks (2026-11-12)
 
-Nearvent is released on **NEAR mainnet** with real USDC. Testnet stays for the
-demo and for development.
+[www.nearvent.site](https://www.nearvent.site) runs on **NEAR mainnet** with real
+USDC since 2026-11-11. Testnet stays for development and Vercel preview builds.
 
-| | Mainnet (release) | Testnet (demo, development) |
+| | Mainnet (www.nearvent.site) | Testnet (development, previews) |
 |---|---|---|
-| Escrow | deploy pending: steps and checks in [docs/DEPLOY.md](docs/DEPLOY.md#mainnet-release) | [`escrow-tp7.tp7-nv1110.testnet`](https://testnet.nearblocks.io/address/escrow-tp7.tp7-nv1110.testnet) |
+| Escrow | [`escrow.lold.near`](https://nearblocks.io/address/escrow.lold.near), deployed 2026-11-11 | [`escrow-tp7.tp7-nv1110.testnet`](https://testnet.nearblocks.io/address/escrow-tp7.tp7-nv1110.testnet) |
 | USDC | native Circle USDC [`17208628…36133a1`](https://nearblocks.io/address/17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1) | test USDC `usdc.tidepool-sandbox.testnet` |
 | NEAR Intents, 1Click | `intents.near`, `1click.chaindefuser.com` | the [Tidepool](https://www.usetidepool.tech/docs) sandbox (official verifier code), since Intents has no testnet |
-| Google/email (NEAR Auth) | `fast-auth.near`; needs our own Auth0 client (application sent 2026-11-09) | shared client, `localhost:3000` only |
+| Google/email (NEAR Auth) | `fast-auth.near`; the button stays hidden until NEAR Auth issues our client id (requested 2026-11-09) | shared client, `localhost:3000` only |
 | Gas for Google/email users | relayer pays (meta-transactions) | relayer gives 0.5 NEAR once |
 | Demo account (made-up data in the browser) | yes | yes |
 | Test USDC faucet | no | yes |
 
-- Hosted site: [www.nearvent.site](https://www.nearvent.site) (Vercel + Upstash
-  Redis), still on testnet until the mainnet escrow is deployed; demo event:
-  [www.nearvent.site/e/4](https://www.nearvent.site/e/4).
-- The testnet escrow runs the CI reproducible WASM of main `96cb1ee` with the
-  2026-11-10 audit fixes (code hash
-  `571uYapS2GwgvfAXrzAcHaLgpb1s1gScUbSb35ESWztE`). The account has no keys; the
-  owner can upgrade the code until `freeze` (`get_config` shows the owner and
-  whether it is frozen). Evidence in [docs/DEPLOY.md](docs/DEPLOY.md).
-- Mainnet pieces checked read-only on 2026-11-10 with `web/scripts/check-release.mjs`:
-  protocol 88, USDC, `intents.near`, `fast-auth.near` + MPC signer, NEAR Auth
-  JWT keys, 1Click token list and a dry quote. No mainnet transaction was sent.
+- Mainnet escrow: the CI reproducible WASM of `0361b38` (code hash
+  `7nrLLgzcUP1NUyUcKACekuq1EoEXWe5jW5a314HiVjm4`), owner `lold.near`, relayer
+  `event_relayer.near`. Deploy, init and key removal ran in one transaction
+  ([`Br4HMem…`](https://nearblocks.io/txns/Br4HMemQfN4WhqoVDchoPQ66XeWcis7onxxJB1gXeGt6)),
+  so the account has no access keys. The owner can still `upgrade` the code until
+  the one-way `freeze`; `get_config` shows `frozen`, the owner and the whitelist
+  and sponsored modes (both off). Evidence in [docs/DEPLOY.md](docs/DEPLOY.md#mainnet-release).
+- Testnet escrow: same rules, CI reproducible WASM of `96cb1ee` (code hash
+  `571uYapS2GwgvfAXrzAcHaLgpb1s1gScUbSb35ESWztE`). Free and paid creation,
+  deposit, ticket, finalize and withdraw ran there with real transactions
+  before the mainnet deploy (see docs/DEPLOY.md).
+- `web/scripts/check-release.mjs` checks the mainnet setup read-only: escrow code,
+  keys and config, USDC, `intents.near`, the relayer, `fast-auth.near` + MPC
+  signer, NEAR Auth JWT keys, 1Click tokens and a dry quote.
 - Older testnet escrows (`tp3`–`tp6`) keep their test data on chain but the app does not read them.
 
 ## Try it in two minutes (no wallet)
@@ -65,9 +71,9 @@ nothing to pay. **Exit Demo** in the account menu clears it.
 4. *AI Coworking Morning* (you went) → **Withdraw** your share.
 5. **Create Event** → Stake to RSVP, Ticket or Free → it shows up in Explore.
 
-For real transactions, sign in with a NEAR testnet wallet or MetaMask; the
-wallet asks before each one. Free mode: on `/create` pick Free → `/f/<id>` with a
-one-click RSVP. User docs: [www.nearvent.site/docs](https://www.nearvent.site/docs),
+Outside the demo the site moves real USDC on mainnet: sign in with a NEAR wallet
+or an EVM browser-extension wallet (MetaMask etc.); the wallet asks before each
+transaction. Free mode: on `/create` pick Free → `/f/<id>` with a one-click RSVP. User docs: [www.nearvent.site/docs](https://www.nearvent.site/docs),
 smart contract: [/docs/contract](https://www.nearvent.site/docs/contract).
 
 ## Run it locally
@@ -128,6 +134,26 @@ creation, deposit, ticket, finalize, withdraw; see docs/DEPLOY.md).
   names, profiles, location, description and cover live on the Nearvent server,
   not in the escrow; only the host can close or cancel.
 
+## Trust model
+
+- **The host decides who came.** `finalize` counts only accounts registered for
+  that event, but a host who registers extra accounts of their own and marks
+  only those as present takes the real guests' deposits. Guests trust the host
+  as they trust any meetup organiser; profiles show how many events a person
+  hosted, how many guests came and how many events they attended. With the
+  whitelist mode on (off now), only hosts the owner verified can create events.
+- **The host cannot withdraw the pool.** The escrow credits USDC only as shares
+  to attended guests, refunds, the rounding remainder (to the host) and, in
+  Ticket mode, the ticket price to the host at registration. Each account can
+  withdraw only its own balance.
+- **Check-ins live on the Nearvent server**; the host signs `finalize` with that
+  list. Without our server the host can still `finalize` or `cancel` from any
+  NEAR client, and anyone can `cancel` 30 days after the end, refunding every
+  deposit.
+- **The owner (`lold.near` on mainnet)** has no method that moves balances, but
+  until `freeze` it can replace the code, so until then guests trust the owner
+  too.
+
 ## Embed on your website
 
 Add a registration button to an existing event page with two lines:
@@ -187,7 +213,7 @@ the escrow, USDC, and USDC leaving NEAR Intents.
 Views: `get_event`, `get_recent_events(limit ≤ 100)`, `get_guests`,
 `get_guest_status`, `get_guest_statuses(account_id, event_ids ≤ 100)`, `balance_of`,
 `create_event_cost(host, capacity, ends_at)` (yoctoNEAR, 0 when free), `get_attended_count(account_id)`, `get_config`.
-There is no pause, event editing or single-guest refund, and the owner cannot touch balances. The door team,
+There is no pause, event editing or single-guest refund, and no method lets the owner touch balances (until `freeze` the owner can replace the code). The door team,
 location, description and cover live on the Nearvent server, not in the escrow.
 
 Init is private and runs atomically with deploy. Set `relayer` at initialization
