@@ -53,10 +53,11 @@ USDC since 2026-11-11. Testnet stays for development and Vercel preview builds.
   the one-way `freeze`; `get_config` shows `frozen`, the owner and the whitelist
   and sponsored modes (both off). Evidence in [docs/DEPLOY.md](docs/DEPLOY.md#mainnet-release).
 - Same code as this repo, with one catch: the mainnet WASM was built by CI in
-  our private workspace repo at commit `0361b388…`, and cargo-near writes that
-  commit into the contract's NEP-330 metadata (`contract_source_metadata`). That
-  commit is not in this repo, so a rebuild here differs only in that embedded
-  commit hash. To check, build here and swap the hash back:
+  our private workspace repo at commit `0361b388…`. This repo has the same
+  history with the AI notes filtered out, which gave every commit a new hash
+  (see [Hackathon work](#hackathon-work)). cargo-near writes the commit into the
+  contract's NEP-330 metadata (`contract_source_metadata`), so a rebuild here
+  differs only in that embedded hash. To check, build here and swap the hash back:
 
   ```bash
   cd contracts && cargo near build reproducible-wasm --manifest-path events/Cargo.toml
@@ -292,9 +293,11 @@ are included. The empty baseline is tagged `pre-hackathon` and the submitted
 state `hackathon-submission`; the full diff is
 [`pre-hackathon...hackathon-submission`](https://github.com/AstralEX1/near-events/compare/pre-hackathon...hackathon-submission).
 
-This repository is a code-only export of our private workspace, which also
-holds AI notes and planning. Each sync is one commit, so the history here is
-coarse. Working names during the hackathon were Near Events and Near Me; they
+The history here is the product's real commit history from our private
+workspace repo. The workspace's AI notes, planning, research and agent skills
+were filtered out of every commit with `git filter-branch`; dates, messages and
+authors are unchanged, and `pre-hackathon` is an empty baseline commit under
+them. Working names during the hackathon were Near Events and Near Me; they
 remain in some code strings, account names and the deployed contract's messages.
 
 ## License
