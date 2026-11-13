@@ -52,7 +52,9 @@ export async function oneClickQuote(body: Record<string, unknown>): Promise<Quot
   return json.quote;
 }
 
-/** Any other proxied 1Click call; `session` is the guest's own 1Click session (near.com balance). */
+export const INTENTS_SESSION_EXPIRED = "Your NEAR Intents sign-in has expired. Sign in again.";
+
+/** Any other proxied 1Click call; `session` is the guest's own 1Click session (Confidential balance). */
 export async function oneClickCall<T>(path: string, body?: unknown, session?: string): Promise<T> {
   const r = await fetch(`/api/oneclick/${path}`, {
     method: body === undefined ? "GET" : "POST",
@@ -61,7 +63,7 @@ export async function oneClickCall<T>(path: string, body?: unknown, session?: st
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const json = await r.json().catch(() => ({}));
-  if (r.status === 401 && session) throw new Error("Your near.com check has expired. Check the balance again.");
+  if (r.status === 401 && session) throw new Error(INTENTS_SESSION_EXPIRED);
   if (!r.ok) throw new Error(json.message ?? json.error ?? `NEAR Intents error ${r.status}`);
   return json as T;
 }

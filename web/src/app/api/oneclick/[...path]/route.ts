@@ -8,17 +8,32 @@ const QUOTE_KEYS = new Set([
   "amount", "refundTo", "refundType", "recipient", "recipientType", "deadline", "referral",
 ]);
 const GET_PATHS = ["tokens", "status", "account/balances"];
-// auth/authenticate, generate-intent and submit-intent move a guest's near.com (Confidential) USDC.
+// auth/authenticate, generate-intent and submit-intent read and move a guest's Confidential USDC.
 const POST_PATHS = ["quote", "auth/authenticate", "generate-intent", "submit-intent"];
 
 const isObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const keysAre = (value: Record<string, unknown>, keys: string[]) =>
   Object.keys(value).length === keys.length && keys.every((key) => key in value);
 
-/** A wallet-signed ERC-191 payload, the only kind these calls accept. */
-const erc191Data = (value: unknown) => isObject(value) && keysAre(value, ["standard", "payload", "signature"])
-  && value.standard === "erc191" && typeof value.payload === "string" && value.payload.length <= 4096
-  && typeof value.signature === "string" && /^secp256k1:[1-9A-HJ-NP-Za-km-z]{60,100}$/.test(value.signature);
+const NEAR_ACCOUNT = /^(?=.{2,64}$)(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
+const base58 = (value: unknown, prefix: string, min: number, max: number) =>
+  typeof value === "string" && new RegExp(`^${prefix}:[1-9A-HJ-NP-Za-km-z]{${min},${max}}$`).test(value);
+
+/** A wallet-signed payload: ERC-191 (EVM wallets) or NEP-413 (NEAR wallets). */
+function signedData(value: unknown) {
+  if (!isObject(value)) return false;
+  if (value.standard === "erc191") {
+    return keysAre(value, ["standard", "payload", "signature"]) && typeof value.payload === "string"
+      && value.payload.length <= 4096 && base58(value.signature, "secp256k1", 60, 100);
+  }
+  const p = value.payload;
+  return value.standard === "nep413" && keysAre(value, ["standard", "payload", "public_key", "signature"])
+    && isObject(p) && keysAre(p, ["recipient", "nonce", "message"])
+    && typeof p.recipient === "string" && NEAR_ACCOUNT.test(p.recipient)
+    && typeof p.nonce === "string" && /^[A-Za-z0-9+/]{43}=$/.test(p.nonce)
+    && typeof p.message === "string" && p.message.length <= 4096
+    && base58(value.public_key, "ed25519", 40, 50) && base58(value.signature, "ed25519", 80, 100);
+}
 
 function quoteAllowed(body: Record<string, unknown>, session: string | undefined) {
   if (!isObject(body) || Object.keys(body).some((key) => !QUOTE_KEYS.has(key))) return false;
@@ -40,14 +55,14 @@ function quoteAllowed(body: Record<string, unknown>, session: string | undefined
 function postAllowed(path: string, body: unknown, session: string | undefined) {
   if (!isObject(body)) return false;
   if (path === "quote") return quoteAllowed(body, session);
-  if (path === "auth/authenticate") return keysAre(body, ["signedData"]) && erc191Data(body.signedData);
+  if (path === "auth/authenticate") return keysAre(body, ["signedData"]) && signedData(body.signedData);
   if (!session || body.type !== "swap_transfer") return false;
   if (path === "generate-intent") {
-    return keysAre(body, ["type", "standard", "signerId", "depositAddress"]) && body.standard === "erc191"
-      && typeof body.signerId === "string" && /^0x[0-9a-f]{40}$/.test(body.signerId)
+    return keysAre(body, ["type", "standard", "signerId", "depositAddress"]) && typeof body.signerId === "string"
+      && (body.standard === "erc191" ? /^0x[0-9a-f]{40}$/.test(body.signerId) : body.standard === "nep413" && NEAR_ACCOUNT.test(body.signerId))
       && typeof body.depositAddress === "string" && /^\S{1,160}$/.test(body.depositAddress);
   }
-  return keysAre(body, ["type", "signedData"]) && erc191Data(body.signedData);
+  return keysAre(body, ["type", "signedData"]) && signedData(body.signedData);
 }
 
 async function handle(req: Request, { params }: { params: Promise<{ path: string[] }> }) {

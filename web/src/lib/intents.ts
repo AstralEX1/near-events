@@ -235,54 +235,95 @@ async function erc191Signature(address: string, text: string): Promise<string> {
   return `secp256k1:${baseEncode(sig)}`;
 }
 
-// near.com keeps most guests' USDC on Confidential Intents, which this page can't read on its
-// own: the guest signs once for a 15-minute 1Click session, then once to move the missing USDC
-// into their public Intents balance, where the usual registration takes it.
+// Most NEAR Intents money (near.com's default) sits on Confidential Intents, which has no
+// public RPC. "Sign In with NEAR Intents" is one wallet signature for a 15-minute 1Click
+// session that reads it; paying then moves what's missing to the public balance (one more
+// signature), where the usual registration takes it.
 
-/** One signature: a 1Click session that can read and move this account's near.com balance. */
-export async function nearComSession(address: string): Promise<string> {
-  const deadline = new Date(Date.now() + 5 * 60_000);
-  const salt = await view<string>("current_salt", {}, INTENTS_CONTRACT!);
-  // An empty intent proves the wallet owns the account and moves nothing.
-  const payload = JSON.stringify({
-    signer_id: address, verifying_contract: INTENTS_CONTRACT, deadline: deadline.toISOString(),
-    nonce: versionedNonce(salt, deadline), intents: [],
-  });
-  const signedData = { standard: "erc191", payload, signature: await erc191Signature(address, payload) };
-  return (await oneClickCall<{ accessToken: string }>("auth/authenticate", { signedData })).accessToken;
+/** NEP-413 signing by a NEAR wallet (`useWallet().signMessage`); without it the guest signs ERC-191 (EVM wallets). */
+export type Nep413Sign = (message: string, recipient: string, nonce: Uint8Array) => Promise<{ publicKey: string; signature: string }>;
+
+const sessionKey = (account: string) => `near-events:intents-session:${account}`;
+
+/** A 1Click session from an earlier sign-in that still has a minute left, or null. */
+export function savedIntentsSession(account: string): string | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(sessionKey(account)) ?? "null") as { token: string; until: number } | null;
+    if (saved && saved.until > Date.now()) return saved.token;
+  } catch {}
+  return null;
 }
 
-/** USDC on the account's near.com (Confidential) balance. */
-export async function nearComUsdc(session: string): Promise<bigint> {
+export function forgetIntentsSession(account: string) {
+  try { localStorage.removeItem(sessionKey(account)); } catch {}
+}
+
+const base64Bytes = (value: string) => Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
+
+/** 1Click `signedData` for `message` (the intent JSON) signed as `account`. */
+async function signedForOneClick(account: string, message: string, nonce: string, nep413?: Nep413Sign, recipient = INTENTS_CONTRACT!) {
+  if (!nep413) return { standard: "erc191", payload: message, signature: await erc191Signature(account, message) };
+  const { publicKey, signature } = await nep413(message, recipient, base64Bytes(nonce));
+  const { baseEncode } = await import("near-api-js");
+  return {
+    standard: "nep413",
+    payload: { recipient, nonce, message },
+    public_key: publicKey,
+    // Wallets return base64; some already give ed25519:<base58>, which 1Click wants.
+    signature: signature.startsWith("ed25519:") ? signature : `ed25519:${baseEncode(base64Bytes(signature))}`,
+  };
+}
+
+/** Signs the guest in to NEAR Intents (one signature) and keeps the session for its 15 minutes. */
+export async function signInToIntents(account: string, nep413?: Nep413Sign): Promise<string> {
+  const deadline = new Date(Date.now() + 5 * 60_000);
+  const nonce = versionedNonce(await view<string>("current_salt", {}, INTENTS_CONTRACT!), deadline);
+  // An empty intent proves the wallet owns the account and moves nothing.
+  const intent = { deadline: deadline.toISOString(), intents: [], signer_id: account };
+  const message = JSON.stringify(nep413 ? intent : { signer_id: account, verifying_contract: INTENTS_CONTRACT, deadline: intent.deadline, nonce, intents: [] });
+  const signedData = await signedForOneClick(account, message, nonce, nep413);
+  const { accessToken, expiresIn } = await oneClickCall<{ accessToken: string; expiresIn?: number }>("auth/authenticate", { signedData });
+  try {
+    localStorage.setItem(sessionKey(account), JSON.stringify({ token: accessToken, until: Date.now() + ((expiresIn ?? 900) - 60) * 1000 }));
+  } catch {}
+  return accessToken;
+}
+
+/** USDC on the account's Confidential Intents balance. */
+export async function confidentialUsdc(session: string): Promise<bigint> {
   const { balances } = await oneClickCall<{ balances: { tokenId: string; available: string }[] }>(
     `account/balances?tokenIds=${encodeURIComponent(USDC_ASSET)}`, undefined, session);
   return balances.filter((b) => b.tokenId === USDC_ASSET).reduce((sum, b) => sum + BigInt(b.available), 0n);
 }
 
-/** One signature: moves `amount` USDC from near.com into this account's public Intents balance and waits for it. */
-export async function moveFromNearCom(address: string, session: string, amount: bigint): Promise<void> {
-  const before = await intentsUsdcBalance(address);
+/** One signature: moves `amount` USDC from Confidential to the account's public Intents balance and waits for it. */
+export async function moveFromConfidential(account: string, session: string, amount: bigint, nep413?: Nep413Sign): Promise<void> {
+  const before = await intentsUsdcBalance(account);
   const { quote } = await oneClickCall<{ quote: { depositAddress: string; amountIn: string } }>("quote", {
     dry: false, swapType: "EXACT_OUTPUT", slippageTolerance: 0,
     originAsset: USDC_ASSET, destinationAsset: USDC_ASSET, amount: amount.toString(),
-    depositType: "CONFIDENTIAL_INTENTS", recipient: address, recipientType: "INTENTS",
-    refundTo: address, refundType: "CONFIDENTIAL_INTENTS",
+    depositType: "CONFIDENTIAL_INTENTS", recipient: account, recipientType: "INTENTS",
+    refundTo: account, refundType: "CONFIDENTIAL_INTENTS",
     deadline: new Date(Date.now() + 10 * 60_000).toISOString(), referral: "near-events",
   }, session);
   const { intent } = await oneClickCall<{ intent: { payload?: unknown } }>("generate-intent", {
-    type: "swap_transfer", standard: "erc191", signerId: address, depositAddress: quote.depositAddress,
+    type: "swap_transfer", standard: nep413 ? "nep413" : "erc191", signerId: account, depositAddress: quote.depositAddress,
   }, session);
-  const payload = typeof intent?.payload === "string" ? intent.payload : "";
-  const problem = moveProblem(payload, { signer: address, depositAddress: quote.depositAddress, amountIn: quote.amountIn, usdc: USDC_CONTRACT });
+  // ERC-191 payloads are the intent JSON; NEP-413 ones wrap it with its nonce.
+  const payload = intent?.payload as string | { message?: string; nonce?: string; recipient?: string } | undefined;
+  const wrapper = typeof payload === "object" ? payload : {};
+  const message = typeof payload === "string" ? payload : wrapper.message ?? "";
+  const problem = moveProblem(message, { signer: account, depositAddress: quote.depositAddress, amountIn: quote.amountIn, usdc: USDC_CONTRACT })
+    ?? (nep413 && (!wrapper.nonce || !wrapper.recipient) ? "no NEP-413 nonce or recipient" : null);
   if (problem) throw new Error(`NEAR Intents asked to sign something unexpected (${problem}), so nothing was signed.`);
-  const signedData = { standard: "erc191", payload, signature: await erc191Signature(address, payload) };
+  const signedData = await signedForOneClick(account, message, wrapper.nonce ?? "", nep413, wrapper.recipient);
   await oneClickCall("submit-intent", { type: "swap_transfer", signedData }, session);
   // The public balance is the proof: wait until the USDC lands there.
   for (let i = 0; i < 40; i++) {
     await new Promise((resolve) => setTimeout(resolve, 3000));
-    if (await intentsUsdcBalance(address).catch(() => 0n) >= before + amount) return;
+    if (await intentsUsdcBalance(account).catch(() => 0n) >= before + amount) return;
   }
-  throw new Error("Your USDC is still on its way from near.com. Wait a minute, then press Confirm Registration again.");
+  throw new Error("Your USDC is still on its way to your NEAR Intents balance. Wait a minute, then press Confirm Registration again.");
 }
 
 /** Asks the relayer to move this account's payout into its Intents balance. */

@@ -63,6 +63,8 @@ interface WalletState {
    * The token is reused for 30 days.
    */
   staffToken: () => Promise<string>;
+  /** NEP-413 signature by the NEAR wallet (kind "wallet") of `message` for `recipient`; no transaction. */
+  signMessage: (message: string, recipient: string, nonce: Uint8Array) => Promise<{ publicKey: string; signature: string }>;
 }
 
 const tokenKey = (accountId: string) => `near-events:staff:${accountId}`;
@@ -326,6 +328,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     throw new Error("Sign out and sign in again.");
   }, [kind, accountId]);
 
+  const signMessage = useCallback(async (message: string, recipient: string, nonce: Uint8Array) => {
+    const c = connector.current;
+    if (kind !== "wallet" || !c) throw new Error("Sign in with a NEAR wallet first.");
+    const signed = await (await c.wallet()).signMessage({ message, recipient, nonce });
+    if (!signed) throw new Error("The wallet did not sign the message.");
+    return { publicKey: signed.publicKey, signature: signed.signature };
+  }, [kind]);
+
   return (
     <WalletContext.Provider
       value={{
@@ -339,6 +349,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         signOut,
         send,
         staffToken,
+        signMessage,
       }}
     >
       {children}

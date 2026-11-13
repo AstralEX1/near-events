@@ -7,7 +7,11 @@ import { events, formatUsdc, isTicket, needsBond, registrationEndsAt, registrati
 import { ruleText, type AccessCheck } from "@/lib/access";
 import { EVENTS_CONTRACT, NETWORK } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
-import { confirmRegistration, intentsUsdcBalance, moveFromNearCom, nearComSession, nearComUsdc, registerFromIntents, withdrawIntentsCall } from "@/lib/intents";
+import {
+  confidentialUsdc, confirmRegistration, forgetIntentsSession, intentsUsdcBalance, moveFromConfidential,
+  registerFromIntents, savedIntentsSession, signInToIntents, withdrawIntentsCall,
+} from "@/lib/intents";
+import { INTENTS_SESSION_EXPIRED } from "@/lib/oneclickClient";
 import { embedReturnPath } from "@/lib/embed";
 import { guestNamesApi } from "@/lib/guestNamesClient";
 import { shortAccount } from "@/components/ui";
@@ -20,14 +24,16 @@ function requireDisplayName(value: string): string {
 }
 
 /**
- * Not enough USDC to register: the guest tops up their NEAR Intents account on near.com,
- * the official NEAR app (same account for the same wallet), then confirms here.
+ * Pays from the guest's NEAR Intents balance. Most of that money (near.com's default) is
+ * confidential, so on mainnet the guest first signs in with NEAR Intents (one signature, kept
+ * 15 minutes) and sees one total. Enough: we move what's missing to the public balance and
+ * register. Not enough: they top up on near.com (same account for the same wallet).
  * We don't run a swap or show deposit addresses on our own site.
  */
 export default function TopUpAndRegister() {
   const id = Number(useParams<{ id: string }>().id);
   const router = useRouter();
-  const { accountId, kind, signIn, send, staffToken } = useWallet();
+  const { accountId, kind, signIn, send, staffToken, signMessage } = useWallet();
   const [event, setEvent] = useState<EventView | null | undefined>(undefined);
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -35,8 +41,10 @@ export default function TopUpAndRegister() {
   const [loadError, setLoadError] = useState("");
   const [available, setAvailable] = useState<bigint | null>(null);
   const [registered, setRegistered] = useState(false);
-  // USDC on near.com's Confidential balance, read after one signature (EVM wallets on mainnet).
-  const [nearCom, setNearCom] = useState<{ session: string; usdc: bigint } | null>(null);
+  // The NEAR Intents sign-in (a 15-minute 1Click session) and the confidential USDC it shows.
+  const [session, setSession] = useState<string | null>(null);
+  const [confidential, setConfidential] = useState<bigint | null>(null);
+  const [signInFailed, setSignInFailed] = useState(false);
   const [stage, setStage] = useState("");
   // The access rule's verdict for this account; registering would refund the payment otherwise.
   const [access, setAccess] = useState<AccessCheck | null>(null);
@@ -49,14 +57,33 @@ export default function TopUpAndRegister() {
     return () => { active = false; };
   }, [id]);
 
-  const refreshBalance = useCallback(() => {
-    if (accountId) intentsUsdcBalance(accountId).then(setAvailable).catch(() => {});
+  // Confidential balances exist on mainnet only; NEAR wallets sign NEP-413, EVM wallets ERC-191.
+  const intentsSignIn = NETWORK === "mainnet" && (kind === "evm" || kind === "wallet");
+  const nep413 = kind === "wallet" ? signMessage : undefined;
+
+  const dropSession = useCallback(() => {
+    if (accountId) forgetIntentsSession(accountId);
+    setSession(null);
+    setConfidential(null);
   }, [accountId]);
+
+  const refreshBalance = useCallback(() => {
+    if (!accountId) return;
+    intentsUsdcBalance(accountId).then(setAvailable).catch(() => {});
+    const saved = intentsSignIn ? savedIntentsSession(accountId) : null;
+    setSession(saved);
+    if (!saved) return setConfidential(null);
+    confidentialUsdc(saved).then(setConfidential).catch((e) => {
+      if (e instanceof Error && e.message === INTENTS_SESSION_EXPIRED) dropSession();
+    });
+  }, [accountId, intentsSignIn, dropSession]);
 
   useEffect(() => {
     setRegistered(false);
     setAvailable(null);
-    setNearCom(null);
+    setSession(null);
+    setConfidential(null);
+    setSignInFailed(false);
     setAccess(null);
     if (!accountId) return;
     let active = true;
@@ -81,21 +108,25 @@ export default function TopUpAndRegister() {
   const canRegister = event.status === "Open" && event.guest_count < event.capacity && Date.now() < registrationEndsAt(event) && !registered && !notAllowed && !needsBond(event);
   const price = `${formatUsdc(event.deposit)} USDC`;
   const deposit = BigInt(event.deposit);
-  const enough = available !== null && available >= deposit;
-  // Not enough in NEAR Intents, but near.com covers the rest: we move it, then register.
-  const fromNearCom = !enough && available !== null && !!nearCom && available + nearCom.usdc >= deposit;
-  const canCheckNearCom = kind === "evm" && NETWORK === "mainnet";
+  // One total: public USDC plus, after the sign-in, confidential USDC.
+  const known = available !== null && (!session || confidential !== null);
+  const total = (available ?? 0n) + (confidential ?? 0n);
+  const enough = known && total >= deposit;
+  // The public balance alone falls short and we can't see the confidential one yet: ask before sending them to top up.
+  const askSignIn = intentsSignIn && !session && available !== null && available < deposit;
 
-  const checkNearCom = async () => {
+  const signInWithIntents = async () => {
     if (!accountId) return;
     setBusy(true);
     setError(null);
     try {
       setStage("Sign in your wallet…");
-      const session = await nearComSession(accountId);
-      setNearCom({ session, usdc: await nearComUsdc(session) });
+      const token = await signInToIntents(accountId, nep413);
+      setConfidential(await confidentialUsdc(token));
+      setSession(token);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setSignInFailed(true);
     } finally {
       setStage("");
       setBusy(false);
@@ -108,11 +139,11 @@ export default function TopUpAndRegister() {
     setError(null);
     try {
       const name = requireDisplayName(displayName);
-      if (fromNearCom && nearCom && available !== null) {
-        setStage("Moving USDC from near.com: sign in your wallet…");
-        await moveFromNearCom(accountId, nearCom.session, deposit - available);
-        setNearCom(null);
-        setStage("Confirm in your wallet…");
+      if (session && available !== null && available < deposit) {
+        // The rest is confidential: move it to the public balance the escrow takes it from.
+        setStage("Confirm in your wallet (1 of 2)…");
+        await moveFromConfidential(accountId, session, deposit - available, nep413);
+        setStage("Confirm in your wallet (2 of 2)…");
       }
       if (kind === "evm") {
         await registerFromIntents(accountId, event.id, event.deposit, name);
@@ -134,8 +165,7 @@ export default function TopUpAndRegister() {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
-      // The 15-minute near.com session ran out: show the Check near.com Balance button again.
-      if (message.includes("near.com check has expired")) setNearCom(null);
+      if (message === INTENTS_SESSION_EXPIRED) dropSession();
     } finally {
       refreshBalance();
       setStage("");
@@ -156,12 +186,21 @@ export default function TopUpAndRegister() {
         <button className="btn btn-primary w-full" onClick={() => void signIn()}>Sign In First</button>
       ) : (
         <div className="card p-4 space-y-3">
-          <p>
-            {available === null ? "Checking your balance…" : `${formatUsdc(available)} USDC in NEAR Intents${nearCom ? `, ${formatUsdc(nearCom.usdc)} USDC on near.com` : ""}.`}{" "}
-            <Link href="/me" className="underline">View or withdraw funds</Link>
-          </p>
+          {askSignIn ? (
+            <div className="space-y-2">
+              <button type="button" className="btn btn-primary w-full" disabled={busy} onClick={signInWithIntents}>
+                {busy ? stage || "Sign in your wallet…" : "Sign In with NEAR Intents"}
+              </button>
+              <p className="text-sm text-muted text-center">One signature shows your whole balance, confidential included. No gas.</p>
+            </div>
+          ) : (
+            <p>
+              {known ? `${formatUsdc(total)} USDC in NEAR Intents.` : "Checking your balance…"}{" "}
+              <Link href="/me" className="underline">View or withdraw funds</Link>
+            </p>
+          )}
           {registered && <p className="text-good">Your place is confirmed.</p>}
-          {canRegister && (enough || fromNearCom) && (
+          {canRegister && enough && (
             <>
               <label className="block space-y-1">
                 <span className="text-sm font-medium">Your name</span>
@@ -176,7 +215,6 @@ export default function TopUpAndRegister() {
                 />
               </label>
               <button className="btn btn-primary" disabled={busy} onClick={finishRegistration}>{busy ? stage || "Confirm in your wallet…" : "Confirm Registration"}</button>
-              {fromNearCom && <p className="text-sm text-muted">We move the missing {formatUsdc(deposit - available!)} USDC from near.com to NEAR Intents first: one more signature.</p>}
             </>
           )}
           {!canRegister && !registered && (
@@ -188,16 +226,8 @@ export default function TopUpAndRegister() {
           {error && <p className="text-sm text-warn break-words">{error}</p>}
         </div>
       )}
-      {accountId && canRegister && available !== null && !enough && !fromNearCom && (
+      {accountId && canRegister && known && !enough && (!askSignIn || signInFailed) && (
         <div className="card p-5 space-y-4">
-          {canCheckNearCom && (nearCom ? (
-            <p className="text-sm">Your near.com balance has {formatUsdc(nearCom.usdc)} USDC: not enough for this event yet.</p>
-          ) : (
-            <div className="space-y-2">
-              <p className="text-sm">Already have USDC on near.com? One signature shows your near.com balance, and you pay from it here.</p>
-              <button type="button" className="btn btn-primary" disabled={busy} onClick={checkNearCom}>{busy ? stage || "Checking…" : "Check near.com Balance"}</button>
-            </div>
-          ))}
           <h2 className="font-semibold">Top up on near.com</h2>
           <ol className="list-decimal pl-5 space-y-2 text-sm">
             <li>Open near.com and sign in with the same wallet you use here{kind === "evm" ? " (EVM Wallets)" : " (NEAR Wallets)"}. Your account there is <span className="font-mono">{shortAccount(accountId)}</span>.</li>
