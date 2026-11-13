@@ -8,6 +8,7 @@ import { bondFromIntents, disputeFromIntents } from "@/lib/intents";
 import { shortAccount } from "@/components/ui";
 import { checkIns, type CheckInEntry } from "@/lib/checkinsClient";
 import { confirmAction } from "@/components/SlUi";
+import { CLOCK_MARGIN_MS } from "@/lib/keeperPlan";
 
 const when = (ms: number) =>
   new Date(ms).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -81,7 +82,8 @@ export function OraclePanel({ event, guests, hostTeam, onChange }: {
     }
   }, [onChange]);
 
-  const due = dueCall(event, now);
+  // The same clock margin as the keeper, so the button never shows before the keeper will act.
+  const due = dueCall(event, now - CLOCK_MARGIN_MS);
   // The keeper normally does this; opening an overdue event nudges it once.
   useEffect(() => {
     if (!due || autoRan.current) return;
@@ -123,8 +125,8 @@ export function OraclePanel({ event, guests, hostTeam, onChange }: {
     if (r.ok && !j.busy) {
       const fresh = await events.get(event.id);
       if (!fresh || fresh.status !== event.status) return;
-      if (!dueCall(fresh, Date.now() - 60_000)) {
-        throw new Error(fresh.challenge_ends_at ? `Not yet: try again after ${when(fresh.challenge_ends_at + 60_000)}.` : "Not yet: try again in a minute.");
+      if (!dueCall(fresh, Date.now() - CLOCK_MARGIN_MS)) {
+        throw new Error(fresh.challenge_ends_at ? `Not yet: try again after ${when(fresh.challenge_ends_at + CLOCK_MARGIN_MS)}.` : "Not yet: try again in a minute.");
       }
     }
     // The relayer is busy or out of quota: anyone may call the escrow directly.
@@ -213,7 +215,7 @@ export function OraclePanel({ event, guests, hostTeam, onChange }: {
               ? <>Guests can dispute a record until <b>{when(event.challenge_ends_at!)}</b>. Then anyone can settle the payouts{(event.open_disputes ?? 0) > 0 ? ", once the council decides" : ""}.</>
               : (event.open_disputes ?? 0) > 0 && now < (event.resolve_by ?? 0)
                 ? <>The council is deciding {event.open_disputes} dispute{event.open_disputes === 1 ? "" : "s"} (by {when(event.resolve_by!)}).</>
-                : <>The dispute window is over: the payout can be settled now.</>}
+                : due ? <>The dispute window is over: the payout can be settled now.</> : <>The dispute window is over. Payouts can be settled in a minute.</>}
           </p>
         )}
         {absent && windowOpen && (
