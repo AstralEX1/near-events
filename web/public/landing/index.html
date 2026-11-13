@@ -213,9 +213,9 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .demo-cta { display: flex; justify-content: center; margin-top: 28px; }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 /* RSVP explained on hover, keyboard focus and tap; same grey bubble as the app's tooltips. */
-.tip { position: relative; text-decoration: underline dotted; text-underline-offset: .18em; text-decoration-thickness: 1px; cursor: help; }
-.tip::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 6px); z-index: 5; width: max-content; max-width: min(300px, 80vw); padding: 4px 8px; border-radius: 4px; background: rgba(97,97,97,.92); color: #fff; font: 500 11px/1.4 var(--font); letter-spacing: 0; text-align: left; white-space: normal; pointer-events: none; opacity: 0; transform: translateX(calc(-50% + var(--x, 0px))) scale(.97); transition: opacity 125ms var(--ease-out), transform 125ms var(--ease-out); }
-.tip:hover::after, .tip:focus::after { opacity: 1; transform: translateX(calc(-50% + var(--x, 0px))); }
+.tip { position: relative; text-decoration: none; cursor: help; }
+.tip::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 6px); z-index: 5; width: max-content; max-width: min(300px, 80vw); padding: 4px 8px; border-radius: 4px; background: rgba(97,97,97,.92); color: #fff; font: 500 11px/1.4 var(--font); letter-spacing: 0; text-align: left; white-space: normal; pointer-events: none; opacity: 0; transform: translateX(calc(-50% + var(--x, 0px))) scale(.97); transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out); }
+.tip:hover::after, .tip:focus::after { opacity: 1; transform: translateX(calc(-50% + var(--x, 0px))); transition-duration: 300ms; transition-delay: 1s; }
 .tip:focus { outline: none; }
 .tip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .live-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
@@ -292,7 +292,7 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .final .wrap { display: flex; flex-direction: column; align-items: center; gap: 22px; }
 .final h2 { font-size: clamp(40px, 6.4vw, 80px); font-weight: 750; letter-spacing: -0.045em; line-height: 1; }
 footer { border-top: 1px solid var(--line); padding-block: 24px 28px; font-size: 13px; color: var(--muted); }
-footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; }
 </style>
 
 <div class="hero">
@@ -415,7 +415,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 
   <section class="demo" id="demo">
     <div class="wrap">
-      <div class="demo-head reveal"><span class="eyebrow">Demo</span><h2 class="h2">See it in 30 seconds.</h2></div>
+      <div class="demo-head reveal"><h2 class="h2">See it in 30 seconds.</h2></div>
       <video class="demo-video" src="/video/nearvent-showcase-720.mp4" poster="/video/nearvent-showcase.jpg" width="1280" height="720" preload="none" muted loop playsinline controls aria-label="Nearvent in 30 seconds: find an event, register with a deposit, check in, get paid"></video>
       <div class="demo-cta"><a class="btn btn-dark" href="/demo">Try Demo</a></div>
     </div>
@@ -632,8 +632,15 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 </main>
 
 <footer><div class="wrap">
-  <span>Escrow contract on <a href="https://near.org" target="_blank" rel="noopener">NEAR</a> · cross-chain deposits via <a href="https://near.org/intents" target="_blank" rel="noopener">NEAR Intents</a></span>
-  <a href="https://github.com/AstralEX1/near-events" target="_blank" rel="noopener">GitHub ↗</a>
+  <!-- same links as the app footer (src/app/(site)/layout.tsx) -->
+  <span>Nearvent · no platform fee</span>
+  <a href="/docs">Docs</a>
+  <a href="/demo">Demo</a>
+  <a href="https://nearblocks.io/address/escrow.lold.near" target="_blank" rel="noopener">Contract</a>
+  <a href="https://github.com/AstralEX1/near-events" target="_blank" rel="noopener">GitHub</a>
+  <a href="https://near.org/intents" target="_blank" rel="noopener">NEAR Intents</a>
+  <a href="/video">Video</a>
+  <a href="/brand">Brand</a>
 </div></footer>
 
 <script>

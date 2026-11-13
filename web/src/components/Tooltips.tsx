@@ -7,8 +7,8 @@ const EDGE = 8;
 
 /**
  * One tooltip for the whole app, styled like MUI's (https://mui.com/material-ui/react-tooltip/).
- * Put `data-tooltip="…"` on any element; it shows on hover and keyboard focus, below the element,
- * or above when there is no room.
+ * Put `data-tooltip="…"` on any element; it fades in after a 1 s hover, keyboard focus or tap,
+ * below the element, or above when there is no room.
  */
 export function Tooltips() {
   useEffect(() => {
@@ -19,11 +19,9 @@ export function Tooltips() {
     document.body.append(tip);
     let anchor: HTMLElement | null = null;
     let timer = 0;
-    let closedAt = 0; // when a visible tooltip last closed
 
     const hide = () => {
       clearTimeout(timer);
-      if (tip.classList.contains("is-open")) closedAt = Date.now();
       anchor?.removeAttribute("aria-describedby");
       anchor = null;
       tip.classList.remove("is-open");
@@ -37,8 +35,6 @@ export function Tooltips() {
       anchor = el;
       tip.textContent = text; // set now so screen readers get the description on focus
       el.setAttribute("aria-describedby", tip.id);
-      // Moving straight from one tooltip to the next skips the delay and the animation.
-      const instant = Date.now() - closedAt < 300;
       const place = () => {
         const a = el.getBoundingClientRect();
         const t = { width: tip.offsetWidth, height: tip.offsetHeight }; // unscaled size, unlike getBoundingClientRect
@@ -47,11 +43,9 @@ export function Tooltips() {
         tip.style.left = `${left}px`;
         tip.style.top = `${below ? a.bottom + GAP : a.top - GAP - t.height}px`;
         tip.style.transformOrigin = `${a.left + a.width / 2 - left}px ${below ? "top" : "bottom"}`;
-        tip.classList.toggle("is-instant", instant);
         tip.classList.add("is-open");
       };
-      if (instant) place();
-      else timer = window.setTimeout(place, 100); // MUI enterDelay
+      timer = window.setTimeout(place, 1000); // Alex: every tooltip waits 1 s
     };
 
     const find = (e: Event) => (e.target as Element | null)?.closest?.<HTMLElement>("[data-tooltip]") ?? null;
