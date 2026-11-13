@@ -12,7 +12,7 @@ import { EMPTY_PROFILE, cleanProfile, type LinkKind, type Profile } from "@/lib/
 
 export default function MyProfile() {
   const { accountId, kind } = useWallet();
-  // Linking or unlinking a wallet can change which profile this wallet shows: reload the editor.
+  // Linking or unlinking a wallet can change which profile this wallet shows: the editor reloads it.
   const [linkRev, setLinkRev] = useState(0);
   if (!accountId) return (
     <div className="gc-checkout space-y-6 mt-6">
@@ -22,7 +22,7 @@ export default function MyProfile() {
   );
   return (
     <div className="max-w-xl mx-auto space-y-8 pt-4">
-      <Editor key={`${accountId}:${linkRev}`} accountId={accountId} />
+      <Editor key={accountId} accountId={accountId} linkRev={linkRev} />
       {kind !== "demo" && <Wallets key={accountId} accountId={accountId} onChange={() => setLinkRev((n) => n + 1)} />}
     </div>
   );
@@ -121,7 +121,7 @@ const LINKS: [LinkKind, string, string][] = [
   ["website", "Website", "https://"],
 ];
 
-function Editor({ accountId }: { accountId: string }) {
+function Editor({ accountId, linkRev }: { accountId: string; linkRev: number }) {
   const { staffToken } = useWallet();
   const [saved, setSaved] = useState<Profile | null>(null);
   const [form, setForm] = useState<Profile | null>(null);
@@ -135,7 +135,7 @@ function Editor({ accountId }: { accountId: string }) {
       // A new profile gets a random generated avatar, like a new event gets a random theme; it is kept on first save.
       .then((p) => { setSaved(p[accountId] ?? null); setForm(p[accountId] ?? { ...EMPTY_PROFILE, avatar_seed: crypto.getRandomValues(new Uint32Array(1))[0] }); })
       .catch(() => { setForm(EMPTY_PROFILE); setStatus("Could not load your profile."); });
-  }, [accountId]);
+  }, [accountId, linkRev]);
 
   if (!form) return <p className="text-muted" role="status">Loading…</p>;
 
