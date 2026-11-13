@@ -156,6 +156,8 @@
             b.textContent = "Event full · view pass";
           } else if (e.status !== "Open") {
             b.textContent = "View event";
+          } else if (e.open === false) {
+            b.textContent = "Registration closed · view event";
           } else if (!custom) {
             b.textContent = (e.mode === "Ticket" ? "Get ticket · " : "Pay deposit · ") + e.deposit_usdc + " USDC";
           }

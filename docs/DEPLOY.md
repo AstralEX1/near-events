@@ -452,7 +452,7 @@ Who does what: **Alex** signs and funds (real money). Claude has prepared everyt
 
 1. **Reproducible WASM (Alex: commit, push, PR):**
    - CI builds `cargo near build reproducible-wasm` with no features. Two equal hashes; use the CI artifact.
-   - The local non-reproducible release build is 356 826 B.
+   - The local non-reproducible release build is 357 900 B.
    - Never deploy a `--features short-windows` WASM: `new` and `migrate` refuse it outside `.testnet` / `.test.near`.
 2. **Web first (Alex: push main → Vercel).** The www build today calls `get_attended_count`, which v3 removes. The v3 site works with the v2 escrow too: no court, the old behaviour. Deploy the site, check it, then upgrade the contract.
 3. **Freeze new events for the upgrade (Alex signs, audit 2 F1):**

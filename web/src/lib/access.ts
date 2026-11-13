@@ -51,12 +51,13 @@ export function buildRule(choice: AccessChoice, o: {
 }
 
 /** Why the rule can't be created yet, or null; mirrors the escrow's checks. */
-export function ruleProblem(rule: AccessRule | null, endsAt: number): string | null {
+/** `closesAt`: when registration closes (the start for Deposit events, the end otherwise). */
+export function ruleProblem(rule: AccessRule | null, closesAt: number): string | null {
   if (!rule) return null;
   const n = rule.past_events.length;
   if (n === 0) return "Regulars need one of your events to be finalized first";
   if (rule.min_attended < 1 || rule.min_attended > n) return `Regulars: pick 1 to ${n} past events`;
-  if (rule.open_to_all_at !== null && rule.open_to_all_at >= endsAt) return "Open the event to everyone before it ends";
+  if (rule.open_to_all_at !== null && rule.open_to_all_at >= closesAt) return "Open the event to everyone before registration closes";
   return null;
 }
 

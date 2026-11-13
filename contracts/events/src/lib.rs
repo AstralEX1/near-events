@@ -1037,7 +1037,9 @@ impl Contract {
         require!(self.can_create(host.clone()), "Only whitelisted hosts can create events");
         validate_metadata(&metadata);
         if let Some(rule) = &access {
-            self.validate_access(&host, &metadata, rule);
+            // An "open to all" moment after registration closes would never come.
+            let closes = if mode == EventMode::Deposit && self.rules.close_at_start { metadata.starts_at } else { metadata.ends_at };
+            self.validate_access(&host, closes, rule);
         }
         require!(deposit.0 >= MIN_DEPOSIT, "Deposit must be at least 0.1 USDC");
         // The host bond and every pool sum must fit in u128: the largest is the
@@ -1217,6 +1219,12 @@ impl Contract {
         let bond = event.deposit;
         require!(amount >= bond, format!("The dispute bond is {} (one deposit)", bond));
         require!(self.guests.contains_key(&(event_id, challenger.clone())), "Only guests of this event can dispute");
+        // Intents names the challenger without proof, so anyone could use up a NEAR guest's one
+        // accusation; a NEAR account signs its own dispute from its wallet (red team R3).
+        require!(
+            !via_intents || (challenger.as_str().starts_with("0x") && challenger.as_str().len() == 42),
+            "Disputes through NEAR Intents are for EVM accounts; NEAR accounts dispute from their wallet"
+        );
         if attended {
             require!(challenger == target, "Only the guest can claim they came");
         } else {
@@ -1399,7 +1407,7 @@ impl Contract {
         );
     }
 
-    fn validate_access(&self, host: &AccountId, metadata: &EventMetadata, rule: &AccessRule) {
+    fn validate_access(&self, host: &AccountId, registration_ends: u64, rule: &AccessRule) {
         let n = rule.past_events.len();
         require!(n >= 1 && n <= MAX_RULE_EVENTS, "An access rule lists 1 to 10 past events");
         for (i, id) in rule.past_events.iter().enumerate() {
@@ -1414,8 +1422,8 @@ impl Contract {
         );
         require!(rule.min_attended > 0 || rule.max_no_shows.is_some(), "The rule lets everyone in");
         require!(
-            rule.open_to_all_at.map_or(true, |at| at < metadata.ends_at),
-            "Open the event to all before it ends"
+            rule.open_to_all_at.map_or(true, |at| at < registration_ends),
+            "Open the event to all before registration closes"
         );
     }
 
@@ -1428,7 +1436,8 @@ impl Contract {
             match self.guests.get(&(id, guest.clone())).map(|r| r.status) {
                 Some(GuestStatus::Attended) => attended += 1,
                 // An event closed with nobody checked in refunded everyone: not a no-show.
-                Some(GuestStatus::Registered) if self.event(id).attended_count > 0 => no_shows += 1,
+                // An abandoned event's empty list proves no absence (the score skips it too).
+                Some(GuestStatus::Registered) if self.event(id).attended_count > 0 && !self.event(id).abandoned => no_shows += 1,
                 _ => {}
             }
         }

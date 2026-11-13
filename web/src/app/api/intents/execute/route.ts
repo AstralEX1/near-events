@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   let registration: { eventId: number; amount: string } | undefined;
   let bond: { eventId: number; amount: string } | undefined;
   let dispute: { eventId: number; amount: string; target: string; attended: boolean } | undefined;
-  let hostAction: { create: { capacity: number; endsAt: number } } | { eventId: number; finalize: boolean } | undefined;
+  let hostAction: { create: { capacity: number; endsAt: number } } | { eventId: number; finalize: boolean; attended?: string[] } | undefined;
   let transfer: string | undefined;
   try {
     signed = await req.json();
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
         hostAction = { create: { capacity, endsAt } };
       } else if ((msg.action === "finalize" || msg.action === "cancel") && Number.isSafeInteger(msg.event_id) && msg.event_id >= 0) {
         if (msg.action === "finalize" && (!Array.isArray(msg.attended) || msg.attended.length > MAX_CAPACITY)) throw new Error();
-        hostAction = { eventId: msg.event_id, finalize: msg.action === "finalize" };
+        hostAction = { eventId: msg.event_id, finalize: msg.action === "finalize", attended: msg.attended };
       } else throw new Error();
     } else if (intent.intent !== "transfer" || typeof intent.receiver_id !== "string"
       || intent.receiver_id.length > 64 || !/^[a-z0-9]+([._-][a-z0-9]+)*$/.test(intent.receiver_id)
@@ -143,6 +143,13 @@ export async function POST(req: Request) {
       }
       if (hostAction.finalize && event.mode !== "Ticket" && event.submit_by && Date.now() > event.submit_by) {
         return Response.json({ error: "Too late to publish the list: the event can only be refunded." }, { status: 409 });
+      }
+      // A finalize the escrow refuses (an unknown account) could be repeated past the shared budget.
+      if (hostAction.finalize) {
+        const registered = new Set((await events.guests(event.id)).map((g) => g.account_id));
+        if (hostAction.attended!.some((a) => typeof a !== "string" || !registered.has(a))) {
+          return Response.json({ error: "Every account on the list must be a registered guest." }, { status: 409 });
+        }
       }
       if (!hostAction.finalize && event.mode !== "Ticket" && event.host_bond !== "0" && Date.now() >= event.metadata.starts_at) {
         return Response.json({ error: "The event has started, so it can't be cancelled: publish the list instead." }, { status: 409 });

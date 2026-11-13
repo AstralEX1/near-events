@@ -202,7 +202,9 @@ function CreateEvent() {
   const accessRule = (now: number) => free ? null : buildRule(accessChoice, {
     pastEvents, minAttended: Number(minVisits), skipNoShows, openToAllAt: now + Number(regularsHours) * 3_600_000,
   });
-  const accessProblem = when ? ruleProblem(accessRule(Date.now()), when.end) : null;
+  const accessProblem = when
+    ? ruleProblem(accessRule(Date.now()), form.mode === "Deposit" && (rules?.close_at_start ?? true) ? when.start : when.end)
+    : null;
   // Past events can only be added as Free: a deposit or ticket for something already over makes no sense.
   // Deposit events stop taking guests (and the host bond) at the start, so the start must be ahead.
   const lateStart = form.mode === "Deposit" && (rules?.close_at_start ?? true) && !!when && when.end >= Date.now() && when.start < Date.now() + 5 * 60_000

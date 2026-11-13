@@ -1835,7 +1835,7 @@ fn bad_rules_are_rejected() {
     assert_rule_rejected(|p| rule(vec![p.a], 2, None, None), "more than its past events");
     assert_rule_rejected(|p| rule(vec![p.a, p.b], 1, Some(3), None), "more than its past events");
     assert_rule_rejected(|p| rule(vec![p.a], 0, None, None), "lets everyone in");
-    assert_rule_rejected(|p| rule(vec![p.a], 1, None, Some(later_meta().ends_at)), "before it ends");
+    assert_rule_rejected(|p| rule(vec![p.a], 1, None, Some(later_meta().ends_at)), "before registration closes");
 }
 
 #[test]
@@ -2622,10 +2622,32 @@ fn dispute_takes_the_bond_and_returns_the_change() {
 
 #[test]
 fn dispute_via_intents_is_flagged() {
-    let (mut c, id) = submitted();
-    let msg = format!(r#"{{"action":"dispute","event_id":{id},"target":"{}","attended":true,"guest":"{}"}}"#, accounts(4), accounts(4));
+    // Only keyless EVM accounts dispute through Intents (red team R3).
+    let (mut c, id) = setup_with_relayer(10, "relayer.testnet".parse().unwrap());
+    let evm: AccountId = "0x1111111111111111111111111111111111111111".parse().unwrap();
+    let named = format!(r#"{{"action":"register","event_id":{id},"guest":"{evm}"}}"#);
+    assert_eq!(pay(&mut c, &intents(), D, &named), 0);
+    register(&mut c, id, &accounts(2));
+    ctx_ended(&accounts(0));
+    c.finalize(id, vec![accounts(2)]);
+    let msg = format!(r#"{{"action":"dispute","event_id":{id},"target":"{evm}","attended":true,"guest":"{evm}"}}"#);
     assert_eq!(raw_pay_at(&mut c, &intents(), D, &msg, now()), 0);
     assert!(c.get_disputes(id, None, None)[0].via_intents);
+}
+
+#[test]
+fn rt_an_intents_payer_cannot_use_up_a_near_guests_accusation() {
+    rejects(|| {
+        let (mut c, id) = setup(10);
+        let g = rt_guests(4);
+        for a in &g {
+            register(&mut c, id, a);
+        }
+        ctx_ended(&accounts(0));
+        c.finalize(id, g.clone());
+        let squat = format!(r#"{{"action":"dispute","event_id":{id},"target":"{}","attended":false,"guest":"{}"}}"#, g[1], g[0]);
+        raw_pay_at(&mut c, &intents(), D, &squat, now());
+    }, "for EVM accounts");
 }
 
 #[test]

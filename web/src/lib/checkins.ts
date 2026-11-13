@@ -86,18 +86,15 @@ export async function checkInLog(eventId: number): Promise<CheckInEntry[]> {
 }
 
 export async function listCheckIns(eventId: number): Promise<CheckIns> {
-  const log = await checkInLog(eventId);
-  if (!log.length) {
-    if (usesRedis()) {
-      const flat = await redis<string[]>(["HGETALL", KEY(eventId)]);
-      const out: CheckIns = {};
-      for (let i = 0; i + 1 < flat.length; i += 2) out[flat[i]] = JSON.parse(flat[i + 1]);
-      return out;
-    }
-    return ((await loadFile())[KEY(eventId)] as CheckIns | undefined) ?? {};
-  }
+  // Marks made before the log (a plain map) count first, so a mid-event deploy drops nobody.
   const out: CheckIns = {};
-  for (const x of log) {
+  if (usesRedis()) {
+    const flat = await redis<string[]>(["HGETALL", KEY(eventId)]);
+    for (let i = 0; i + 1 < flat.length; i += 2) out[flat[i]] = JSON.parse(flat[i + 1]);
+  } else {
+    Object.assign(out, ((await loadFile())[KEY(eventId)] as CheckIns | undefined) ?? {});
+  }
+  for (const x of await checkInLog(eventId)) {
     if (x.on) out[x.account] ??= { at: x.at, by: x.by };
     else delete out[x.account];
   }

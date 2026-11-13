@@ -69,9 +69,9 @@ export async function planKeeper(list: EventView[], now = Date.now()): Promise<K
       }
     }
     // The door log is frozen once the list is published; its hash goes into the proposals.
-    const logHash = disputed(e)
-      ? createHash("sha256").update(JSON.stringify(await checkInLog(e.id).catch(() => []))).digest("hex")
-      : undefined;
+    // No hash when the store cannot be read: the hash of [] would read as "the log was empty".
+    const log = disputed(e) ? await checkInLog(e.id).catch(() => null) : null;
+    const logHash = log ? createHash("sha256").update(JSON.stringify(log)).digest("hex") : undefined;
     plan.actions.push(...planEvent(e, now, disputes, existing, EVENTS_CONTRACT, SITE, bot, logHash));
   }
   return plan;
@@ -98,8 +98,8 @@ export async function runKeeper(plan: KeeperPlan, maxProposals = 20): Promise<Ke
   const out: KeeperResult[] = [];
   const blocked = new Set(plan.lowDaos.map((d) => d.dao));
   let proposals = 0;
-  const ordered = [...plan.actions].sort((x, y) => Number(y.kind === "propose" && y.upheld) - Number(x.kind === "propose" && x.upheld));
-  for (const a of ordered) {
+  // planEvent already orders each event's pairs ("I came" first, one challenger at a time).
+  for (const a of plan.actions) {
     const base: KeeperResult = { action: a.kind, eventId: a.eventId, ok: false };
     try {
       let call;

@@ -30,7 +30,7 @@ test("ruleProblem mirrors the escrow's checks", () => {
   assert.equal(ruleProblem(rule, 10), null);
   assert.match(ruleProblem({ ...rule, past_events: [] }, 10), /finalized first/);
   assert.match(ruleProblem({ ...rule, min_attended: 3 }, 10), /1 to 2/);
-  assert.match(ruleProblem({ ...rule, open_to_all_at: 10 }, 10), /before it ends/);
+  assert.match(ruleProblem({ ...rule, open_to_all_at: 10 }, 10), /before registration closes/);
 });
 
 test("ruleText says who may register and until when", () => {
