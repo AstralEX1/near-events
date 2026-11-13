@@ -42,11 +42,12 @@ export type KeeperAction =
 export const proposalTag = (escrow: string, eventId: number, target: string, upheld: boolean) =>
   `nearvent:dispute:${escrow}:${eventId}:${target}:${upheld ? "uphold" : "dismiss"}`;
 
-export function proposalDescription(escrow: string, eventId: number, d: KeeperDispute, upheld: boolean, site: string): string {
+export function proposalDescription(escrow: string, eventId: number, d: KeeperDispute, upheld: boolean, site: string, logHash?: string): string {
   const claim = (d.attended ? `${d.target} says they came` : `${d.challenger} says ${d.target} did not come`)
     + (d.via_intents ? " (paid through NEAR Intents: the challenger's name is unproven)" : "");
   const verdict = upheld ? "the challenger is right" : "the host's list stands";
-  return `${proposalTag(escrow, eventId, d.target, upheld)} — ${claim}. Approve if ${verdict}. Evidence (the host's list, the disputes and the door check-in log): ${site}/e/${eventId}#checkins`;
+  // The hash pins the door log as it was at publish inside the DAO, so a later edit of our store shows.
+  return `${proposalTag(escrow, eventId, d.target, upheld)} — ${claim}. Approve if ${verdict}. Evidence (the host's list, the disputes and the door check-in log): ${site}/e/${eventId}#checkins${logHash ? ` (door log sha256:${logHash})` : ""}`;
 }
 
 /**
@@ -72,6 +73,7 @@ export function planEvent(
   escrow: string,
   site: string,
   bot: string,
+  logHash?: string,
 ): KeeperAction[] {
   if (e.mode === "Ticket") return [];
   if (e.status === "Open") return e.submit_by && now > e.submit_by + CLOCK_MARGIN_MS ? [{ kind: "refund", eventId: e.id }] : [];
@@ -82,11 +84,16 @@ export function planEvent(
   // A proposal created this late could not be voted through before the escrow stops taking verdicts.
   if (!open || !e.dao || now >= (e.resolve_by ?? 0) - CLOCK_MARGIN_MS) return [];
   const actions: KeeperAction[] = [];
-  // "I came" claims first: a guest left off the list loses the most.
-  const undecided = disputes.filter((d) => d.upheld === null).sort((a, b) => Number(b.attended) - Number(a.attended));
+  // "I came" claims first (a guest left off the list loses the most), then one dispute per
+  // challenger in turn, so one account's wall of disputes cannot crowd out another (red team R1).
+  const turn = new Map<string, number>();
+  const undecided = disputes.filter((d) => d.upheld === null)
+    .map((d) => ({ d, k: turn.set(d.challenger, (turn.get(d.challenger) ?? -1) + 1).get(d.challenger)! }))
+    .sort((a, b) => Number(b.d.attended) - Number(a.d.attended) || a.k - b.k)
+    .map((x) => x.d);
   for (const d of undecided.slice(0, MAX_DISPUTES_PROPOSED)) {
     for (const upheld of [true, false]) {
-      const action = { kind: "propose" as const, eventId: e.id, dao: e.dao, target: d.target, upheld, description: proposalDescription(escrow, e.id, d, upheld, site) };
+      const action = { kind: "propose" as const, eventId: e.id, dao: e.dao, target: d.target, upheld, description: proposalDescription(escrow, e.id, d, upheld, site, logHash) };
       if (!hasVerdictProposal(existing, bot, action, escrow)) actions.push(action);
     }
   }

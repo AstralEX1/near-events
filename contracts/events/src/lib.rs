@@ -377,6 +377,10 @@ pub struct GuestRecord {
     pub listed: bool,
     /// The dispute about this record, if any.
     pub dispute: Option<Dispute>,
+    /// This guest already disputed another guest's record here: one "did not come" each,
+    /// so one account cannot flood the court for free (red team R1; one upheld record
+    /// already costs the host the whole bond).
+    pub accused: bool,
 }
 
 #[near(serializers = [borsh])]
@@ -701,6 +705,11 @@ impl Contract {
         near_sdk::assert_one_yocto();
         self.require_owner(&env::predecessor_account_id());
         rules.check();
+        // A server key or the owner alone would decide every dispute (red team R2).
+        require!(
+            rules.dao.is_none() || (rules.dao != self.relayer && rules.dao.as_ref() != Some(&self.owner)),
+            "The court must be a DAO, not the owner or the relayer"
+        );
         // Balances of these accounts could never be withdrawn, and they cannot vote (audit 2, L-2).
         let stuck = [Some(env::current_account_id()), Some(self.usdc.clone()), self.intents.clone()];
         require!(
@@ -1212,6 +1221,9 @@ impl Contract {
             require!(challenger == target, "Only the guest can claim they came");
         } else {
             require!(challenger != target, "Nobody disputes their own presence");
+            let own = self.guests.get_mut(&(event_id, challenger.clone())).unwrap();
+            require!(!own.accused, "You already disputed another guest's record in this event");
+            own.accused = true;
         }
         let record = self
             .guests
@@ -1566,7 +1578,7 @@ impl Contract {
         self.reserved_bytes -= STORAGE_BYTES_PER_GUEST;
         self.guests.insert(
             (event_id, guest.clone()),
-            GuestRecord { status: GuestStatus::Registered, registered_at: env::block_timestamp_ms(), listed: false, dispute: None },
+            GuestRecord { status: GuestStatus::Registered, registered_at: env::block_timestamp_ms(), listed: false, dispute: None, accused: false },
         );
         self.guest_index.insert((event_id, index), guest.clone());
         let event = self.event_mut(event_id);

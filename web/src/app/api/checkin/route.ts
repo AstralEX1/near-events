@@ -1,5 +1,6 @@
 import { events } from "@/lib/near";
 import { checkInLog, listCheckIns, setCheckIn } from "@/lib/checkins";
+import { rateLimited } from "@/lib/ratelimit";
 import { readStaffToken, staffEvent } from "@/lib/staff";
 
 // Door check-ins, kept here until the host finalizes on-chain.
@@ -14,6 +15,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  // A busy door: 300 guests in a few minutes is fine; an endless writer is not.
+  if (rateLimited(req, 120)) return Response.json({ error: "Too many requests" }, { status: 429 });
   const staff = readStaffToken(req.headers.get("authorization")?.replace(/^Bearer\s+/i, ""));
   if (!staff) return Response.json({ error: "Sign in again to check guests in" }, { status: 401 });
   const { event, account, on } = (await req.json().catch(() => ({}))) as { event?: number; account?: string; on?: boolean };
@@ -24,6 +27,10 @@ export async function POST(req: Request) {
   if (e.status !== "Open") return Response.json({ error: "The event is closed" }, { status: 409 });
   if ((await events.guestStatus(event!, account).catch(() => null)) == null)
     return Response.json({ error: `${account} is not registered` }, { status: 404 });
+  // The log is public and read whole: cap it at a few marks per seat.
+  if ((await checkInLog(event!)).length >= 4 * e.capacity + 50) {
+    return Response.json({ error: "The door log is full for this event" }, { status: 409 });
+  }
   await setCheckIn(event!, account, on !== false, staff);
   return Response.json({ ok: true, checkedIn: await listCheckIns(event!) });
 }

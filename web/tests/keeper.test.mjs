@@ -71,3 +71,16 @@ test("the bot proposes at most 10 disputes per event, 'I came' first", async () 
   assert.equal(actions.length, 2 * MAX_DISPUTES_PROPOSED);
   assert.equal(actions[0].target, "late.testnet");
 });
+
+test("red team: one challenger's ten disputes do not crowd out another challenger", () => {
+  const spam = Array.from({ length: 10 }, (_, i) => ({ target: `g${i}.near`, challenger: "puppet.near", attended: false, upheld: null }));
+  const honest = { target: "fake.near", challenger: "honest.near", attended: false, upheld: null };
+  const actions = plan({ status: "Submitted", open_disputes: 11 }, 100, [...spam, honest]);
+  assert.ok(actions.some((a) => a.target === "fake.near"));
+});
+
+test("the door log hash goes into the proposal text", async () => {
+  const { planEvent } = await import("../src/lib/keeperPlan.ts");
+  const [a] = planEvent({ ...base, status: "Submitted", open_disputes: 1 }, 100, [dispute("x.near")], [], ESCROW, SITE, BOT, "ab12");
+  assert.match(a.description, /door log sha256:ab12/);
+});

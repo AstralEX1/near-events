@@ -2,6 +2,8 @@
 // the DAO proposal pair for every new dispute. Everything it sends is
 // permissionless (`settle`, `refund`) or a proposal the council still has to
 // vote on, so a leaked relayer key cannot move anyone's money.
+import { createHash } from "node:crypto";
+import { checkInLog } from "./checkins";
 import "server-only";
 import { EVENTS_CONTRACT } from "./config";
 import { events, view, type EventView } from "./near";
@@ -66,7 +68,11 @@ export async function planKeeper(list: EventView[], now = Date.now()): Promise<K
         plan.lowDaos.push({ dao: e.dao!, balance: state.available.toString() });
       }
     }
-    plan.actions.push(...planEvent(e, now, disputes, existing, EVENTS_CONTRACT, SITE, bot));
+    // The door log is frozen once the list is published; its hash goes into the proposals.
+    const logHash = disputed(e)
+      ? createHash("sha256").update(JSON.stringify(await checkInLog(e.id).catch(() => []))).digest("hex")
+      : undefined;
+    plan.actions.push(...planEvent(e, now, disputes, existing, EVENTS_CONTRACT, SITE, bot, logHash));
   }
   return plan;
 }

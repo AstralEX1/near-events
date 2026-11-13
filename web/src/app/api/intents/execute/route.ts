@@ -118,7 +118,9 @@ export async function POST(req: Request) {
       const self = dispute.target === signer;
       // The escrow's own rules: "I came" only for yourself and only if left off; "X did not come" only about a listed other guest.
       const legal = !!target && guests.some((g) => g.account_id === signer) && !disputes.some((d) => d.target === dispute!.target)
-        && (dispute.attended ? self && !target.listed : !self && !!target.listed);
+        && (dispute.attended ? self && !target.listed : !self && !!target.listed)
+        // One "did not come" per guest per event (the escrow refuses a second).
+        && !(!dispute.attended && disputes.some((d) => d.challenger === signer && !d.attended));
       if (!event || event.status !== "Submitted" || Date.now() >= (event.challenge_ends_at ?? 0) || dispute.amount !== event.deposit || !legal) {
         return Response.json({ error: "This dispute is unavailable. Your USDC is still in NEAR Intents." }, { status: 409 });
       }

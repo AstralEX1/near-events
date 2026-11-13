@@ -506,4 +506,10 @@ Testnet rehearsal (`evidence/v3-upgrade-rehearsal.log`):
   - bond 1/seat on 9e1adc3;
   - after a v3 → v3 upgrade with live events, bond 2/seat with the 5-deposit cap on a0564b6.
   Both covered: a guest refused after the start, the host leaving a guest off, the guest's dispute, the keeper's proposals, 3 of 5 votes, the keeper's settle. Balances matched to the unit.
-- Older v3 test escrows (`oracle-v3*.atia-nv1109.testnet`) are out of the flow.
+- Final code with the red-team fixes: a fresh `v3rh2.stan-nv1109.testnet`.
+  - Mainnet code, then the upgrade `6v2bPaBh…`: spare 1.6752 NEAR.
+  - The relayer as court is refused.
+  - The court is set.
+  - A full dispute cycle ran, and balances match.
+  - The proposals carry the door log hash.
+- Older v3 test escrows (`oracle-v3*.atia-nv1109.testnet`, `v3rh`) are out of the flow.

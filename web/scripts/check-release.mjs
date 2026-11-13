@@ -86,6 +86,15 @@ if (ESCROW) {
     const policy = await view(r.dao, "get_policy");
     const council = policy.roles.find((x) => x.name === "council")?.kind?.Group ?? [];
     if (mainnet && council.length !== 5) throw new Error(`council has ${council.length} members, expected 5`);
+    // 3 of the council must vote; nobody else may approve (the bot only proposes). Re-run this: the
+    // council could change the policy or turn auto_update back on with 3 votes.
+    const vote = policy.default_vote_policy ?? {};
+    if (vote.weight_kind !== "RoleWeight" || Number(vote.quorum) < 3 || !(Number(vote.threshold) >= 3 || Array.isArray(vote.threshold))) {
+      throw new Error(`default vote policy ${JSON.stringify(vote)}: expected RoleWeight with quorum and threshold of at least 3`);
+    }
+    const approvers = policy.roles.filter((x) => x.name !== "council" && x.permissions.some((p) => /^(\*|call):(VoteApprove|\*)$/.test(p) || p === "*:VoteApprove"));
+    if (approvers.length) throw new Error(`roles besides the council can approve: ${approvers.map((x) => x.name).join(", ")}`);
+    if (r.dao === RELAYER || r.dao === OWNER) throw new Error("the court is the relayer or the owner");
     return `court ${r.dao}, council ${council.length}, treasury ${r.treasury}, bond ${r.bond_per_seat} deposit(s) per seat, ${hours}`;
   });
   await check("escrow holds USDC storage", async () => !!(await view(USDC, "storage_balance_of", { account_id: ESCROW })));

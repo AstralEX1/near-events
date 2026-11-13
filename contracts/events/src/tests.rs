@@ -2973,6 +2973,7 @@ fn random_case(seed: u64) {
     }
     let start = c.get_event(id).unwrap().submitted_at;
     let mut disputes = Vec::new();
+    let mut accused = vec![false; n];
     for target in 0..n {
         if r.below(2) == 0 {
             continue;
@@ -2982,6 +2983,10 @@ fn random_case(seed: u64) {
             if n < 2 { continue; }
             (target + 1 + r.below(n as u64 - 1) as usize) % n
         };
+        // One "did not come" per challenger (red team R1).
+        if !claim && std::mem::replace(&mut accused[challenger], true) {
+            continue;
+        }
         let at = start + r.below(CHALLENGE_WINDOW_MS);
         money_in += d - raw_pay_at(&mut c, &name(challenger), d, &dispute_msg(id, &name(target), claim), at);
         let v = match r.below(3) { 0 => Some(true), 1 => Some(false), _ => None };
@@ -3116,4 +3121,66 @@ fn a_running_event_keeps_its_treasury() {
         ctx(&treasury(), NearToken::from_near(1));
         c.create_event(meta(), U128(D), 10, None, None);
     }, "treasury cannot host");
+}
+
+// ------------------------------------------------------------- red team (R1, R2)
+
+fn rt_guests(n: usize) -> Vec<AccountId> {
+    (0..n).map(|i| format!("g{i}.testnet").parse().unwrap()).collect()
+}
+
+/// R1: before the fix one guest could accuse every record, and ignored disputes cost nothing.
+#[test]
+#[should_panic(expected = "already disputed")]
+fn rt_ignored_spam_disputes_cost_the_spammer_nothing() {
+    let (mut c, id) = setup(10);
+    let g = rt_guests(6);
+    for a in &g {
+        register(&mut c, id, a);
+    }
+    ctx_ended(&accounts(0));
+    c.finalize(id, g.clone());
+    for t in &g[1..] {
+        assert_eq!(dispute_at(&mut c, id, &g[0], t, false, now()), 0);
+    }
+}
+
+#[test]
+fn rt_a_guest_files_one_did_not_come_dispute_per_event() {
+    rejects(|| {
+        let (mut c, id) = setup(10);
+        let g = rt_guests(4);
+        for a in &g {
+            register(&mut c, id, a);
+        }
+        ctx_ended(&accounts(0));
+        c.finalize(id, g.clone());
+        assert_eq!(dispute_at(&mut c, id, &g[0], &g[1], false, now()), 0);
+        dispute_at(&mut c, id, &g[0], &g[2], false, now());
+    }, "already disputed");
+    // "I came" is not an accusation: a guest left off can still claim it after accusing someone.
+    let (mut c, id) = setup(10);
+    let g = rt_guests(3);
+    for a in &g {
+        register(&mut c, id, a);
+    }
+    ctx_ended(&accounts(0));
+    c.finalize(id, vec![g[1].clone(), g[2].clone()]);
+    assert_eq!(dispute_at(&mut c, id, &g[0], &g[1], false, now()), 0);
+    assert_eq!(dispute_at(&mut c, id, &g[0], &g[0], true, now()), 0);
+    assert_eq!(c.get_event(id).unwrap().open_disputes, 2);
+}
+
+/// R2: the relayer's server key or the owner alone must not be the court.
+#[test]
+fn rt_the_court_is_not_the_relayer_or_the_owner() {
+    let relayer: AccountId = "relayer.testnet".parse().unwrap();
+    for court in [relayer.clone(), owner()] {
+        let r = relayer.clone();
+        rejects(move || {
+            let (mut c, _) = setup_with_relayer(10, r);
+            ctx(&owner(), one_yocto());
+            c.set_rules(Rules { dao: Some(court), ..court_rules() });
+        }, "not the owner or the relayer");
+    }
 }
