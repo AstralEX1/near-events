@@ -106,4 +106,4 @@ assert.equal(keys.keys.length, 0, "The escrow account still has an access key");
 // The escrow must hold a USDC storage registration to receive deposits.
 await deployer.callFunction({ contractId: USDC, methodName: "storage_deposit", args: { account_id: id, registration_only: true }, deposit: BigInt(parseNearAmount("0.0125")), gas: 30_000_000_000_000n });
 console.log("deployed", id, "on", network, "code", expectedHash, "owner", OWNER, "relayer", RELAYER, "no access keys", rules ? `oracle hour ${hourMs} ms` : "v2 code");
-if (rules) console.log(`next: the owner sets the court with scripts/escrow-owner.mjs rules '{"dao":"<court>.sputnik-dao.near","treasury":"<wallet>","bond_per_seat":1,"close_at_start":true,"challenge_hours":12,"submit_hours":72,"resolve_hours":168}'`);
+if (rules) console.log(`next: the owner sets the court with scripts/escrow-owner.mjs rules '{"dao":"<court>.sputnik-dao.near","treasury":"<wallet>","bond_per_seat":2,"close_at_start":true,"challenge_hours":12,"submit_hours":72,"resolve_hours":168}'`);

@@ -3,13 +3,16 @@
 import { SlCopy } from "@/components/SlUi";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { formatUsdc, isTicket, priceLabel, type EventView, type GuestView } from "@/lib/near";
+import { cameOf, formatUsdc, isTicket, priceLabel, windowText, hoursText, type EventView, type GuestView } from "@/lib/near";
 import { Avatar, Cover, DateBadge, shortAccount } from "@/components/ui";
 import { cohostsProblem, splitCohosts } from "@/lib/cohostsShared";
 import type { GuestNames } from "@/lib/guestNamesClient";
 
 /** How many of the newest guests the Overview shows before "All Guests". */
 const RECENT_GUESTS = 5;
+
+const when = (ms: number) =>
+  new Date(ms).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 type Props = {
   event: EventView;
@@ -41,16 +44,18 @@ export function Overview({ event, guests, guestNames, origin, isHost, busy, onGu
   const payUrl = origin ? `${origin}/p/${id}` : "";
   const integrationHref = `/e/${id}/manage?tab=integration`;
   const over = open && Date.now() >= event.metadata.ends_at;
+  // A bonded Deposit event can only be cancelled before it starts (escrow v3).
+  const canCancel = open && isHost && (isTicket(event) || !event.dao || event.host_bond === "0" || Date.now() < event.metadata.starts_at);
 
   const closeCard = (
-    <CloseEvent event={event} isHost={isHost} busy={busy} over={over} onFinalize={onFinalize} />
+    <CloseEvent event={event} guests={guests} isHost={isHost} busy={busy} over={over} canCancel={canCancel} onFinalize={onFinalize} />
   );
 
   return (
     <div className="space-y-8">
       <div className="gc-host-stats" aria-label="Event overview">
         <div className="gc-host-stat"><span>Registered</span><strong>{guests.length}<small className="text-sm text-muted font-normal"> / {event.capacity}</small></strong></div>
-        <div className="gc-host-stat"><span>Checked in</span><strong>{guests.filter((g) => g.status === "Attended").length}</strong></div>
+        <div className="gc-host-stat"><span>Checked in</span><strong>{event.attended_count}</strong></div>
         <div className="gc-host-stat"><span>{isTicket(event) ? "Ticket sales" : "Deposit pool"}</span><strong>{formatUsdc(event.total_pool)}<small className="block text-xs text-muted font-normal tracking-normal">USDC</small></strong></div>
       </div>
       <div className="-mx-4 px-4 sm:mx-0 sm:px-0 flex sm:grid sm:grid-cols-3 gap-3 overflow-x-auto [scrollbar-width:none]">
@@ -81,10 +86,7 @@ export function Overview({ event, guests, guestNames, origin, isHost, busy, onGu
 
       {!over && closeCard}
 
-      {/* A bonded Deposit event can only be cancelled before it starts (escrow v3). */}
-      {open && isHost && (isTicket(event) || !event.dao || event.host_bond === "0" || Date.now() < event.metadata.starts_at) && (
-        <CancelEvent event={event} busy={busy} onCancel={onCancel} />
-      )}
+      {canCancel && <CancelEvent event={event} busy={busy} onCancel={onCancel} />}
 
       <Divider />
       <HostsSection event={event} isHost={isHost} doorTeam={doorTeam} onSave={onSaveDoorTeam} onGuests={onGuests} />
@@ -313,9 +315,9 @@ function GuestsSection({ event, guests, guestNames, onGuests, onShare }: { event
             <Stat label="Paid to you" value={`${formatUsdc(pool)} USDC`} />
           ) : (
             <Stat
-              label={open ? "Each if closed now" : "Each attendee got"}
+              label={open ? "Each if published now" : event.status === "Submitted" ? "Each if the list stands" : "Each attendee got"}
               value={
-                open && attended > 0
+                (open || event.status === "Submitted") && attended > 0
                   ? `${formatUsdc(each)} USDC`
                   : event.status === "Finalized" && attended > 0
                     ? `${formatUsdc(event.payout_per_attendee)} USDC`
@@ -354,8 +356,8 @@ function GuestsSection({ event, guests, guestNames, onGuests, onShare }: { event
                     )}
                   </span>
                   <span className="text-right shrink-0">
-                    <span className={`block text-xs font-medium px-2 py-0.5 rounded-full ${g.status === "Attended" ? "bg-good text-bg" : "bg-good/15 text-good"}`}>
-                      {g.status === "Attended" ? "Checked in" : "Going"}
+                    <span className={`block text-xs font-medium px-2 py-0.5 rounded-full ${cameOf(event, g) ? "bg-good text-bg" : "bg-good/15 text-good"}`}>
+                      {cameOf(event, g) ? "Checked in" : "Going"}
                     </span>
                     <span className="block text-xs text-muted mt-0.5">{timeAgo(g.registered_at)}</span>
                   </span>
@@ -397,28 +399,41 @@ function Stat({ label, value, className = "" }: { label: string; value: string; 
 
 function CloseEvent({
   event,
+  guests,
   isHost,
   busy,
   over,
+  canCancel,
   onFinalize,
 }: {
   event: EventView;
+  guests: GuestView[];
   isHost: boolean;
   busy: boolean;
   over: boolean;
+  canCancel: boolean;
   onFinalize: () => void;
 }) {
   const ticket = isTicket(event);
   const pool = BigInt(event.total_pool);
   const { attended_count: attended, guest_count: going } = event;
+  const court = !!event.dao;
+  const bonded = BigInt(event.host_bond ?? "0") > 0n;
+  const submitBy = when(event.submit_by ?? event.metadata.ends_at);
   // v3: past the publish deadline only `refund` works (shown on the event page).
   const late = !ticket && !!event.submit_by && Date.now() > event.submit_by;
 
   if (event.status === "Open" && late) {
     return (
       <section className="card p-4 space-y-1">
-        <h2 className="font-semibold text-warn">Too late to publish the list</h2>
-        <p className="text-sm text-muted">No list was published within 72 hours of the end. Anyone can now start the refund on the event page; guests who came can still prove it, and the host bond is lost.</p>
+        <h2 className="font-semibold text-warn">{court && going === 0 ? "Nobody registered" : "Too late to publish the list"}</h2>
+        <p className="text-sm text-muted">
+          {!court
+            ? `The deadline was ${submitBy}. Anyone can now refund every guest.`
+            : going === 0
+              ? `Anyone can close the event now.${bonded ? " Your bond goes back to your balance." : ""}`
+              : `The deadline was ${submitBy}. Anyone can now start the refund on the event page. Your bond is lost; guests who came can still prove it.`}
+        </p>
       </section>
     );
   }
@@ -437,13 +452,14 @@ function CloseEvent({
     );
   }
   if (event.status === "Submitted") {
+    const challengeEnds = when(event.challenge_ends_at ?? 0);
     return (
       <section className="card p-4 space-y-1">
-        <h2 className="font-semibold">List published</h2>
+        <h2 className={`font-semibold ${event.abandoned ? "text-warn" : ""}`}>{event.abandoned ? "No list published" : "List published"}</h2>
         <p className="text-sm text-muted">
-          {attended} of {going} on your list. Guests can dispute it until{" "}
-          {new Date(event.challenge_ends_at ?? 0).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })};
-          then the payouts are settled and your bond comes back if no dispute was upheld.
+          {event.abandoned
+            ? `You published no list by ${submitBy}, so your bond is lost. Guests who came can prove it until ${challengeEnds}.`
+            : `${guests.filter((g) => g.listed).length} of ${going} on your list. Guests can dispute it until ${challengeEnds}. Then anyone settles the payouts, and your bond comes back unless the council upholds a dispute.`}
         </p>
       </section>
     );
@@ -451,8 +467,8 @@ function CloseEvent({
   if (event.status === "Refunded") {
     return (
       <section className="card p-4 space-y-1">
-        <h2 className="font-semibold text-warn">Refunded</h2>
-        <p className="text-sm text-muted">No list was published in time: every deposit went back, and the host bond went to the guests and the treasury.</p>
+        <h2 className="font-semibold">Closed</h2>
+        <p className="text-sm text-muted">Nobody registered and no list was published, so the event closed. Your bond went back to your balance.</p>
       </section>
     );
   }
@@ -465,18 +481,23 @@ function CloseEvent({
     );
   }
 
+  const each = attended > 0 ? formatUsdc(pool / BigInt(attended)) : "0";
   const summary = ticket
     ? `${formatUsdc(pool)} USDC from ${going} ${going === 1 ? "ticket" : "tickets"} is already in your balance. Close the event when it is over.`
     : attended > 0
-      ? `${attended} of ${going} checked in. Publishing the list opens a 24-hour dispute window; then ${formatUsdc(pool)} USDC is split, ${formatUsdc(pool / BigInt(attended))} USDC each.`
+      ? court
+        ? `${attended} of ${going} checked in. Publish the list by ${submitBy}. Guests then have ${windowText(event)} to dispute it. If nobody does, ${formatUsdc(pool)} USDC is split, ${each} USDC each.`
+        : `${attended} of ${going} checked in. Publish the list by ${submitBy} to pay out ${formatUsdc(pool)} USDC now, ${each} USDC each. The list is final.`
       : going > 0
-        ? "Nobody is checked in yet. If nobody came, every deposit goes back to its guest."
-        : "No deposits yet. Check guests in at the door, then publish who came within 72 hours of the end.";
+        ? "Nobody is checked in yet. If you publish an empty list, every deposit goes back to its guest."
+        : over
+          ? `Nobody registered. Publish the empty list to close the event${bonded ? " and get your bond back" : ""}.`
+          : `No deposits yet. Check guests in at the door, then publish who came within ${hoursText(event.rules?.submit_hours ?? 72)} after the end.`;
 
   return (
     <section className={`card p-4 space-y-3 ${over ? "ring-2 ring-accent" : ""}`}>
       <div>
-        <h2 className="font-semibold">{over ? (ticket ? "The event is over. Close it to get paid." : "The event is over. Publish who came.") : ticket ? "Get paid" : "Pay out"}</h2>
+        <h2 className="font-semibold">{over ? (ticket ? "The event is over. Close it to get paid." : "The event is over. Publish who came.") : ticket ? "Get paid" : "Publish who came"}</h2>
         <p className="text-sm text-muted mt-0.5">{summary}</p>
       </div>
       {isHost ? (
@@ -488,9 +509,15 @@ function CloseEvent({
             data-tooltip={over ? undefined : "Available once the event ends"}
             onClick={onFinalize}
           >
-            {ticket ? "Close event & get paid" : "Publish who came"}
+            {ticket ? "Close Event & Get Paid" : "Publish Who Came"}
           </button>
-          {!over && <span className="text-xs text-muted">Opens when the event ends. To refund everyone now, cancel it below.</span>}
+          {!over && (
+            <span className="text-xs text-muted">
+              {ticket
+                ? "You can close the event once it ends."
+                : `You can publish the list once the event ends.${canCancel ? " To refund everyone now, cancel the event below." : " The event has started, so it can’t be cancelled."}`}
+            </span>
+          )}
         </div>
       ) : (
         <p className="text-sm text-muted">Only the host ({shortAccount(event.host)}) can {ticket ? "close the event" : "publish who came"}. You can check guests in.</p>
@@ -501,26 +528,32 @@ function CloseEvent({
 
 /* ---------- Cancel ---------- */
 
-/** Host only, while open. The contract refunds every guest in the same call. */
+/** Host only, while open. Deposits and the host bond come back in the same call; tickets are not refunded. */
 function CancelEvent({ event, busy, onCancel }: { event: EventView; busy: boolean; onCancel: () => void }) {
-  const ticket = isTicket(event);
   return (
     <section className="card p-4 space-y-3 border-warn/40">
       <div>
         <h2 className="font-semibold">Cancel event</h2>
-        <p className="text-sm text-muted mt-0.5">
-          Everyone gets their money back.{" "}
-          {event.guest_count > 0
-            ? `${event.guest_count} ${ticket ? (event.guest_count === 1 ? "ticket" : "tickets") : (event.guest_count === 1 ? "deposit" : "deposits")} (${formatUsdc(event.total_pool)} USDC) go back to the guests' Nearvent balances, ready to withdraw.`
-            : "Nobody has paid yet."}{" "}
-          This cannot be undone.
-        </p>
+        <p className="text-sm text-muted mt-0.5">{cancelText(event)}</p>
       </div>
       <button type="button" className="btn btn-ghost !py-2 text-sm text-warn border-warn/50 hover:bg-warn/10" disabled={busy} onClick={onCancel}>
-        Cancel event &amp; refund everyone
+        {isTicket(event) ? "Cancel Event" : "Cancel Event & Refund"}
       </button>
     </section>
   );
+}
+
+/** What cancelling does to the money; also the confirm text in Manage. */
+export function cancelText(event: EventView): string {
+  const n = event.guest_count;
+  const pool = formatUsdc(event.total_pool);
+  if (isTicket(event)) {
+    return `${n > 0 ? `Guests are not refunded: the ${pool} USDC from tickets stays in your balance.` : "Nobody has bought a ticket yet."} This cannot be undone.`;
+  }
+  const bond = BigInt(event.host_bond ?? "0") > 0n;
+  return `${n > 0
+    ? `Every guest gets the deposit back: ${n} ${n === 1 ? "deposit" : "deposits"} (${pool} USDC) go to their Nearvent balances${bond ? ", and your bond comes back to you" : ""}.`
+    : `Nobody has paid yet.${bond ? " Your bond comes back to you." : ""}`} This cannot be undone.`;
 }
 
 /* ---------- Hosts ---------- */
@@ -558,11 +591,11 @@ function HostsSection({ event, isHost, doorTeam, onSave, onGuests }: {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Hosts</h2>
-          <p className="text-sm text-muted mt-0.5">The door team can check guests in; only the host can close or cancel.</p>
+          <p className="text-sm text-muted mt-0.5">The door team can check guests in. Only the host can publish the list or cancel.</p>
         </div>
         {isHost && open && !editing && (
           <button type="button" className="btn btn-ghost !py-1.5 text-sm shrink-0" onClick={() => { setText(doorTeam.join(", ")); setError(null); setEditing(true); }}>
-            Edit door team
+            Edit Door Team
           </button>
         )}
       </div>

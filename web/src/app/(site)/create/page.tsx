@@ -4,7 +4,7 @@ import { SlAmount, SlCopy } from "@/components/SlUi";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { events, formatNear, FREE_MAX_CAPACITY, FREE_MAX_DAYS, FREE_MAX_EVENTS, MAX_CAPACITY, toUnits, type EventMode, type EventView } from "@/lib/near";
+import { bondPerSeatText, events, formatNear, formatUsdc, FREE_MAX_CAPACITY, FREE_MAX_DAYS, FREE_MAX_EVENTS, hoursText, hostBondFor, MAX_CAPACITY, needsBond, toUnits, type EventMode, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { Cover } from "@/components/ui";
@@ -181,11 +181,17 @@ function CreateEvent() {
     void importEvent(importOnArrival, true);
   }, [importOnArrival]);
 
-  // Integrate flow ends in the event's Integration tab, once its details are saved.
+  // Integrate flow ends in the event's Integration tab, once its details are saved
+  // (and, with a court, after the success screen has said that the bond comes first).
   const saved = Boolean(created) && savesDone && !savingDetails && !savingVisual && !detailsSaveError && !visualSaveError;
   useEffect(() => {
-    if (integrate && saved && created) router.replace(integrationUrl(created.id));
+    if (integrate && saved && created && !needsBond(created)) router.replace(integrationUrl(created.id));
   }, [integrate, saved, created, router]);
+  // The owner's rules for new events: whether a court and a host bond apply (null until read, or on an older escrow).
+  const [rules, setRules] = useState<EventView["rules"] | null>(null);
+  useEffect(() => {
+    events.config().then((c) => setRules(c.rules ?? null)).catch(() => {});
+  }, []);
 
   const free = form.mode === "Free";
   const maxSeats = free ? MAX_FREE_CAPACITY : MAX_CAPACITY;
@@ -198,7 +204,10 @@ function CreateEvent() {
   });
   const accessProblem = when ? ruleProblem(accessRule(Date.now()), when.end) : null;
   // Past events can only be added as Free: a deposit or ticket for something already over makes no sense.
-  const missing = !free && when && when.end < Date.now() ? "Pick Free to add a past event" : !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? `Set the capacity: 1 to ${maxSeats}` : doorTeamProblem ?? accessProblem ?? undefined;
+  // Deposit events stop taking guests (and the host bond) at the start, so the start must be ahead.
+  const lateStart = form.mode === "Deposit" && (rules?.close_at_start ?? true) && !!when && when.end >= Date.now() && when.start < Date.now() + 5 * 60_000
+    ? "Deposit events close registration at the start. Pick a start time in the future." : null;
+  const missing = !free && when && when.end < Date.now() ? "Pick Free to add a past event" : lateStart ? lateStart : !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? `Set the capacity: 1 to ${maxSeats}` : doorTeamProblem ?? accessProblem ?? undefined;
   // yoctoNEAR the host pays for storage beyond the free tier; "0" when free.
   const [storageCost, setStorageCost] = useState("0");
   const endsAt = when?.end;
@@ -399,7 +408,7 @@ function CreateEvent() {
     );
   }
   if (importOnArrival && !imported && importing) return <p className="max-w-2xl mx-auto text-sm text-muted" role="status">Importing…</p>;
-  if (created && integrate && !detailsSaveError && !visualSaveError) return <p className="max-w-2xl mx-auto text-sm text-muted" role="status">Opening integration…</p>;
+  if (created && integrate && !needsBond(created) && !detailsSaveError && !visualSaveError) return <p className="max-w-2xl mx-auto text-sm text-muted" role="status">Opening integration…</p>;
   if (created) return <Created event={created} visual={createdVisual} coverUrl={createdDetails?.cover_url} detailsSaveError={detailsSaveError} savingDetails={savingDetails} onRetry={retryDetailsSave} visualSaveError={visualSaveError} savingVisual={savingVisual} onRetryVisual={retryVisualSave} />;
 
   const summaryReady = integrate && !!imported && !editing && !missing && !!when && when.end > when.start && !!form.title.trim() && !locationProblem(form.location);
@@ -531,7 +540,7 @@ function CreateEvent() {
                 help={
                   form.mode === "Ticket"
                     ? "Each guest pays this for a ticket. It goes to your balance as soon as they register. Tickets are not refunded if you cancel."
-                    : `Each guest puts this down. People who come get it back plus a share of the no-shows. To open registration you lock a bond of one deposit per seat (${validAmount(form.deposit) && seats > 0 ? `${Number(form.deposit) * seats} USDC` : "deposit × seats"}); it comes back after the event unless a guest proves your list wrong. Registration closes when the event starts.`
+                    : depositHint(rules ?? null, amountOk && seatsOk ? BigInt(toUnits(form.deposit)) * BigInt(seats) : null)
                 }
               >
                 <SlAmount value={form.deposit} onChange={set("deposit")} label={form.mode === "Ticket" ? "Ticket price" : "Deposit"} />
@@ -570,6 +579,7 @@ function CreateEvent() {
           </div>
 
           {costNote}
+          {lateStart && <p className="text-sm text-muted">{lateStart}</p>}
           {when && when.end < Date.now() && (
             <p className="text-sm text-muted">
               {free ? "This date is in the past. The event goes to Past, and guests can add themselves as attended." : "Paid events need a future date. Pick Free to add a past event."}
@@ -926,6 +936,15 @@ function OptionRow({ icon, label, value, title, help, attention, children }: { i
   );
 }
 
+/** The Deposit help text under the amount; `pool` is deposit × seats in USDC units. */
+function depositHint(rules: EventView["rules"] | null, pool: bigint | null): string {
+  const base = "Each guest puts this down. People who come get it back plus a share of the no-shows.";
+  if (!rules) return base;
+  if (!rules.dao) return `${base} Your list of who came is final. Registration closes when the event ${rules.close_at_start ? "starts" : "ends"}.`;
+  const bond = pool === null ? "deposit × seats" : `${formatUsdc(pool * BigInt(rules.bond_per_seat))} USDC`;
+  return `${base} Before registration opens, you lock a bond of ${bondPerSeatText({ rules })} (${bond}). You get it back after the event unless the council upholds a dispute or you publish no list within ${hoursText(rules.submit_hours)}. Registration closes when the event starts.`;
+}
+
 /** After creating: share the event page, quick checkout, or simple site button. */
 function Created({ event, visual, coverUrl, detailsSaveError, savingDetails, onRetry, visualSaveError, savingVisual, onRetryVisual }: {
   event: EventView;
@@ -974,6 +993,13 @@ function Created({ event, visual, coverUrl, detailsSaveError, savingDetails, onR
       )}
       {savingVisual && <p className="text-sm text-muted">Saving the event look off-chain…</p>}
 
+      {needsBond(event) && (
+        <div className="card p-4 space-y-2 border-accent/50">
+          <p className="text-sm">Registration opens once you lock the {formatUsdc(hostBondFor(event))} USDC host bond. Lock it on the event page before the event starts.</p>
+          <Link href={`/e/${event.id}`} className="btn btn-accent !py-2 text-sm">Lock Host Bond</Link>
+        </div>
+      )}
+
       <div className="space-y-3">
         <Way title="Event page" value={page} />
         <Way title="Quick checkout link" value={checkout} />
@@ -981,13 +1007,13 @@ function Created({ event, visual, coverUrl, detailsSaveError, savingDetails, onR
 
       <div className="flex flex-wrap gap-3">
         <Link href={`/e/${event.id}`} className="btn btn-primary">
-          Open event page
+          Open Event Page
         </Link>
         <Link href={integrationUrl(event.id)} className="btn btn-ghost">
-          Add to your site
+          Add to Your Site
         </Link>
         <Link href={`/e/${event.id}/manage`} className="btn btn-ghost">
-          Manage guests &amp; check-in
+          Manage Guests &amp; Check-In
         </Link>
       </div>
     </div>

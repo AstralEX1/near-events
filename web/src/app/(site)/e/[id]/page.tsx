@@ -4,7 +4,7 @@ import { SlShare } from "@/components/SlUi";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { events, formatUsdc, isTicket, registrationEndsAt, type EventView, type GuestView } from "@/lib/near";
+import { events, formatUsdc, isTicket, needsBond, registrationEndsAt, registrationOpen, type EventView, type GuestView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
 import { Avatar, Cover, DateBadge, EventSkeleton, StatusPill, formatWhen, shortAccount } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
@@ -165,7 +165,7 @@ export default function EventPage() {
           ) : open ? (
             <RegisterBox
               head="Registration"
-              aside={Date.now() >= registrationEndsAt(event) ? "Closed" : spots ? `${spots} spot${spots === 1 ? "" : "s"} left` : "Full"}
+              aside={needsBond(event) ? "Not open yet" : Date.now() >= registrationEndsAt(event) ? "Closed" : spots ? `${spots} spot${spots === 1 ? "" : "s"} left` : "Full"}
               icon={ticket ? ICONS.ticket : ICONS.wallet}
               title={ticket ? "Ticket" : "Attendance deposit"}
               desc={ticket ? "Goes to the host, no refunds" : "Show up, get it back + a no-show share"}
@@ -174,7 +174,7 @@ export default function EventPage() {
               <RegistrationCard event={event} myStatus={null} onChange={load} explain={false} />
             </RegisterBox>
           ) : (
-            <RegisterBox head={event.status === "Cancelled" ? "Cancelled" : event.status === "Refunded" ? "Refunded" : "Event ended"}>
+            <RegisterBox head={event.status === "Cancelled" ? "Cancelled" : event.status === "Refunded" ? "Closed" : "Event ended"}>
               <RegistrationCard event={event} myStatus={null} onChange={load} explain={false} />
             </RegisterBox>
           )}
@@ -194,7 +194,7 @@ export default function EventPage() {
           {!open && <GuestGrid event={event} guests={guests} me={accountId} />}
         </section>
       </div>
-    {open && !me && spots > 0 && <div className="gc-mobile-register"><span><b>{price}</b><small className="block text-muted">{ticket ? "Ticket" : "Attendance deposit"}</small></span><a href="#registration" className="btn btn-accent">{ticket ? "Get ticket" : "Register"}</a></div>}
+    {registrationOpen(event) && !me && spots > 0 && <div className="gc-mobile-register"><span><b>{price}</b><small className="block text-muted">{ticket ? "Ticket" : "Attendance deposit"}</small></span><a href="#registration" className="btn btn-accent">{ticket ? "Get Ticket" : "Register"}</a></div>}
     </>
   );
 }

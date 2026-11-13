@@ -23,7 +23,7 @@ const COUNCIL = ["steve-nv1109", "chawki-nv1109", "jacqueline-nv1109", "tp6guest
 const BOT = n("relayer-nearevents-11022103");
 const [HOST_A, HOST_B] = [n("yusak-nv1109"), n("alexandre-nv1109")];
 /** The default rules with the rehearsal court. */
-const COURT_RULES = { dao: DAO, treasury: OWNER, bond_per_seat: 1, close_at_start: true, challenge_hours: 12, submit_hours: 72, resolve_hours: 168 };
+const COURT_RULES = { dao: DAO, treasury: OWNER, bond_per_seat: 2, close_at_start: true, challenge_hours: 12, submit_hours: 72, resolve_hours: 168 };
 const [STAN, HEBERT, G2] = [n("stan-nv1109"), n("hebert-nv1109"), n("tp6guest2-nv1110")];
 
 const provider = new JsonRpcProvider({ url: "https://test.rpc.fastnear.com" });
@@ -255,8 +255,8 @@ const SITE = process.env.SITE ?? "http://localhost:3000";
 const DEMO_PEOPLE = [STAN, HEBERT, G2, DEMO_HOST, OWNER];
 steps.demo = async () => {
   const capacity = Number(process.env.DEMO_CAPACITY ?? 4);
-  // The bond is one deposit per seat (Rules default).
-  const bond = BigInt(capacity) * D;
+  // The bond is 2 deposits per seat (COURT_RULES); the top-up only has to cover it.
+  const bond = 2n * BigInt(capacity) * D;
   if ((await usdcOf(DEMO_HOST)) < bond) {
     const reg = await view(USDC, "storage_balance_of", { account_id: DEMO_HOST });
     if (!reg) await tx("USDC storage for the demo host", BOT, USDC, "storage_deposit", { account_id: DEMO_HOST, registration_only: true }, { deposit: 1_250_000_000_000_000_000_000n });
@@ -280,7 +280,7 @@ steps["demo-bond"] = async () => {
   await pay("register before the bond (refused)", HEBERT, D, { action: "register", event_id: state.demo });
   assert.equal(await usdcOf(HEBERT), before, "the refused registration's USDC came back");
   const bond = (await event(state.demo)).bond_due;
-  await pay(`host bond for ${state.demo} (${Number(bond) / 1e6} USDC, one deposit per seat)`, DEMO_HOST, BigInt(bond), { action: "host_bond", event_id: state.demo });
+  await pay(`host bond for ${state.demo} (${Number(bond) / 1e6} USDC, ${(await event(state.demo)).rules.bond_per_seat} deposits per seat)`, DEMO_HOST, BigInt(bond), { action: "host_bond", event_id: state.demo });
   for (const g of [STAN, HEBERT, G2]) await pay(`register ${g} for ${state.demo}`, g, D, { action: "register", event_id: state.demo });
   const e = await event(state.demo);
   assert.deepEqual([e.host_bond, e.guest_count], [bond, 3]);
@@ -347,7 +347,8 @@ steps["demo-check"] = async () => {
     console.log(`events ${state.demoOthers} were open at the start too: their payouts mix into the deltas, checking escrow-wide only`);
   } else {
     // Pool 3 over 3 attendees; hebert also gets his dispute bond back and the winner's half of the host bond.
-    const half = BigInt(e.host_bond) / 2n;
+    // The winner's half of the bond, at most 5 deposits (MAX_WIN_DEPOSITS); the rest to the treasury.
+    const half = BigInt(e.host_bond) / 2n < 5n * D ? BigInt(e.host_bond) / 2n : 5n * D;
     const gain = { [STAN]: D, [HEBERT]: D + D + half, [G2]: D, [DEMO_HOST]: 0n, [OWNER]: BigInt(e.host_bond) - half };
     for (const [who, want] of Object.entries(gain)) {
       const got = (await escrowOf(who)) - BigInt(state.demoBefore[who]);

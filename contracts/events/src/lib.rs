@@ -12,9 +12,9 @@
 //! `deposit` in both modes.
 //!
 //! Deposit events follow the `Rules` the owner set when they were created
-//! (`set_rules`; defaults: bond 1 deposit per seat, window 12 h, publish 72 h,
-//! court 7 days). Without a court (`rules.dao = None`) there is no bond and no
-//! dispute: the host's list pays out when published. With one:
+//! (`set_rules`; defaults: no court; window 12 h, publish 72 h, court 7 days;
+//! with a court, at least 2 deposits per seat). Without a court (`rules.dao = None`) there
+//! is no bond and no dispute: the host's list pays out when published. With one:
 //! 1. The host (or anyone for them) locks a bond of `bond_per_seat` deposits per
 //!    seat (`host_bond` message). Registration opens only after that and closes
 //!    at `starts_at`, and the host can never take a seat.
@@ -30,14 +30,16 @@
 //! 5. Anyone calls `settle` once the window is over and no dispute is waiting.
 //!    Money (all on internal balances): the pool is split by the final list;
 //!    the host bond goes back to the host, or, if any dispute was upheld,
-//!    `HOST_TREASURY_BPS` of it to the treasury and the rest to the winners;
+//!    `HOST_TREASURY_BPS` of it to the treasury and the rest to the winners
+//!    (at most `MAX_WIN_DEPOSITS` deposits each, the excess to the treasury);
 //!    a dismissed challenger bond goes `CHALLENGER_TREASURY_BPS` to the treasury
 //!    and the rest to the people who came. Every unit that comes in is paid out.
 //! 6. A host who publishes no list in time loses the bond: anyone calls
 //!    `refund`, which publishes an empty list in the host's place and opens the
-//!    dispute window. Guests who came can still prove it ("I came"); everyone
-//!    else gets the deposit back. The bond goes to the winners and the treasury,
-//!    or, with no winner, to all guests and the treasury. So abandoning never
+//!    dispute window. Guests who came can still prove it ("I came") and then
+//!    split the pool; if nobody proves it, everyone gets the deposit back. The
+//!    bond goes to the winners and the treasury, or, with no winner, to all
+//!    guests and the treasury. So abandoning never
 //!    beats publishing an honest list. The host may `cancel` only before
 //!    `starts_at` (or before the bond).
 //!
@@ -136,6 +138,9 @@ pub const ORACLE_HOUR_MS: u64 = if cfg!(feature = "short-windows") { 10_000 } el
 pub const HOST_TREASURY_BPS: u128 = 5_000;
 /// Share of a dismissed challenger bond that goes to the treasury (the rest to the people who came).
 pub const CHALLENGER_TREASURY_BPS: u128 = 5_000;
+/// Most one winner takes from a lost host bond, in deposits; the rest goes to the treasury.
+/// Without it a false claim against a 300-seat bond pays at a 0.7% council error rate (audit 2).
+pub const MAX_WIN_DEPOSITS: u128 = 5;
 const BPS: u128 = 10_000;
 
 const HOUR_MS: u64 = 60 * 60 * 1000;
@@ -219,7 +224,7 @@ pub struct Rules {
     pub dao: Option<AccountId>,
     /// Receives the treasury share of lost bonds.
     pub treasury: AccountId,
-    /// Host bond in deposits per seat (bond = deposit × capacity × this); 1–10 with a court, 0 without.
+    /// Host bond in deposits per seat (bond = deposit × capacity × this); 2–10 with a court, 0 without.
     pub bond_per_seat: u8,
     /// Deposit events stop taking guests at `starts_at` instead of `ends_at`. Required with a court.
     pub close_at_start: bool,
@@ -243,12 +248,16 @@ impl Rules {
         require!(court == (self.bond_per_seat > 0), "A court needs a host bond, and a bond needs a court");
         require!(self.dao.as_ref() != Some(&self.treasury), "The court cannot receive the lost bonds it decides");
         require!(!court || self.close_at_start, "With a court, registration must close at the start");
+        // Below 2 deposits per seat a caught host's no-shows win back half the bond by disputing
+        // their own lies ("dilution", audit 2); short hours let a host publish when nobody looks,
+        // abandon an honest late host, or outrun the council's voting period.
         require!(
             self.bond_per_seat <= 10
-                && (1..=168).contains(&self.challenge_hours)
-                && (1..=720).contains(&self.submit_hours)
-                && (1..=720).contains(&self.resolve_hours),
-            "Rules out of range: bond 0-10 deposits per seat, window 1-168 h, publish and court 1-720 h"
+                && (!court || self.bond_per_seat >= 2)
+                && (12..=168).contains(&self.challenge_hours)
+                && (24..=720).contains(&self.submit_hours)
+                && (72..=720).contains(&self.resolve_hours),
+            "Rules out of range: bond 2-10 deposits per seat with a court, window 12-168 h, publish 24-720 h, court 72-720 h"
         );
     }
 }
@@ -329,13 +338,13 @@ pub struct EventView {
     pub access: Option<AccessRule>,
     /// The court of this event (`rules.dao`); `None`: the host's list is final.
     pub dao: Option<AccountId>,
-    pub treasury: Option<AccountId>,
     pub rules: Rules,
     /// Locked host bond; 0 until paid. Registration opens once it equals `bond_due`.
     pub host_bond: U128,
-    /// The bond this event needs: deposit × capacity (one deposit per seat); 0 for Ticket.
+    /// The bond this event needs: deposit × capacity × `rules.bond_per_seat`; 0 for Ticket or without a court.
     pub bond_due: U128,
-    /// Registration is accepted until this time (exclusive): `starts_at` for Deposit, `ends_at` for Ticket.
+    /// Registration is accepted until this time (exclusive): `starts_at` for Deposit with
+    /// `rules.close_at_start`, else `ends_at`.
     pub registration_ends_at: u64,
     pub submitted_at: u64,
     /// Disputes are accepted until this time (exclusive); 0 before the list.
@@ -574,8 +583,9 @@ impl Contract {
     /// Host only, once `ends_at` has passed, with the guests who came
     /// (`attended`, checked in at the door off-chain). Unknown accounts fail
     /// the call, duplicates count once.
-    /// `Deposit`: publishes the list (within `rules.submit_hours`) and opens the
-    /// dispute window; `settle` pays out later. With no guests it closes at once.
+    /// `Deposit`: publishes the list (within `rules.submit_hours`). With a court
+    /// the dispute window opens and `settle` pays out later; without one it pays
+    /// out now. With no guests it closes at once.
     /// `Ticket`: just closes the event; the host was paid at registration.
     #[payable]
     pub fn finalize(&mut self, event_id: u64, attended: Vec<AccountId>) {
@@ -676,28 +686,9 @@ impl Contract {
         require!(event.mode == EventMode::Deposit, "Only Deposit events are refunded");
         require!(event.status == EventStatus::Open, "Nothing to refund");
         require!(env::block_timestamp_ms() > submit_by(event), "The host can still publish the list");
-        let (host, n, bond) = (event.host.clone(), event.guest_count, event.host_bond);
-        if n == 0 {
-            self.credit(&host, bond);
-            self.mark_closed(event_id, EventStatus::Refunded);
-            emit("refunded", json!({ "event_id": event_id, "reason": "no_guests", "host": U128(bond) }));
-            return;
-        }
         // Without a list a host's sybils and its no-shows could all walk away
         // refunded; an empty list keeps the attendees' claims alive.
-        let event = self.event_mut(event_id);
-        event.status = EventStatus::Submitted;
-        event.submitted_at = env::block_timestamp_ms();
-        event.abandoned = true;
-        let (challenge_ends, court) = (challenge_ends_at(event), event.rules.dao.is_some());
-        emit(
-            "attendance_submitted",
-            json!({ "event_id": event_id, "attended": 0, "guests": n, "challenge_ends_at": challenge_ends, "abandoned": true }),
-        );
-        // No court: nobody can prove they came, so everyone is refunded now.
-        if !court {
-            self.settle_money(event_id);
-        }
+        self.publish(event_id, true);
     }
 
     // --------------------------------------------------------------- owner
@@ -993,7 +984,7 @@ impl FungibleTokenReceiver for Contract {
                 // Everyone else registers only themselves; paying for another guest is refused.
                 if let (Some(guest), _) = self.payer(&sender_id, guest) {
                     if let Some(deposit) = self.get_event_deposit(event_id) {
-                        if amount.0 >= deposit && self.can_register(event_id, &guest) {
+                        if amount.0 >= deposit && self.refusal(event_id, &guest).is_none() {
                             self.register(event_id, guest, sender_id);
                             return PromiseOrValue::Value(U128(amount.0 - deposit));
                         }
@@ -1034,8 +1025,8 @@ impl Contract {
             self.validate_access(&host, &metadata, rule);
         }
         require!(deposit.0 >= MIN_DEPOSIT, "Deposit must be at least 0.1 USDC");
-        // The host bond and every pool sum must fit in u128: the largest is
-        // 300 dismissed bonds × CHALLENGER_TREASURY_BPS in `split_lost` (1.5e6 deposits).
+        // The host bond and every pool sum must fit in u128: the largest is the
+        // bond at 10 deposits × 300 seats × HOST_TREASURY_BPS in `split_lost` (1.5e7 deposits).
         require!(deposit.0 <= u128::MAX / 1_000_000_000, "Deposit is too large");
         require!(capacity > 0 && capacity <= MAX_CAPACITY, "Capacity out of range");
         let mut rules = self.rules.clone();
@@ -1113,7 +1104,6 @@ impl Contract {
             "Too late to publish the list: the event can only be refunded"
         );
         require!(attended.len() <= MAX_CAPACITY as usize, "Too many accounts");
-        let (guest_count, host, bond) = (event.guest_count, event.host.clone(), event.host_bond);
 
         let mut came = 0u32;
         for account in &attended {
@@ -1121,13 +1111,11 @@ impl Contract {
                 .guests
                 .get_mut(&(event_id, account.clone()))
                 .unwrap_or_else(|| env::panic_str(&format!("{} is not registered", account)));
-            // Ticket: the final status now. Deposit: the host's claim, final at `settle`.
-            let first = if ticket { record.status == GuestStatus::Registered } else { !record.listed };
-            if first {
+            // Duplicates count once. Ticket: the final status now. Deposit: the host's claim, final at `settle`.
+            if !record.listed {
+                record.listed = true;
                 if ticket {
                     record.status = GuestStatus::Attended;
-                } else {
-                    record.listed = true;
                 }
                 came += 1;
             }
@@ -1136,21 +1124,27 @@ impl Contract {
         if ticket {
             return self.finalize_tickets(event_id);
         }
-        if guest_count == 0 {
-            self.credit(&host, bond);
-            self.mark_closed(event_id, EventStatus::Finalized);
-            emit("settled", json!({ "event_id": event_id, "attended": 0, "host": U128(bond) }));
-            return;
-        }
+        self.publish(event_id, false);
+    }
+
+    /// Publishes a Deposit event's list (`abandoned`: the empty one `refund`
+    /// publishes for the host). No guests: closes at once, bond back. No court:
+    /// the list is final and pays out now; with one, the dispute window opens.
+    fn publish(&mut self, event_id: u64, abandoned: bool) {
         let event = self.event_mut(event_id);
+        let (n, came) = (event.guest_count, event.attended_count);
+        if n == 0 {
+            let status = if abandoned { EventStatus::Refunded } else { EventStatus::Finalized };
+            return self.close_with_refunds(event_id, status);
+        }
         event.status = EventStatus::Submitted;
         event.submitted_at = env::block_timestamp_ms();
+        event.abandoned = abandoned;
         let (challenge_ends, court) = (challenge_ends_at(event), event.rules.dao.is_some());
         emit(
             "attendance_submitted",
-            json!({ "event_id": event_id, "attended": came, "guests": guest_count, "challenge_ends_at": challenge_ends }),
+            json!({ "event_id": event_id, "attended": came, "guests": n, "challenge_ends_at": challenge_ends, "abandoned": abandoned }),
         );
-        // No court: the host's list is final, so it pays out now.
         if !court {
             self.settle_money(event_id);
         }
@@ -1178,12 +1172,12 @@ impl Contract {
     /// amount kept (exactly the bond). Panics otherwise, so all of it comes back.
     fn lock_host_bond(&mut self, event_id: u64, amount: u128, payer: &AccountId) -> u128 {
         let event = self.event(event_id);
-        require!(bond_due(event) > 0, "This event takes no host bond");
+        let bond = bond_due(event);
+        require!(bond > 0, "This event takes no host bond");
         require!(event.status == EventStatus::Open, "Event is closed");
         require!(env::block_timestamp_ms() < registration_ends(event), "Registration has closed");
         require!(event.host_bond == 0, "The host bond is already paid");
-        let bond = bond_due(event);
-        require!(amount >= bond, format!("The host bond is {} (one deposit per seat)", bond));
+        require!(amount >= bond, format!("The host bond is {}", bond));
         let host = event.host.clone();
         self.event_mut(event_id).host_bond = bond;
         emit("host_bond_paid", json!({ "event_id": event_id, "host": host, "paid_by": payer, "amount": U128(bond) }));
@@ -1244,7 +1238,12 @@ impl Contract {
         // event loses it anyway, to every guest; otherwise back to the host.
         let (mut win_part, mut guest_part) = (0, 0);
         if w > 0 || abandoned {
-            let (part, rest) = split_lost(bond, HOST_TREASURY_BPS, if w > 0 { w } else { n });
+            let (mut part, mut rest) = split_lost(bond, HOST_TREASURY_BPS, if w > 0 { w } else { n });
+            // A winner's prize is capped; guests of an abandoned event are not (they cannot cause it).
+            if w > 0 && part > MAX_WIN_DEPOSITS * d {
+                rest += (part - MAX_WIN_DEPOSITS * d) * u128::from(w);
+                part = MAX_WIN_DEPOSITS * d;
+            }
             treasury_total += rest;
             if w > 0 { win_part = part } else { guest_part = part }
         } else {
@@ -1522,34 +1521,42 @@ impl Contract {
             || (self.intents.is_some() && self.relayer.is_some())
     }
 
-    /// Events with a bond open once it is in, and never seat the host.
-    fn seats_open(event: &Event, guest: &AccountId) -> bool {
-        (bond_due(event) == 0 || event.host_bond > 0) && *guest != event.host
-    }
-
-    fn can_register(&self, event_id: u64, guest: &AccountId) -> bool {
+    /// Why `guest` cannot take a seat now, or `None`: the one list of
+    /// registration rules (`ft_on_transfer` refunds on it, `register` panics).
+    fn refusal(&self, event_id: u64, guest: &AccountId) -> Option<&'static str> {
         let event = self.event(event_id);
-        event.status == EventStatus::Open
-            && env::block_timestamp_ms() < registration_ends(event)
-            && event.guest_count < event.capacity
-            && Self::seats_open(event, guest)
-            && self.keyless_ok(guest)
-            && !self.guests.contains_key(&(event_id, guest.clone()))
-            && self.access_check(event_id, guest).allowed
+        if event.status != EventStatus::Open {
+            return Some("Event is closed");
+        }
+        if env::block_timestamp_ms() >= registration_ends(event) {
+            return Some("Registration has closed");
+        }
+        if event.guest_count >= event.capacity {
+            return Some("Event is full");
+        }
+        // Events with a bond open once it is in; the host never takes a seat.
+        if (bond_due(event) > 0 && event.host_bond == 0) || *guest == event.host {
+            return Some("Registration needs the host bond, and the host cannot take a seat");
+        }
+        if self.guests.contains_key(&(event_id, guest.clone())) {
+            return Some("Already registered");
+        }
+        if !self.keyless_ok(guest) {
+            return Some("Keyless registration requires Intents and a relayer");
+        }
+        if !self.access_check(event_id, guest).allowed {
+            return Some("Only regulars can register yet");
+        }
+        None
     }
 
     /// Every seat was reserved when the event was created, so a registration
     /// only moves its bytes from the reservation into real storage.
     fn register(&mut self, event_id: u64, guest: AccountId, paid_by: AccountId) {
-        let event = self.event(event_id);
-        require!(event.status == EventStatus::Open, "Event is closed");
-        require!(env::block_timestamp_ms() < registration_ends(event), "Registration has closed");
-        require!(event.guest_count < event.capacity, "Event is full");
-        require!(Self::seats_open(event, &guest), "Registration needs the host bond, and the host cannot take a seat");
-        require!(!self.guests.contains_key(&(event_id, guest.clone())), "Already registered");
-        require!(self.keyless_ok(&guest), "Keyless registration requires Intents and a relayer");
-        require!(self.access_check(event_id, &guest).allowed, "Only regulars can register yet");
-        let index = event.guest_count;
+        if let Some(why) = self.refusal(event_id, &guest) {
+            env::panic_str(why);
+        }
+        let index = self.event(event_id).guest_count;
         self.reserved_bytes -= STORAGE_BYTES_PER_GUEST;
         self.guests.insert(
             (event_id, guest.clone()),
@@ -1680,7 +1687,6 @@ fn view_event(id: u64, e: &Event) -> EventView {
         closed_at: e.closed_at,
         access: e.access.clone(),
         dao: e.rules.dao.clone(),
-        treasury: e.rules.dao.as_ref().map(|_| e.rules.treasury.clone()),
         rules: e.rules.clone(),
         host_bond: U128(e.host_bond),
         bond_due: U128(bond_due(e)),

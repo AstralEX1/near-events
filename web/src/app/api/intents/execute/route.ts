@@ -22,6 +22,7 @@ export async function POST(req: Request) {
   let bond: { eventId: number; amount: string } | undefined;
   let dispute: { eventId: number; amount: string; target: string; attended: boolean } | undefined;
   let hostAction: { create: { capacity: number; endsAt: number } } | { eventId: number; finalize: boolean } | undefined;
+  let transfer: string | undefined;
   try {
     signed = await req.json();
     if (signed.standard !== "erc191" || typeof signed.payload !== "string" || signed.payload.length > 24_576
@@ -36,6 +37,13 @@ export async function POST(req: Request) {
 
     nonce = payload.nonce;
     const [intent] = payload.intents;
+    // Only the fields we check reach the verifier (no notifications or extra calls paid by the relayer).
+    const allowed: Record<string, string[]> = {
+      ft_withdraw: ["intent", "token", "receiver_id", "amount", "msg", "memo"],
+      auth_call: ["intent", "contract_id", "msg"],
+      transfer: ["intent", "receiver_id", "tokens", "memo"],
+    };
+    if (!allowed[intent?.intent] || Object.keys(intent).some((k) => !allowed[intent.intent].includes(k))) throw new Error();
     const positiveAmount = (value: unknown) => typeof value === "string" && /^[1-9][0-9]{0,38}$/.test(value)
       && BigInt(value) < (1n << 128n);
     if (intent.intent === "ft_withdraw") {
@@ -56,7 +64,11 @@ export async function POST(req: Request) {
       if (msg.action === "create_event") {
         const capacity = Number(msg.capacity);
         const endsAt = Number(msg.metadata?.ends_at);
-        if (!Number.isSafeInteger(capacity) || !Number.isSafeInteger(endsAt)) throw new Error();
+        const title = msg.metadata?.title;
+        // The escrow's own create checks, so a refused create cannot be repeated at the relayer's cost.
+        if (!Number.isSafeInteger(capacity) || !Number.isSafeInteger(endsAt) || capacity < 1 || capacity > MAX_CAPACITY
+          || typeof title !== "string" || !title.trim() || title.length > 120
+          || !(Number(msg.metadata?.starts_at) <= endsAt) || !positiveAmount(msg.deposit) || BigInt(msg.deposit) < 100_000n) throw new Error();
         hostAction = { create: { capacity, endsAt } };
       } else if ((msg.action === "finalize" || msg.action === "cancel") && Number.isSafeInteger(msg.event_id) && msg.event_id >= 0) {
         if (msg.action === "finalize" && (!Array.isArray(msg.attended) || msg.attended.length > MAX_CAPACITY)) throw new Error();
@@ -66,6 +78,7 @@ export async function POST(req: Request) {
       || intent.receiver_id.length > 64 || !/^[a-z0-9]+([._-][a-z0-9]+)*$/.test(intent.receiver_id)
       || Object.keys(intent.tokens).join() !== `nep141:${USDC_CONTRACT}`
       || !positiveAmount(intent.tokens[`nep141:${USDC_CONTRACT}`])) throw new Error();
+    else transfer = intent.tokens[`nep141:${USDC_CONTRACT}`];
 
     if (erc191Signer(signed.payload, baseDecode(signed.signature.slice("secp256k1:".length))) !== signer) throw new Error();
   } catch {
@@ -74,10 +87,10 @@ export async function POST(req: Request) {
 
   try {
     // Any payment from Intents: the verifier would fail on a short balance after the relayer paid.
-    const payment = registration ?? bond ?? dispute;
-    if (payment) {
+    const amount = (registration ?? bond ?? dispute)?.amount ?? transfer;
+    if (amount) {
       const balance = await view<string>("mt_balance_of", { account_id: signer, token_id: `nep141:${USDC_CONTRACT}` }, INTENTS_CONTRACT);
-      if (BigInt(balance) < BigInt(payment.amount)) {
+      if (BigInt(balance) < BigInt(amount)) {
         return Response.json({ error: "Not enough USDC in NEAR Intents for this payment." }, { status: 409 });
       }
     }
@@ -124,10 +137,19 @@ export async function POST(req: Request) {
         return Response.json({ error: "Only the host can close this event while it is open." }, { status: 409 });
       }
       if (hostAction.finalize && Date.now() < event.metadata.ends_at) {
-        return Response.json({ error: "You can close the event once it ends. To refund everyone now, cancel it." }, { status: 409 });
+        return Response.json({ error: "You can publish the list once the event ends." }, { status: 409 });
+      }
+      if (hostAction.finalize && event.mode !== "Ticket" && event.submit_by && Date.now() > event.submit_by) {
+        return Response.json({ error: "Too late to publish the list: the event can only be refunded." }, { status: 409 });
+      }
+      if (!hostAction.finalize && event.mode !== "Ticket" && event.host_bond !== "0" && Date.now() >= event.metadata.starts_at) {
+        return Response.json({ error: "The event has started, so it can't be cancelled: publish the list instead." }, { status: 409 });
       }
     }
-    if (await paidRequestLimited(req, "execute", signer, nonce)) return Response.json({ error: "Relayer quota unavailable or exceeded" }, { status: 429 });
+    // A host publishing its list or a guest disputing in the window stand to lose money if the
+    // shared relayer budget runs out, so their requests skip it (per-IP and per-account limits stay).
+    const critical = !!dispute || (!!hostAction && "finalize" in hostAction && hostAction.finalize);
+    if (await paidRequestLimited(req, "execute", signer, nonce, critical)) return Response.json({ error: "Relayer quota unavailable or exceeded" }, { status: 429 });
     const outcome = await relayer().callFunctionRaw({
       contractId: INTENTS_CONTRACT,
       methodName: "execute_intents",
@@ -143,6 +165,10 @@ export async function POST(req: Request) {
     if (refused) {
       const reason = JSON.stringify(refused.Failure).match(/panicked: ([^"\\]+)/)?.[1];
       return Response.json({ error: reason ? `The escrow refused: ${reason}` : "The escrow refused this action" }, { status: 409 });
+    }
+    // A refused registration does not panic (the escrow returns the USDC), so look for the seat.
+    if (registration && !(await events.guestStatus(registration.eventId, signer).catch(() => null))) {
+      return Response.json({ error: "The escrow did not take the registration. Your USDC is back in NEAR Intents." }, { status: 409 });
     }
     // EVM guests have no staff token; the registration they just signed is their proof for the display name.
     const name = registration && cleanGuestName(signed.name);

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { events, formatUsdc, hostBondFor, needsBond, registrationEndsAt, usdc, windowHours, bondPerSeatText, type EventView, type GuestStatus, isTicket } from "@/lib/near";
+import { events, formatUsdc, hostBondFor, hoursText, needsBond, registrationEndsAt, registrationOpen, usdc, windowText, bondPerSeatText, type EventView, type GuestStatus, isTicket } from "@/lib/near";
 import { EVENTS_CONTRACT, HAS_FAUCET, TEST_EVM_FAUCET_LIMIT, USDC_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
@@ -13,6 +13,9 @@ import { CashOut } from "@/components/CashOut";
 import { DepositRulesTooltip } from "@/components/DepositRulesTooltip";
 import { guestNamesApi } from "@/lib/guestNamesClient";
 import { ruleText, type AccessCheck } from "@/lib/access";
+
+const when = (ms: number) =>
+  new Date(ms).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 function requireDisplayName(value: string): string {
   const name = value.trim().replace(/\s+/g, " ");
@@ -176,25 +179,26 @@ export function RegistrationCard({
 
   const price = `${formatUsdc(event.deposit)} USDC`;
   const ticket = isTicket(event);
-  const action = ticket ? "Get ticket" : "Register";
+  const action = ticket ? "Get Ticket" : "Register";
   // One primary button per state; alternatives stay folded away.
   let body;
   if (event.status === "Cancelled" && ticket) {
     body = <p className="text-sm">This event was cancelled. Tickets are not refunded.</p>;
   } else if (event.status === "Submitted") {
-    body = myStatus ? (
-      <p className="text-sm">The host published who came. Payouts follow the 24-hour dispute window; see below.</p>
+    body = !myStatus ? (
+      <p className="text-sm">This event is over. Payouts follow the dispute window.</p>
+    ) : event.abandoned ? (
+      <p className="text-sm">The host published no list. Came to the event? Prove it below before {when(event.challenge_ends_at ?? 0)}.</p>
     ) : (
-      <p className="text-sm">This event is over. The host published who came; payouts follow the dispute window.</p>
+      <p className="text-sm">The host published who came. Payouts follow when the dispute window ends on {when(event.challenge_ends_at ?? 0)}; see below.</p>
     );
-  } else if (event.status === "Cancelled" || event.status === "Refunded") {
+  } else if (event.status === "Refunded") {
+    // `refund` with no guests: the event just closed and the bond went back to the host.
+    body = <p className="text-sm">Nobody registered for this event, so it closed.</p>;
+  } else if (event.status === "Cancelled") {
     body = (
       <div className="space-y-2">
-        <p className="text-sm">
-          {event.status === "Refunded"
-            ? "The host did not publish who came in time, so every deposit was refunded with a share of the host bond."
-            : "This event was cancelled. Refunds were credited to guests’ Nearvent balances."}
-        </p>
+        <p className="text-sm">This event was cancelled. Refunds were credited to guests’ Nearvent balances.</p>
         {!accountId ? (
           <SignInFolded hint="Registered? Sign in to see your refund." onDone={refreshAfterSignIn} />
         ) : balanceLoading ? (
@@ -259,7 +263,7 @@ export function RegistrationCard({
     body = (
       <div>
         <p className="font-semibold text-good">✓ You’re checked in</p>
-        {!ticket && <p className="text-sm text-muted mt-1">Withdraw your payout here once the host closes the event.</p>}
+        {!ticket && <p className="text-sm text-muted mt-1">Your payout arrives when the event is settled.</p>}
       </div>
     );
   } else if (myStatus === "Registered") {
@@ -290,7 +294,7 @@ export function RegistrationCard({
       </div>
     ) : (
       <button className="btn btn-accent w-full !py-3.5" onClick={() => setChoosing(true)}>
-        {event.guest_count >= event.capacity ? "Sign in to view your pass" : `${action} · ${price}`}
+        {event.guest_count >= event.capacity ? "Sign In to View Your Pass" : `${action} · ${price}`}
       </button>
     );
   } else if (event.guest_count >= event.capacity) {
@@ -345,7 +349,7 @@ export function RegistrationCard({
     );
   }
 
-  const open = event.status === "Open" && !myStatus && event.guest_count < event.capacity && Date.now() < registrationEndsAt(event) && !needsBond(event);
+  const open = registrationOpen(event) && !myStatus && event.guest_count < event.capacity;
   return (
     <div className="space-y-3">
       {open && rule && access?.allowed !== false && <p className="text-sm text-muted">{ruleText(rule)}</p>}
@@ -357,8 +361,16 @@ export function RegistrationCard({
         )}
       {open && (
         <div className="space-y-1.5 text-sm text-muted leading-relaxed">
-          {explain && <p>{ticket ? "A paid ticket. The money goes to the host when you register; tickets are not refunded." : event.dao ? `Get checked in and receive your deposit plus a share of no-shows once the host’s list has stood for ${windowHours(event)} hours. Miss it, and your deposit goes to the guests who came. Marked absent by mistake? Dispute it.` : "Get checked in and receive your deposit plus a share of no-shows when the host closes the event. Miss it, and your deposit goes to the guests who came."}</p>}
-          <DepositRulesTooltip ticket={ticket} amount={price} oracle={!!event.dao} hours={windowHours(event)} perSeat={bondPerSeatText(event)} />
+          {explain && <p>{ticket ? "A paid ticket. The money goes to the host when you register; tickets are not refunded." : event.dao ? `Get checked in to get your deposit back plus a share of the no-shows, paid when the ${windowText(event)} dispute window ends. Miss it and your deposit goes to the guests who came. Marked absent by mistake? You can dispute it.` : "Get checked in to get your deposit back plus a share of the no-shows when the host publishes who came. Miss it and your deposit goes to the guests who came."}</p>}
+          <DepositRulesTooltip
+            ticket={ticket}
+            amount={price}
+            oracle={!!event.dao}
+            disputeWindow={windowText(event)}
+            submit={hoursText(event.rules?.submit_hours ?? 72)}
+            resolve={hoursText(event.rules?.resolve_hours ?? 168)}
+            perSeat={bondPerSeatText(event)}
+          />
         </div>
       )}
     </div>

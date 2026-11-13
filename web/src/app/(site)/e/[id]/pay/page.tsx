@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { events, formatUsdc, isTicket, needsBond, registrationEndsAt, type EventView } from "@/lib/near";
+import { events, formatUsdc, isTicket, needsBond, registrationEndsAt, registrationOpen, type EventView } from "@/lib/near";
 import { ruleText, type AccessCheck } from "@/lib/access";
 import { EVENTS_CONTRACT, LIVE_EVENT_SWAPS } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
@@ -204,10 +204,15 @@ export default function PayFromAnyChain() {
                   disabled={busy}
                 />
               </label>
-              <button className="btn btn-primary" disabled={busy} onClick={finishRegistration}>Confirm registration</button>
+              <button className="btn btn-primary" disabled={busy} onClick={finishRegistration}>Confirm Registration</button>
             </>
           )}
-          {!canRegister && !registered && <p>This event is no longer accepting registrations.</p>}
+          {!canRegister && !registered && (
+            needsBond(event) ? <p>Registration opens once the host locks the bond.</p>
+              : registrationOpen(event) && event.guest_count >= event.capacity ? <p>This event is full.</p>
+                : !registrationOpen(event) ? <p>Registration is closed.</p>
+                  : null // the access rule refused: said above
+          )}
         </div>
       )}
       <div className="card p-5 space-y-4">
@@ -228,7 +233,7 @@ export default function PayFromAnyChain() {
           </label>
         )}
         <button className="btn btn-primary w-full" disabled={busy || !assetId || !!quote?.depositAddress || (live && (!canRegister || (!!accountId && !ownRefund && !refundTo.trim())))} onClick={getQuote}>
-          {!accountId ? "Sign in first" : busy ? "Getting quote…" : live ? "Get deposit address" : "Get quote"}
+          {!accountId ? "Sign In First" : busy ? "Getting quote…" : live ? "Get Deposit Address" : "Get Quote"}
         </button>
 
         {quote && (

@@ -38,7 +38,12 @@ end
 if #KEYS > n then redis.call('SET', KEYS[n + 1], '1', 'EX', 600) end
 return 0`;
 
-export async function paidRequestLimited(req: Request, scope: string, account?: string, nonce?: string) {
+/**
+ * `critical`: a request a pre-check already tied to a signer with a stake in the event (a host
+ * publishing its list, a guest disputing in the window). It skips the shared budgets, so nobody
+ * can use them up for free and make a host lose its bond or a guest miss the window.
+ */
+export async function paidRequestLimited(req: Request, scope: string, account?: string, nonce?: string, critical = false) {
   const url = process.env.RATE_LIMIT_REDIS_URL;
   const token = process.env.RATE_LIMIT_REDIS_TOKEN;
   const proxy = scope.startsWith("oneclick");
@@ -46,13 +51,17 @@ export async function paidRequestLimited(req: Request, scope: string, account?: 
   const maxPerIp = proxy ? 30 : 8;
   if (!url || !token) {
     if (process.env.VERCEL || process.env.NEXT_PUBLIC_NETWORK === "mainnet") return true;
-    if (rateLimited(req, maxPerIp) || limited(`paid:${scope}`, budget, 60_000)) return true;
+    if (rateLimited(req, maxPerIp) || (!critical && limited(`paid:${scope}`, budget, 60_000))) return true;
     return !!nonce && limited(`nonce:${account}:${nonce}`, 1, 600_000);
   }
   const prefix = `near-me:${process.env.NEXT_PUBLIC_NETWORK ?? "testnet"}`;
-  const keys = [`${prefix}:${proxy ? scope : "relayer"}:all`, `${prefix}:${scope}:ip:${address(req)}`];
-  const limits = [budget, 60, maxPerIp, 60];
-  if (!proxy) {
+  const keys = [`${prefix}:${scope}:ip:${address(req)}`];
+  const limits = [maxPerIp, 60];
+  if (!critical) {
+    keys.push(`${prefix}:${proxy ? scope : "relayer"}:all`);
+    limits.push(budget, 60);
+  }
+  if (!proxy && !critical) {
     keys.push(`${prefix}:relayer:daily`);
     limits.push(300, 86_400);
   }

@@ -1,10 +1,13 @@
 "use client";
 
-/** `oracle`: a v3 Deposit event (host bond, published list, disputes); older escrows close with the host's list. */
-type Props = { ticket: boolean; amount: string; oracle?: boolean; hours?: number; perSeat?: string };
+/**
+ * `oracle`: a v3 Deposit event with a court (host bond, published list, disputes); without one the host's list is final.
+ * Durations come as text from `hoursText` ("12 hours", "3 days").
+ */
+type Props = { ticket: boolean; amount: string; oracle?: boolean; disputeWindow?: string; submit?: string; resolve?: string; perSeat?: string };
 
 /** Secondary payment details; the key commitment stays visible beside registration. */
-export function DepositRulesTooltip({ ticket, amount, oracle, hours = 12, perSeat = "one deposit per seat" }: Props) {
+export function DepositRulesTooltip({ ticket, amount, oracle, disputeWindow = "12 hours", submit = "3 days", resolve = "7 days", perSeat = "2 deposits per seat" }: Props) {
   return (
     <details className="gc-deposit-rules text-sm">
       <summary className="text-accent font-medium cursor-pointer py-2">{ticket ? "Ticket details" : "Deposit details"}</summary>
@@ -13,22 +16,22 @@ export function DepositRulesTooltip({ ticket, amount, oracle, hours = 12, perSea
           <p>Your {amount} ticket goes to the host as soon as you register. Tickets are not refunded, even if the host cancels.</p>
         ) : oracle ? (
           <>
-            <p>Your {amount} deposit is held in a NEAR smart contract. You cannot cancel your registration.</p>
+            <p>Your {amount} deposit is held in a NEAR smart contract. You can’t cancel your registration.</p>
             <p>
-              Registration closes when the event starts. After the event the host publishes who came. For {hours} hours any
-              guest can dispute the list by locking one deposit, and a council of 5 decides by vote. Then guests who came
-              split the pool in their Nearvent balances.
+              Registration closes when the event starts. Within {submit} after the end, the host publishes who came. For{" "}
+              {disputeWindow} any guest can then dispute one record by locking one deposit, and a council of 5 decides within{" "}
+              {resolve} after that (3 of 5 votes). Then guests who came split the pool in their Nearvent balances.
             </p>
             <p>
-              The host locks a bond of {perSeat} first and loses it if a dispute proves the list wrong. If the host
-              cancels before the start, everyone is refunded. If the host publishes no list within 3 days, the list counts
-              as empty: guests who came can still prove it, and everyone else gets the deposit back plus a share of the bond.
+              The host locks a bond of {perSeat} first and loses it if the council upholds a dispute. If the host cancels
+              before the start, everyone is refunded. If the host publishes no list in time, it counts as empty: guests who
+              came can prove it and split the pool. If nobody proves it, everyone gets the deposit back plus a share of the bond.
             </p>
           </>
         ) : (
           <>
-            <p>Your {amount} deposit is held in a NEAR smart contract. After the host closes the event, checked-in guests receive equal shares of the pool in their Nearvent balances. You cannot cancel your registration.</p>
-            <p>If the host cancels, refunds are credited to guests’ Nearvent balances. If the event remains open 30 days after it ends, anyone can request a refund for all guests.</p>
+            <p>Your {amount} deposit is held in a NEAR smart contract. You can’t cancel your registration. After the event the host publishes who came, and guests on the list split the pool in their Nearvent balances right away. The host’s list is final.</p>
+            <p>If the host cancels, every deposit goes back to your Nearvent balance. If the host publishes no list within {submit} after the end, anyone can refund every guest.</p>
           </>
         )}
         <p>No platform fee. Network and swap fees may apply when moving funds.</p>

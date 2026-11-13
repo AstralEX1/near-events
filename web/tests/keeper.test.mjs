@@ -62,3 +62,12 @@ test("a verdict proposal calls resolve_dispute on the escrow with no deposit", (
   assert.equal(action.deposit, "0");
   assert.deepEqual(JSON.parse(Buffer.from(action.args, "base64").toString()), { event_id: 7, target: "a.near", upheld: true });
 });
+
+test("the bot proposes at most 10 disputes per event, 'I came' first", async () => {
+  const { MAX_DISPUTES_PROPOSED } = await import("../src/lib/keeperPlan.ts");
+  const absent = Array.from({ length: 12 }, (_, i) => ({ target: `g${i}.testnet`, challenger: "x.testnet", attended: false, upheld: null }));
+  const came = { target: "late.testnet", challenger: "late.testnet", attended: true, upheld: null };
+  const actions = plan({ status: "Submitted", open_disputes: 13 }, 1_000_000 - M, [...absent, came]);
+  assert.equal(actions.length, 2 * MAX_DISPUTES_PROPOSED);
+  assert.equal(actions[0].target, "late.testnet");
+});

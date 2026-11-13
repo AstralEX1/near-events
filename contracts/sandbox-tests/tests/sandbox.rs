@@ -2,7 +2,7 @@
 //! these do. Testnet-only contracts, local sandbox, no mainnet.
 //!
 //! The escrow is built with `--features short-windows`: one oracle "hour" is
-//! 10 seconds, so the 24 h dispute window is 240 s of sandbox time. The money
+//! 10 seconds, so the 12 h dispute window is 120 s of sandbox time. The money
 //! rules and every check are the same code as the release build.
 //!
 //! Optional fixtures (read-only copies of on-chain code; tests that need one
@@ -169,9 +169,9 @@ async fn new_escrow(worker: &Worker<Sandbox>, usdc: &Contract, payer: &Account) 
     Ok((events, owner, dao))
 }
 
-/// The default rules with a court: one deposit per seat, 12 h window, 72 h to publish, 7 days for the court.
+/// The default rules with a court: 2 deposits per seat, 12 h window, 72 h to publish, 7 days for the court.
 fn court_rules(dao: &AccountId, treasury: &AccountId) -> Value {
-    json!({ "dao": dao, "treasury": treasury, "bond_per_seat": 1, "close_at_start": true,
+    json!({ "dao": dao, "treasury": treasury, "bond_per_seat": 2, "close_at_start": true,
             "challenge_hours": 12, "submit_hours": 72, "resolve_hours": 168 })
 }
 
@@ -360,18 +360,18 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     let register = json!({ "action": "register", "event_id": event_id });
     transfer_call(&guest, usdc.id(), events.id(), deposit, register.clone()).await?.into_result()?;
     assert_eq!(token_balance(&usdc, guest.id()).await?, minted, "registered before the host bond");
-    // The bond is one deposit per seat: 10 seats × 10 USDC. A short bond is refused in full by the real token resolver.
-    assert_eq!(event_view(&events, event_id).await?["bond_due"], "100000000");
-    mint(&usdc, &host, host.id(), 200 * USDC).await?;
-    transfer_call(&host, usdc.id(), events.id(), 99 * USDC, json!({ "action": "host_bond", "event_id": event_id })).await?.into_result()?;
-    assert_eq!(token_balance(&usdc, host.id()).await?, 200 * USDC, "a short bond was kept");
+    // The bond is 2 deposits per seat: 10 seats × 2 × 10 USDC. A short bond is refused in full by the real token resolver.
+    assert_eq!(event_view(&events, event_id).await?["bond_due"], "200000000");
+    mint(&usdc, &host, host.id(), 400 * USDC).await?;
+    transfer_call(&host, usdc.id(), events.id(), 199 * USDC, json!({ "action": "host_bond", "event_id": event_id })).await?.into_result()?;
+    assert_eq!(token_balance(&usdc, host.id()).await?, 400 * USDC, "a short bond was kept");
     // Overpaid: the change comes back.
-    transfer_call(&host, usdc.id(), events.id(), 110 * USDC, json!({ "action": "host_bond", "event_id": event_id })).await?.into_result()?;
-    assert_eq!(token_balance(&usdc, host.id()).await?, 100 * USDC);
-    assert_eq!(event_view(&events, event_id).await?["host_bond"], "100000000");
+    transfer_call(&host, usdc.id(), events.id(), 210 * USDC, json!({ "action": "host_bond", "event_id": event_id })).await?.into_result()?;
+    assert_eq!(token_balance(&usdc, host.id()).await?, 200 * USDC);
+    assert_eq!(event_view(&events, event_id).await?["host_bond"], "200000000");
     // The host cannot take a seat.
     transfer_call(&host, usdc.id(), events.id(), deposit, register.clone()).await?.into_result()?;
-    assert_eq!(token_balance(&usdc, host.id()).await?, 100 * USDC, "the host took a seat");
+    assert_eq!(token_balance(&usdc, host.id()).await?, 200 * USDC, "the host took a seat");
 
     // Exact self payment, then a second one. The second must come back.
     transfer_call(&guest, usdc.id(), events.id(), deposit, register.clone()).await?.into_result()?;
@@ -424,7 +424,7 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     expect_reject(&call_settle(&stranger, &events, event_id).await?, "Nothing to settle");
     assert_eq!(escrow_balance(&events, guest.id()).await?, 20 * USDC);
     assert_eq!(escrow_balance(&events, noshow.id()).await?, 0);
-    assert_eq!(escrow_balance(&events, host.id()).await?, 100 * USDC, "the bond goes back to the host");
+    assert_eq!(escrow_balance(&events, host.id()).await?, 200 * USDC, "the bond goes back to the host");
     let event = event_view(&events, event_id).await?;
     assert_eq!(event["status"], "Finalized");
     assert_eq!(event["payout_per_attendee"], "20000000");
@@ -463,7 +463,7 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     // A second event: the host cancels before the start, deposits and bond come back.
     let now = worker.view_block().await?.timestamp() / 1_000_000;
     let cancel_id: u64 = create(&host, "Cancel me", now + 50_000, now + 60_000, 4).await?.json()?;
-    transfer_call(&host, usdc.id(), events.id(), 40 * USDC, json!({ "action": "host_bond", "event_id": cancel_id })).await?.into_result()?;
+    transfer_call(&host, usdc.id(), events.id(), 80 * USDC, json!({ "action": "host_bond", "event_id": cancel_id })).await?.into_result()?;
     transfer_call(&noshow, usdc.id(), events.id(), deposit, json!({ "action": "register", "event_id": cancel_id }))
         .await?
         .into_result()?;
@@ -475,7 +475,7 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
         .await?
         .into_result()?;
     assert_eq!(escrow_balance(&events, noshow.id()).await?, deposit);
-    assert_eq!(escrow_balance(&events, host.id()).await?, 140 * USDC, "both bonds back (10 and 4 seats)");
+    assert_eq!(escrow_balance(&events, host.id()).await?, 280 * USDC, "both bonds back (10 and 4 seats)");
 
     // A third event the host never closes: strangers cannot cancel it, but
     // after the publish deadline anyone opens the window on an empty list,
@@ -505,9 +505,9 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
     wait_until(&worker, view["challenge_ends_at"].as_u64().unwrap()).await?;
     call_settle(&stranger, &events, ended).await?.into_result()?;
     assert_eq!(event_view(&events, ended).await?["status"], "Finalized");
-    // The deposit plus half of the 40 USDC bond (4 seats); the other half to the treasury (the owner).
-    assert_eq!(escrow_balance(&events, guest.id()).await?, deposit + 20 * USDC);
-    assert_eq!(escrow_balance(&events, owner.id()).await?, 20 * USDC);
+    // The deposit plus half of the 80 USDC bond (4 seats × 2; no winner, so uncapped); the other half to the treasury (the owner).
+    assert_eq!(escrow_balance(&events, guest.id()).await?, deposit + 40 * USDC);
+    assert_eq!(escrow_balance(&events, owner.id()).await?, 40 * USDC);
     assert_eq!(escrow_balance(&events, helper.id()).await?, 0);
 
     // Every unit the escrow holds is on someone's balance.
@@ -613,7 +613,7 @@ async fn measure_full_event_gas(
         assert!(gas < 240_000_000_000_000, "300-guest {operation} used {gas} gas");
         let expected = if operation == "settle" { 2 * USDC } else { USDC };
         assert_eq!(escrow_balance(&target, last).await?, expected);
-        assert_eq!(escrow_balance(&target, host.id()).await? - host_before, 300 * USDC, "the host gets the 300-seat bond back");
+        assert_eq!(escrow_balance(&target, host.id()).await? - host_before, 600 * USDC, "the host gets the 300-seat bond back");
     }
     Ok(())
 }
@@ -831,7 +831,7 @@ async fn sandbox_upgrade_and_freeze() -> anyhow::Result<()> {
         assert_eq!(config["rules"]["bond_per_seat"], 0);
         configure(&owner, &empty, stranger.id()).await?;
         let config: Value = empty.view("get_config").await?.json()?;
-        assert_eq!(config["rules"]["bond_per_seat"], 1);
+        assert_eq!(config["rules"]["bond_per_seat"], 2);
     } else {
         eprintln!("V2_ESCROW_WASM not set: skipped the v2 -> v3 in-place upgrade");
     }
@@ -953,16 +953,16 @@ async fn sandbox_sputnik_dispute_cycle() -> anyhow::Result<()> {
     assert_eq!(proposal_status(&dao, pid(gd, true)).await?, "Failed");
     call_settle(&host, &events, id).await?.into_result()?;
 
-    // N = 4, D = 10, H = 100 (10 seats). Final list A, B, C, D: 10 each from the pool.
-    // H: 50 to the treasury (owner), 50 to C. A's lost bond: 5 treasury, 1.25 to each attendee.
+    // N = 4, D = 10, H = 200 (10 seats × 2). Final list A, B, C, D: 10 each from the pool.
+    // H: C's prize is capped at 5 deposits (50), 150 to the treasury (owner). A's lost bond: 5 treasury, 1.25 to each attendee.
     // C: both bonds back (one upheld, one expired).
     let want = [(ga, 11_250_000u128), (gb, 11_250_000), (gc, 81_250_000), (gd, 11_250_000)];
     for (g, amount) in want {
         assert_eq!(escrow_balance(&events, g.id()).await?, amount, "guest {}", g.id());
     }
     assert_eq!(escrow_balance(&events, host.id()).await?, 0);
-    assert_eq!(escrow_balance(&events, owner.id()).await?, 55 * USDC);
-    assert_eq!(token_balance(&usdc, events.id()).await?, 170 * USDC);
+    assert_eq!(escrow_balance(&events, owner.id()).await?, 155 * USDC);
+    assert_eq!(token_balance(&usdc, events.id()).await?, 270 * USDC);
     let status: Value = events.view("get_guest_status").args_json(json!({ "event_id": id, "account_id": gc.id() })).await?.json()?;
     assert_eq!(status, "Attended");
     // A late verdict on a closed event fails too.

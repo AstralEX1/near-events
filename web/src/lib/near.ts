@@ -36,8 +36,6 @@ export interface EventView {
   access?: AccessRule | null;
   /** Deposit events (v3 escrow): the DAO that decides disputes; null for tickets. */
   dao?: string | null;
-  /** Deposit events: receives the treasury share of lost bonds, fixed at creation. */
-  treasury?: string | null;
   /** USDC locked by the host; registration opens once it equals `bond_due`. */
   host_bond?: string;
   /** The bond this event needs: `rules.bond_per_seat` deposits per seat (v3); 0 for Ticket or without a court. */
@@ -86,15 +84,22 @@ export interface DisputeView {
 export const hostBondFor = (e: { bond_due?: string }) => e.bond_due ?? "0";
 /** How long guests may dispute the published list (v3 rules; 12 h by default). */
 export const windowHours = (e: Pick<EventView, "rules">) => e.rules?.challenge_hours ?? 12;
+/** "1 hour", "12 hours", "3 days" (whole days from 48 h). */
+export const hoursText = (h: number) => (h >= 48 && h % 24 === 0 ? `${h / 24} days` : `${h} hour${h === 1 ? "" : "s"}`);
+export const windowText = (e: Pick<EventView, "rules">) => hoursText(windowHours(e));
 /** "one deposit per seat" / "2 deposits per seat". */
 export const bondPerSeatText = (e: Pick<EventView, "rules">) => {
-  const n = e.rules?.bond_per_seat ?? 1;
+  const n = e.rules?.bond_per_seat ?? 2;
   return n === 1 ? "one deposit per seat" : `${n} deposits per seat`;
 };
 /** Older escrows take guests until the end. */
 export const registrationEndsAt = (e: Pick<EventView, "registration_ends_at" | "metadata">) => e.registration_ends_at ?? e.metadata.ends_at;
 /** Deposit events that still need the host bond before guests can register. */
 export const needsBond = (e: EventView) => !!e.dao && !isTicket(e) && e.status === "Open" && BigInt(e.host_bond ?? "0") === 0n;
+/** The escrow takes guests now (seats and the access rule aside). */
+export const registrationOpen = (e: EventView) => e.status === "Open" && Date.now() < registrationEndsAt(e) && !needsBond(e);
+/** Counts as came: the host's list while it waits out the dispute window, the status otherwise (Manage puts door check-ins there). */
+export const cameOf = (e: Pick<EventView, "status">, g: GuestView) => (e.status === "Submitted" ? !!g.listed : g.status === "Attended");
 
 /** Read-only contract call over JSON-RPC. */
 export async function view<T>(method: string, args: object = {}, contractId = EVENTS_CONTRACT): Promise<T> {
@@ -136,6 +141,8 @@ export const events = {
     return all.filter((e) => !hidden.has(e.id));
   },
   get: (id: number) => view<EventView | null>("get_event", { event_id: id }),
+  /** The owner's rules that new events copy (v3 escrow). */
+  config: () => view<{ owner: string; rules?: NonNullable<EventView["rules"]>; oracle_hour_ms?: number }>("get_config"),
   guests: (id: number) => view<GuestView[]>("get_guests", { event_id: id, from_index: 0, limit: MAX_CAPACITY }),
   /** Disputes about the event's records, in registration order. */
   disputes: (id: number) => view<DisputeView[]>("get_disputes", { event_id: id, from_index: 0, limit: MAX_CAPACITY }),

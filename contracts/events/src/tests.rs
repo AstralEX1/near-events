@@ -95,9 +95,9 @@ const CHALLENGE_WINDOW_MS: u64 = 12 * ORACLE_HOUR_MS;
 const SUBMIT_DEADLINE_MS: u64 = 72 * ORACLE_HOUR_MS;
 const RESOLVE_GRACE_MS: u64 = 168 * ORACLE_HOUR_MS;
 
-/// The default rules with the test court: one deposit per seat.
+/// The default rules with the test court: 2 deposits per seat (the floor with a court).
 fn court_rules() -> Rules {
-    Rules { dao: Some(dao()), treasury: treasury(), bond_per_seat: 1, ..Rules::new(owner()) }
+    Rules { dao: Some(dao()), treasury: treasury(), bond_per_seat: 2, ..Rules::new(owner()) }
 }
 
 /// `Contract::new` plus `set_rules` with a court, as a v3 deployment starts.
@@ -107,7 +107,7 @@ fn new_contract(usdc: AccountId, intents: Option<AccountId>, relayer: Option<Acc
     c
 }
 
-/// The host bond `event` needs (one deposit per seat).
+/// The host bond `event` needs (`bond_per_seat` deposits per seat).
 fn bond(c: &Contract, id: u64) -> u128 {
     c.get_event(id).unwrap().bond_due.0
 }
@@ -803,10 +803,10 @@ fn ticket_registration_closes_when_the_event_ends() {
 }
 
 #[test]
-fn the_bond_is_one_deposit_per_seat() {
+fn the_bond_is_deposits_per_seat() {
     for capacity in [1, 10, 300] {
         let (c, id) = setup(capacity);
-        assert_eq!(bond(&c, id), 10 * USDC * u128::from(capacity));
+        assert_eq!(bond(&c, id), 2 * 10 * USDC * u128::from(capacity), "2 deposits per seat (court_rules)");
     }
     let (c, id) = setup_tickets(10);
     assert_eq!(bond(&c, id), 0, "tickets take no bond");
@@ -2236,8 +2236,10 @@ fn on_auth_with_unknown_action_is_rejected() {
 // ------------------------------------------------- v3: bonds, disputes, settlement
 
 const D: u128 = 10 * USDC;
-/// The bond of `setup(10)`: one deposit per seat.
-const H: u128 = 10 * D;
+/// The bond of `setup(10)`: 2 deposits per seat.
+const H: u128 = 20 * D;
+/// What a single winner takes from `H`: half of it, capped at `MAX_WIN_DEPOSITS` deposits.
+const WIN1: u128 = if H / 2 > MAX_WIN_DEPOSITS * D { MAX_WIN_DEPOSITS * D } else { H / 2 };
 
 fn bond_msg(id: u64) -> String {
     format!(r#"{{"action":"host_bond","event_id":{id}}}"#)
@@ -2365,15 +2367,15 @@ fn without_a_court_the_list_is_final_at_publish() {
 fn set_rules_is_for_the_owner_and_future_events() {
     let (mut c, old) = setup(10);
     let other: AccountId = "new-court.sputnik-dao.testnet".parse().unwrap();
-    let new_rules = Rules { dao: Some(other.clone()), treasury: accounts(1), bond_per_seat: 2, challenge_hours: 24, ..court_rules() };
+    let new_rules = Rules { dao: Some(other.clone()), treasury: accounts(1), bond_per_seat: 3, challenge_hours: 24, ..court_rules() };
     ctx(&owner(), one_yocto());
     c.set_rules(new_rules.clone());
     assert_eq!(c.get_config().rules, new_rules);
     ctx(&accounts(0), NearToken::from_near(1));
     let new = c.create_event(meta(), U128(D), 10, None, None);
     let (o, n) = (c.get_event(old).unwrap(), c.get_event(new).unwrap());
-    assert_eq!((o.dao, o.treasury, o.bond_due.0), (Some(dao()), Some(treasury()), 10 * D), "a running event keeps its rules");
-    assert_eq!((n.dao, n.treasury, n.bond_due.0), (Some(other), Some(accounts(1)), 20 * D));
+    assert_eq!((o.dao, o.rules.treasury, o.bond_due.0), (Some(dao()), treasury(), 20 * D), "a running event keeps its rules");
+    assert_eq!((n.dao, n.rules.treasury, n.bond_due.0), (Some(other), accounts(1), 30 * D));
     assert_eq!(n.rules.challenge_hours, 24);
     // Tickets never get a court or a bond.
     let t = c.create_event(meta(), U128(D), 10, Some(EventMode::Ticket), None);
@@ -2390,11 +2392,12 @@ fn set_rules_refuses_unsafe_combinations() {
         (Rules { dao: None, ..court_rules() }, "needs a host bond"),
         (Rules { close_at_start: false, ..court_rules() }, "close at the start"),
         (Rules { treasury: dao(), ..court_rules() }, "court cannot receive"),
+        (Rules { bond_per_seat: 1, ..court_rules() }, "out of range"),
         (Rules { bond_per_seat: 11, ..court_rules() }, "out of range"),
-        (Rules { challenge_hours: 0, ..court_rules() }, "out of range"),
+        (Rules { challenge_hours: 11, ..court_rules() }, "out of range"),
         (Rules { challenge_hours: 169, ..court_rules() }, "out of range"),
-        (Rules { submit_hours: 0, ..court_rules() }, "out of range"),
-        (Rules { resolve_hours: 0, ..court_rules() }, "out of range"),
+        (Rules { submit_hours: 23, ..court_rules() }, "out of range"),
+        (Rules { resolve_hours: 71, ..court_rules() }, "out of range"),
         (Rules { resolve_hours: 721, ..court_rules() }, "out of range"),
     ];
     for (rules, msg) in bad {
@@ -2458,7 +2461,7 @@ fn refund_of_an_abandoned_event_publishes_an_empty_list_and_punishes_the_bond() 
     assert_eq!((e.status, e.abandoned, e.attended_count), (EventStatus::Submitted, true, 0));
     assert_eq!(c.balance_of(accounts(2)).0, 0, "nothing is paid before the window");
     settle_after_window(&mut c, id);
-    // H = 50: 25 to the treasury, 25 / 3 = 8.333333 to each guest, 1 unit of rounding to the treasury.
+    // No winner: half of H to the treasury, the other half split over the 3 guests (uncapped), rounding to the treasury.
     let per = (H - H * HOST_TREASURY_BPS / 10_000) / 3;
     for g in [accounts(2), accounts(3), accounts(4)] {
         assert_eq!(c.balance_of(g).0, D + per);
@@ -2494,11 +2497,11 @@ fn guests_who_came_still_win_when_the_host_abandons() {
     verdict(&mut c, id, &accounts(2), true);
     settle_after_window(&mut c, id);
     // 2 came: the 40 USDC pool, its bond back and 25 USDC of the host bond.
-    assert_eq!(c.balance_of(accounts(2)).0, 40 * USDC + D + H / 2);
+    assert_eq!(c.balance_of(accounts(2)).0, 40 * USDC + D + WIN1);
     for g in [accounts(3), accounts(4), accounts(5)] {
         assert_eq!(c.balance_of(g).0, 0);
     }
-    assert_eq!(c.balance_of(treasury()).0, H / 2);
+    assert_eq!(c.balance_of(treasury()).0, H - WIN1);
     assert_eq!(c.balance_of(accounts(0)).0, 0);
 }
 
@@ -2705,7 +2708,7 @@ fn settle_waits_for_open_disputes_until_they_expire() {
     assert_eq!(c.reserved_bytes, 0);
 }
 
-/// SPEC G3: N = 4, D = 10, H = 50. A, B, C came; the host listed A, B; C says "I came".
+/// SPEC G3: N = 4, D = 10, H = 200 (10 seats × 2). A, B, C came; the host listed A, B; C says "I came".
 fn g3() -> (Contract, u64) {
     let (mut c, id) = setup(10);
     for g in [accounts(2), accounts(3), accounts(4), accounts(5)] {
@@ -2726,10 +2729,10 @@ fn settle_math_g3_challenger_wins() {
     assert_eq!(c.balance_of(accounts(2)).0, share);
     assert_eq!(c.balance_of(accounts(3)).0, share);
     // C: the share, the bond back and half of the host bond.
-    assert_eq!(c.balance_of(accounts(4)).0, share + D + H / 2);
+    assert_eq!(c.balance_of(accounts(4)).0, share + D + WIN1);
     assert_eq!(c.balance_of(accounts(5)).0, 0);
     assert_eq!(c.balance_of(accounts(0)).0, 40 * USDC - 3 * share); // 1 unit of dust
-    assert_eq!(c.balance_of(treasury()).0, H / 2);
+    assert_eq!(c.balance_of(treasury()).0, H - WIN1);
     assert_eq!(c.get_guest_status(id, accounts(4)), Some(GuestStatus::Attended));
     let e = c.get_event(id).unwrap();
     assert_eq!((e.attended_count, e.payout_per_attendee.0, e.upheld_disputes), (3, share, 1));
@@ -2758,10 +2761,10 @@ fn upheld_absence_removes_the_guest_and_pays_the_challenger() {
     verdict(&mut c, id, &accounts(3), true);
     assert_eq!(c.get_event(id).unwrap().attended_count, 1);
     settle_after_window(&mut c, id);
-    assert_eq!(c.balance_of(accounts(2)).0, 30 * USDC + D + H / 2);
+    assert_eq!(c.balance_of(accounts(2)).0, 30 * USDC + D + WIN1);
     assert_eq!(c.balance_of(accounts(3)).0, 0);
     assert_eq!(c.get_guest_status(id, accounts(3)), Some(GuestStatus::Registered));
-    assert_eq!(c.balance_of(treasury()).0, H / 2);
+    assert_eq!(c.balance_of(treasury()).0, H - WIN1);
 }
 
 #[test]
@@ -2781,9 +2784,9 @@ fn nobody_came_after_disputes_refunds_and_splits_lost_bonds_among_everyone() {
     // A = 0: deposits back; 4's lost bond: 5 to the treasury, 5 / 3 to each guest.
     let part = 5 * USDC / 3;
     assert_eq!(c.balance_of(accounts(2)).0, D + part);
-    assert_eq!(c.balance_of(accounts(3)).0, D + part + D + H / 2);
+    assert_eq!(c.balance_of(accounts(3)).0, D + part + D + WIN1);
     assert_eq!(c.balance_of(accounts(4)).0, D + part);
-    assert_eq!(c.balance_of(treasury()).0, H / 2 + 10 * USDC - 3 * part);
+    assert_eq!(c.balance_of(treasury()).0, H - WIN1 + 10 * USDC - 3 * part);
     assert_eq!(c.balance_of(accounts(0)).0, 0);
     assert_eq!(c.get_event(id).unwrap().payout_per_attendee.0, 0);
 }
@@ -2869,8 +2872,8 @@ fn model_settle(
 ) -> std::collections::BTreeMap<String, u128> {
     let mut out = std::collections::BTreeMap::new();
     let mut add = |who: String, x: u128| *out.entry(who).or_insert(0) += x;
-    // One deposit per seat.
-    let h = d * capacity as u128;
+    // 2 deposits per seat (`court_rules`).
+    let h = 2 * d * capacity as u128;
     let mut fin = listed.to_vec();
     for &(target, _, claim, v) in disputes {
         if v == Some(true) {
@@ -2895,7 +2898,8 @@ fn model_settle(
     } else if winners.is_empty() {
         add("host".into(), h);
     } else {
-        let part = (h - h / 2) / winners.len() as u128;
+        // Half to the winners, but at most 5 deposits each; the rest to the treasury.
+        let part = ((h - h / 2) / winners.len() as u128).min(5 * d);
         winners.iter().for_each(|&w| add(format!("g{w}"), part));
         add("treasury".into(), h - part * winners.len() as u128);
     }
@@ -2947,7 +2951,7 @@ fn random_case(seed: u64) {
     let mut money_in = 0u128;
     // Overpaying the bond: the change goes back.
     let extra = r.below(3) as u128;
-    let h = d * capacity as u128;
+    let h = 2 * d * capacity as u128;
     money_in += h + extra - raw_pay_at(&mut c, &accounts(5), h + extra, &bond_msg(id), 1_000_000);
     let reg = format!(r#"{{"action":"register","event_id":{id}}}"#);
     for i in 0..n {
@@ -3057,6 +3061,25 @@ fn the_court_cannot_host_or_take_the_treasury() {
     c.create_event(meta(), U128(D), 10, Some(EventMode::Ticket), None);
 }
 
+/// A 50-seat bond (100 deposits): one winner takes 5 deposits, the treasury the other 95 (audit 2).
+#[test]
+fn a_winner_takes_at_most_five_deposits_of_the_bond() {
+    let (mut c, id) = setup(50);
+    assert_eq!(bond(&c, id), 100 * D);
+    for g in [accounts(2), accounts(3)] {
+        register(&mut c, id, &g);
+    }
+    ctx_ended(&accounts(0));
+    c.finalize(id, vec![accounts(2), accounts(3)]);
+    assert_eq!(dispute_at(&mut c, id, &accounts(2), &accounts(3), false, now()), 0);
+    verdict(&mut c, id, &accounts(3), true);
+    settle_after_window(&mut c, id);
+    assert_eq!(c.balance_of(accounts(2)).0, 2 * D + D + 5 * D, "the pool, the dispute bond back, 5 deposits of the bond");
+    assert_eq!(c.balance_of(accounts(3)).0, 0);
+    assert_eq!(c.balance_of(accounts(0)).0, 0);
+    assert_eq!(c.balance_of(treasury()).0, 95 * D);
+}
+
 #[test]
 fn the_deposit_bound_keeps_every_split_in_u128() {
     // The largest product: 300 dismissed bonds × CHALLENGER_TREASURY_BPS.
@@ -3081,7 +3104,7 @@ fn a_running_event_keeps_its_treasury() {
     c.set_rules(Rules { treasury: accounts(0), ..court_rules() });
     verdict(&mut c, id, &accounts(4), true);
     settle_after_window(&mut c, id);
-    assert_eq!(c.balance_of(treasury()).0, H / 2);
+    assert_eq!(c.balance_of(treasury()).0, H - WIN1);
     assert_eq!(c.balance_of(accounts(0)).0, 40 * USDC - 3 * (40 * USDC / 3), "only the pool's dust");
     // And the treasury can never host a Deposit event.
     rejects(|| {
