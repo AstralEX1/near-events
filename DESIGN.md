@@ -175,8 +175,12 @@ In code always use the variable (`var(--accent)`) or the Tailwind alias
 | `--sage` (violet) | `#d2ccff` | same | Rare secondary block |
 | `--good` / `--warn` / `--danger` | `#237a57` / `#8c5a13` / `#b53e49` | `#86d0aa` / `#ebbf80` / `#f1a1aa` | Status only |
 
-- Logo pink `#ff3d8b` appears only in the square icon (favicon).
-  For text and buttons use `--accent` (`#d61f69`): it passes contrast.
+- Logo pink `#ff3d8b` is for the n-square and big poster blocks (the `/brand`
+  hero); text on it is white or ink at 24px and up. For text and buttons
+  use `--accent` (`#d61f69`): it passes contrast.
+- Sun on the landing: a highlighter block behind one or two heading words
+  (ink text in both themes), at most two per page; now "show up" and
+  "starts here." Thin section rules on the landing are accent pink. (2026-11-12, Claude)
 - Checked contrast (WCAG): ink on blush 17.4:1, muted on blush 5.8:1,
   white on accent 4.9:1, accent on blush 4.7:1, dark accent on dark bg 7.1:1.
   White on logo pink is 3.3:1, so it is only for the icon.
@@ -195,7 +199,7 @@ request at runtime. Fonts cover Latin, Latin Extended and Cyrillic.
 
 | Role | Size | Weight | Tracking | Example class |
 |---|---|---|---|---|
-| Logo | 27px (header) | 800 | -0.04em | `.gc-brand` |
+| Logo | SVG 26px tall (header; 24px on phones) | 800 outlines | -0.04em | `.gc-brand` + `Logo.tsx` |
 | Page title | clamp(1.85rem, 4vw, 2.75rem) | 600 | -0.045em | `.gc-page-title` |
 | Event title | clamp(1.9rem, 4vw, 2.6rem) | 600 | -0.045em | `.gc-event-title` |
 | Landing hero | clamp(52px, 5.25vw, 76px) | 600 | -0.055em | landing `h1` |
@@ -236,7 +240,7 @@ Soft and round, like a party sticker.
 - 12px: app buttons and inputs (`.btn`, `.input`, `.lu-field`).
 - 16px: menus, mode icons. 20px: cards (`.card`). 24px: choice cards.
   28px: the create form. Landing photo frames use an arch: `180px 180px 28px 28px`.
-- Only the square icon is tilted (`-4deg`); don't tilt UI or the wordmark.
+- Only the n-square is tilted (`-4deg`, in the icon and the logo); don't tilt UI or the word.
 
 ## Components
 
@@ -277,27 +281,37 @@ Don't:
 
 ## Logo & Assets
 
-The logo is one lowercase word, **nearvent**, in Geist 800 with -0.04em
-tracking, ink on light and blush on dark. No part of the word is highlighted:
-"vent" on its own reads like "ventilation", so never split, color or box it
-(Alex, 2026-11-10). In the app it is live text (class `.gc-brand`, see
-[`Header.tsx`](web/src/components/Header.tsx)); use the files below wherever
-text can't be used.
+The logo is **[n]earvent**: the first n sits in the pink square from the
+icon (tilted -4deg, the n fills 56% of its height), then "earvent" in
+Geist 800, ink on light and blush on dark (Alex, 2026-11-12). Only the first
+n is boxed; never box or color any other part ("vent" alone reads like
+"ventilation"). In the app the header draws it inline with
+[`Logo.tsx`](web/src/components/Logo.tsx) (word in `currentColor`, so it
+follows dark mode); use the files below everywhere else. The public brand
+page is `/brand` (logo downloads, colors, type, voice, avatar and a prompt
+for AI tools), linked from the footer.
 
-| File | Use |
+The idea, in one line each: the square is a saved seat (a deposit holds
+your spot); the n is for near (people in one room, NEAR holding the money);
+the tilt is a sticker stuck on by hand (a party, not a bank).
+
+| File (`web/public/brand/`) | Use |
 |---|---|
-| [`nearvent-wordmark.svg`](web/public/brand/nearvent-wordmark.svg) | Logo on light backgrounds |
-| [`nearvent-wordmark-dark.svg`](web/public/brand/nearvent-wordmark-dark.svg) | Logo on dark backgrounds |
-| [`nearvent-icon.svg`](web/public/brand/nearvent-icon.svg) | Square mark: tilted pink square with "n" (favicon, avatars, small spaces) |
-| [`favicon.ico`](web/src/app/favicon.ico), [`icon.svg`](web/src/app/icon.svg), [`apple-icon.png`](web/src/app/apple-icon.png) | Browser and home-screen icons (Next.js app icons) |
+| `nearvent-logo.svg` / `.png` | Logo on light backgrounds |
+| `nearvent-logo-dark.svg` / `.png` | Logo on dark backgrounds |
+| `nearvent-logo-white.svg` / `.png` | Logo on logo pink: white square, pink n, white word |
+| `nearvent-icon.svg` / `.png` | Tilted pink square with the n (small spaces) |
+| `nearvent-avatar.svg` / `.png` | Full-bleed pink square with the n (X, Telegram, profiles; 400×400 PNG) |
+| [`favicon.ico`](web/src/app/favicon.ico), [`icon.svg`](web/src/app/icon.svg), [`apple-icon.png`](web/src/app/apple-icon.png) | Browser and home-screen icons; the Apple icon is the full-bleed avatar |
 
-Public URLs on the site: `/brand/nearvent-wordmark.svg`,
-`/brand/nearvent-wordmark-dark.svg`, `/brand/nearvent-icon.svg`, `/favicon.ico`.
+Public URLs: `/brand/<file>` (for example `/brand/nearvent-logo.svg`) and `/favicon.ico`.
 
-Letters in the SVG files are outlines (no font needed). Rules: keep clear
-space of at least the letter height around the logo; don't recolor, stretch,
-tilt or add effects; don't write "Nearvent" in another font as a logo. In
-text the name is written **Nearvent** (one word, capital N).
+Letters in the SVG files are outlines (no font needed). Rules: keep half
+the square of empty space around the logo; at least 20 px tall, smaller
+than that use the icon; don't recolor, stretch, tilt further or add
+effects; don't drop the square; no busy photos behind it; don't write
+"Nearvent" in another font as a logo. In text the name is written
+**Nearvent** (one word, capital N).
 
 ## Voice & Copy
 
@@ -309,8 +323,8 @@ text the name is written **Nearvent** (one word, capital N).
 - Product words (use exactly): **Nearvent**, **deposit**, **Stake to RSVP**,
   **Ticket**, **Free**, **Going**, **I was there**, **check-in**, **QR pass**,
   **host**, **door team**, **USDC**.
-- UI and docs are in English. Landing copy examples: "Clicking "Going" is
-  free. So nobody means it." / "Add a little friction." / "Your next event
+- UI and docs are in English. Landing copy examples: "You never know who
+  will show up." / "Add a little friction." / "Your next event
   starts here."
 
 ## Imagery
