@@ -38,19 +38,6 @@ end
 if #KEYS > n then redis.call('SET', KEYS[n + 1], '1', 'EX', 600) end
 return 0`;
 
-const DAY_S = 86_400;
-/**
- * Scopes with their own caps a day, [per IP, all callers], instead of the shared relayer budget,
- * so nobody can use that budget up through them.
- */
-const DAILY: Record<string, [number, number]> = {
-  // shortcut: any implicit id can ask (no Google login is proven here), so new accounts are capped per day;
-  // check the Auth0 ID token before real sign-ups near 100 a day.
-  fund: [20, 100],
-  // Uploads stay stored: with lib/covers.ts's byte budget, one address cannot use it all in a day.
-  covers: [30, 300],
-};
-
 /**
  * `critical`: a request a pre-check already tied to a signer with a stake in the event (a host
  * publishing its list, a guest disputing in the window). It skips the shared budgets, so nobody
@@ -62,27 +49,21 @@ export async function paidRequestLimited(req: Request, scope: string, account?: 
   const proxy = scope.startsWith("oneclick");
   const budget = proxy ? 120 : 30;
   const maxPerIp = proxy ? 30 : 8;
-  const daily = DAILY[scope];
   if (!url || !token) {
     if (process.env.VERCEL || process.env.NEXT_PUBLIC_NETWORK === "mainnet") return true;
-    if (rateLimited(req, maxPerIp)) return true;
-    if (daily) return limited(`day:${scope}:${address(req)}`, daily[0], DAY_S * 1000) || limited(`day:${scope}`, daily[1], DAY_S * 1000);
-    if (!critical && limited(`paid:${scope}`, budget, 60_000)) return true;
+    if (rateLimited(req, maxPerIp) || (!critical && limited(`paid:${scope}`, budget, 60_000))) return true;
     return !!nonce && limited(`nonce:${account}:${nonce}`, 1, 600_000);
   }
   const prefix = `near-me:${process.env.NEXT_PUBLIC_NETWORK ?? "testnet"}`;
   const keys = [`${prefix}:${scope}:ip:${address(req)}`];
   const limits = [maxPerIp, 60];
-  if (daily) {
-    keys.push(`${prefix}:${scope}:ip-day:${address(req)}`, `${prefix}:${scope}:day`);
-    limits.push(daily[0], DAY_S, daily[1], DAY_S);
-  } else if (!critical) {
+  if (!critical) {
     keys.push(`${prefix}:${proxy ? scope : "relayer"}:all`);
     limits.push(budget, 60);
-    if (!proxy) {
-      keys.push(`${prefix}:relayer:daily`);
-      limits.push(300, DAY_S);
-    }
+  }
+  if (!proxy && !critical) {
+    keys.push(`${prefix}:relayer:daily`);
+    limits.push(300, 86_400);
   }
   if (account) {
     keys.push(`${prefix}:${scope}:account:${account}`);
@@ -90,6 +71,26 @@ export async function paidRequestLimited(req: Request, scope: string, account?: 
   }
   const limitCount = keys.length;
   if (nonce) keys.push(`${prefix}:${scope}:nonce:${account}:${nonce}`);
+  return quotaExceeded(url, token, keys, limitCount, limits);
+}
+
+/**
+ * At most `max` a day per IP and per account (and `all` for everyone, if given), shared across
+ * instances: for free sign-ins that would otherwise write without end. No rate-limit Redis: refused
+ * on Vercel and mainnet, unlimited in local development (as before).
+ */
+export async function dailyLimited(req: Request, scope: string, account: string, max: number, all?: number) {
+  const url = process.env.RATE_LIMIT_REDIS_URL;
+  const token = process.env.RATE_LIMIT_REDIS_TOKEN;
+  if (!url || !token) return !!process.env.VERCEL || process.env.NEXT_PUBLIC_NETWORK === "mainnet";
+  const day = `near-me:${process.env.NEXT_PUBLIC_NETWORK ?? "testnet"}:${scope}:day`;
+  const keys = [`${day}:ip:${address(req)}`, `${day}:account:${account}`, ...(all ? [day] : [])];
+  const limits = [max, 86_400, max, 86_400, ...(all ? [all, 86_400] : [])];
+  return quotaExceeded(url, token, keys, keys.length, limits);
+}
+
+/** Runs `quota` on the rate-limit Redis; true (refuse) when a limit is reached or Redis cannot answer. */
+async function quotaExceeded(url: string, token: string, keys: string[], limitCount: number, limits: number[]) {
   try {
     const response = await fetch(url, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },

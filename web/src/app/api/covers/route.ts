@@ -1,4 +1,4 @@
-import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
+import { dailyLimited, rateLimited } from "@/lib/ratelimit";
 import { readStaffToken } from "@/lib/staff";
 import { COVERS_FULL, isJpeg, MAX_COVER_BYTES, saveCover } from "@/lib/covers";
 
@@ -14,8 +14,8 @@ export async function POST(req: Request) {
   const bytes = Buffer.from(await req.arrayBuffer());
   if (bytes.length > MAX_COVER_BYTES) return Response.json({ error: "Cover photo is too large" }, { status: 413 });
   if (!isJpeg(bytes)) return Response.json({ error: "Upload a JPEG image" }, { status: 400 });
-  // Sign-in is free (any fresh EVM key), so uploads are also capped per address and day.
-  if (await paidRequestLimited(req, "covers", accountId)) return Response.json({ error: "Too many uploads today. Try again tomorrow." }, { status: 429 });
+  // Sign-in is free (any fresh EVM key), so uploads are also capped per IP and account a day.
+  if (await dailyLimited(req, "covers", accountId, 20)) return Response.json({ error: "Too many uploads today. Try again tomorrow." }, { status: 429 });
   try {
     const id = await saveCover(bytes);
     return Response.json({ url: new URL(`/api/covers/${id}`, req.url).href });

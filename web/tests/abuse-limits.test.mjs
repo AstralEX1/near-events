@@ -25,25 +25,19 @@ const run = (code) => {
   return JSON.parse(execFileSync(process.execPath, ["--no-warnings", "--conditions=react-server", "--import", path.join(web, "scripts/ts-register.mjs"), "--input-type=module", "-e", script], { cwd: web, env }).toString());
 };
 
-test("funding new accounts and cover uploads have day caps and leave the relayer budget alone", () => {
-  const keys = run(`
-    const { paidRequestLimited } = await import(${JSON.stringify(path.join(web, "src/lib/ratelimit.ts"))});
-    const req = new Request("http://x/api/fastauth/fund", { headers: { "x-forwarded-for": "1.2.3.4" } });
-    const out = {};
-    for (const scope of ["fund", "covers", "relay"]) {
-      sent.length = 0;
-      await paidRequestLimited(req, scope, "a".repeat(64));
-      const [, , n, ...rest] = sent[0];
-      out[scope] = rest.slice(0, n);
-    }
-    console.log(JSON.stringify(out));
+test("cover uploads count per IP and per account a day, and run free without the rate-limit Redis locally", () => {
+  const r = run(`
+    const { dailyLimited } = await import(${JSON.stringify(path.join(web, "src/lib/ratelimit.ts"))});
+    const req = new Request("http://x/api/covers", { headers: { "x-forwarded-for": "1.2.3.4" } });
+    const limited = await dailyLimited(req, "covers", "alice.testnet", 20);
+    const [, , n, ...rest] = sent[0];
+    delete process.env.RATE_LIMIT_REDIS_URL;
+    console.log(JSON.stringify({ limited, keys: rest.slice(0, n), limits: rest.slice(n + 1), local: await dailyLimited(req, "covers", "alice.testnet", 20) }));
   `);
-  for (const scope of ["fund", "covers"]) {
-    assert.ok(keys[scope].includes(`near-me:testnet:${scope}:day`), `${scope} has a cap for all callers a day`);
-    assert.ok(keys[scope].includes(`near-me:testnet:${scope}:ip-day:1.2.3.4`), `${scope} has a cap per IP a day`);
-    assert.ok(!keys[scope].some((k) => k.includes(":relayer:")), `${scope} does not spend the shared relayer budget`);
-  }
-  assert.ok(keys.relay.includes("near-me:testnet:relayer:daily"), "relayed transactions still share the relayer budget");
+  assert.equal(r.limited, false);
+  assert.deepEqual(r.keys, ["near-me:testnet:covers:day:ip:1.2.3.4", "near-me:testnet:covers:day:account:alice.testnet"]);
+  assert.deepEqual(r.limits, [20, 86400, 20, 86400]);
+  assert.equal(r.local, false, "local development without the rate-limit Redis behaves as before");
 });
 
 test("cover uploads stop at the byte budget; a repeat upload is free", () => {
@@ -60,4 +54,15 @@ test("cover uploads stop at the byte budget; a repeat upload is free", () => {
   assert.equal(r.full, "Cover storage is full");
   assert.equal(r.used, 100_000_000 - 4, "a refused upload gives its bytes back");
   assert.equal(r.sets, 1, "the repeat and the refused upload store nothing");
+});
+
+test("funding a new Google account has its own day caps and leaves the relayer budget alone", () => {
+  const keys = run(`
+    const { dailyLimited } = await import(${JSON.stringify(path.join(web, "src/lib/ratelimit.ts"))});
+    await dailyLimited(new Request("http://x/api/fastauth/fund", { headers: { "x-forwarded-for": "1.2.3.4" } }), "fund", "a".repeat(64), 20, 100);
+    const [, , n, ...rest] = sent[0];
+    console.log(JSON.stringify(rest.slice(0, n)));
+  `);
+  assert.ok(keys.includes("near-me:testnet:fund:day"), "a cap for all callers a day");
+  assert.ok(!keys.some((k) => k.includes(":relayer:")), "not the shared relayer budget");
 });

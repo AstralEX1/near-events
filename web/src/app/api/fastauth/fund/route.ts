@@ -1,5 +1,5 @@
 import { FASTAUTH_CLIENT_ID } from "@/lib/config";
-import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
+import { dailyLimited, rateLimited } from "@/lib/ratelimit";
 import { NETWORK } from "@/lib/config";
 import { accountExists, relayer } from "@/lib/relayer";
 
@@ -22,8 +22,10 @@ export async function POST(req: Request) {
   }
   if (await accountExists(accountId)) return Response.json({ funded: false, exists: true });
   try {
-    // Nothing proves the id belongs to a Google login, so new accounts have their own daily caps (DAILY in lib/ratelimit.ts).
-    if (await paidRequestLimited(req, "fund", accountId)) return Response.json({ error: "Funding quota unavailable or exceeded" }, { status: 429 });
+    // shortcut: nothing proves the id is a Google login's (the browser needs the account before its first
+    // signature, so this cannot wait for the JWT in /api/fastauth/sign); new accounts get their own day caps
+    // instead of the shared relayer budget. Check the Auth0 ID token here before sign-ups near 100 a day.
+    if (await dailyLimited(req, "fund", accountId, 20, 100)) return Response.json({ error: "Funding quota unavailable or exceeded" }, { status: 429 });
     await relayer().transfer({ receiverId: accountId, amount: STARTER_NEAR });
     return Response.json({ funded: true, exists: true });
   } catch (e) {
