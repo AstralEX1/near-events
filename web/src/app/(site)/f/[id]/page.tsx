@@ -97,8 +97,7 @@ export default function FreeEventPage() {
           </Section>
           <GoingList
             accounts={guests}
-            names={Object.fromEntries(Object.entries(profiles).flatMap(([a, p]) => { const n = `${p.first_name} ${p.last_name}`.trim(); return n ? [[a, n]] : []; }))}
-            avatars={Object.fromEntries(Object.entries(profiles).flatMap(([a, p]) => (p.avatar_url ? [[a, p.avatar_url]] : [])))}
+            profiles={profiles}
             total={event.guest_count} verb={ended ? "Went" : "Going"} />
         </aside>
 

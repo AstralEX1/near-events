@@ -31,13 +31,15 @@ export function PersonLink({ account, profile, note }: { account: string; profil
   );
 }
 
-export function GoingList({ accounts, names = {}, avatars, total, verb = "Going" }: { accounts: string[]; names?: Record<string, string>; avatars?: Record<string, string>; total: number; verb?: string }) {
+/** Who's going: guest photos come from their profiles; the name given at registration wins over the profile name. */
+export function GoingList({ accounts, names = {}, profiles = {}, total, verb = "Going" }: { accounts: string[]; names?: Record<string, string>; profiles?: Record<string, Profile>; total: number; verb?: string }) {
   if (!total || !accounts.length) return null;
-  const shown = accounts.slice(0, 2).map((a) => names[a] || shortAccount(a));
+  const all = Object.fromEntries(accounts.flatMap((a) => { const n = names[a] || displayName(profiles[a]); return n ? [[a, n]] : []; }));
+  const shown = accounts.slice(0, 2).map((a) => all[a] || shortAccount(a));
   return (
     <Section label={`${total} ${verb}`}>
-      {/* Remount when names arrive: the avatars widget keeps the first name it rendered. */}
-      <SlAvatars key={Object.values(names).join("|")} accounts={accounts} names={names} avatars={avatars} role={verb === "Going" ? "Going · view profile" : "Went · view profile"} />
+      {/* Remount when names or profiles arrive: the avatars widget keeps the first name it rendered. */}
+      <SlAvatars key={`${Object.values(all).join("|")}#${Object.keys(profiles).join()}`} accounts={accounts} names={all} profiles={profiles} role={verb === "Going" ? "Going · view profile" : "Went · view profile"} />
       <p className="mt-2 text-sm text-muted break-words">{goingLine(shown, total)}</p>
     </Section>
   );

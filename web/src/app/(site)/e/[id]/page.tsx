@@ -42,7 +42,7 @@ export default function EventPage() {
   const [hostTeam, setHostTeam] = useState<string[]>([]);
   const [hostRecord, setHostRecord] = useState<{ hosted: number; guestsCame: number; abandoned: number } | null>(null);
   const [names, setNames] = useState<GuestNames>({});
-  // Profiles of the host and door team, for their names and photos.
+  // Profiles of the host, door team and guests, for their names and photos.
   const [people, setPeople] = useState<Record<string, Profile>>({});
   const visual = useEventVisual(id, event?.metadata.title ?? "");
 
@@ -71,7 +71,9 @@ export default function EventPage() {
       void events.all()
         .then((all) => setHostRecord({ ...hostedStats(all, e.host), abandoned: all.filter((x) => x.host === e.host && x.abandoned).length }))
         .catch(() => {});
-      void team.then((t) => { setDoorTeam(t); return getProfiles([e.host, ...t]); }).then(setPeople).catch(() => {});
+      void team.then((t) => { setDoorTeam(t); return getProfiles([e.host, ...t]); }).then((p) => setPeople((old) => ({ ...old, ...p }))).catch(() => {});
+      // shortcut: photos for the first 100 guests only (one /api/profiles batch); page through if events get bigger.
+      void getProfiles(g.slice(0, 100).map((x) => x.account_id)).then((p) => setPeople((old) => ({ ...p, ...old }))).catch(() => {});
       void guestNames.then(setNames);
       void publicDetails.then((d) => {
         setDetails(d ?? null);
@@ -124,7 +126,7 @@ export default function EventPage() {
               )}
             </div>
           </Section>
-          <GoingList accounts={going} names={names} total={event.guest_count} verb={open ? "Going" : "Went"} />
+          <GoingList accounts={going} names={names} profiles={people} total={event.guest_count} verb={open ? "Going" : "Went"} />
         </aside>
 
         <section className="space-y-6 min-w-0">
