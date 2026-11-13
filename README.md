@@ -110,14 +110,14 @@ USDC since 2026-11-11. Testnet stays for development and Vercel preview builds.
 ## Try it in two minutes (no wallet)
 
 Open **[www.nearvent.site/demo](https://www.nearvent.site/demo)** (or **Sign In** →
-**Try with a demo account**). The site switches to a demo with made-up events, guests and
-50 demo USDC. Everything stays in your browser: no server, no blockchain,
-nothing to pay. **Exit Demo** in the account menu clears it.
+**Try with a demo account**). The site switches to a demo with real BaliSquad AI events,
+made-up guests and 50 demo USDC. Everything stays in your browser: no server, no blockchain,
+nothing to pay. **Exit Demo** in the header clears it.
 
-1. **Explore** → *NEAR Builders Night* → type a name in **Your name** → **Register** → you appear under "Going" with a QR pass.
-2. **My Events** → *Sunset Builders Meetup* (yours, it just ended) → **Manage → Guests** → check a few guests in.
+1. **Explore** → *Grok Bot Workshop Bali* → type a name in **Your name** → **Register** → you appear under "Going" with a QR pass.
+2. **My Events** → *Cursor Meetup - AI Agent 101* (yours, it just ended) → **Manage → Guests** → check a few guests in.
 3. **Close event & pay out** → the pool is split among the guests who came.
-4. *AI Coworking Morning* (you went) → **Withdraw** your share.
+4. *How I AI* (you went) → **Withdraw** your share.
 5. **Create Event** → Stake to RSVP, Ticket or Free → it shows up in Explore.
 
 Outside the demo the site moves real USDC on mainnet: sign in with a NEAR wallet

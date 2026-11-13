@@ -41,6 +41,10 @@ const D = 24 * H;
 const PEOPLE = ["Maya", "Leo", "Nina", "Omar", "Sara", "Kai", "Ivan", "Zoe", "Ravi", "Lena", "Theo", "Ana", "Max", "Ida", "Noah", "Eva", "Sam", "Mia", "Tom", "Liv", "Ben", "Ava", "Jon"];
 const acct = (name: string) => `${name.toLowerCase()}.demo`;
 const map = (place: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
+// Real BaliSquad AI events (titles, posters, venues; used with BaliSquad's permission, 2026-11-13; Alex: AI and crypto only, none crypto found). Posters live in public/demo.
+// They use the Paradise theme: nearvent-style themes print the title over the poster, which has its own text.
+const poster = (name: string) => new URL(`/demo/balisquad-${name}.jpg`, location.origin).href;
+const HOSTS = { bstc: "Bali Startup & Tech", spacexai: "SpaceXAI Bali", nebula: "Nebula Coworking", aialliance: "Bali AI Alliance" };
 
 function seed(): State {
   const now = Date.now();
@@ -51,10 +55,13 @@ function seed(): State {
   PEOPLE.forEach((name, i) => {
     s.profiles[acct(name)] = { username: name.toLowerCase(), first_name: name, last_name: "", avatar_url: null, avatar_seed: 7919 * (i + 1), links: {} };
   });
+  Object.entries(HOSTS).forEach(([id, name], i) => {
+    s.profiles[acct(id)] = { username: id, first_name: name, last_name: "", avatar_url: null, avatar_seed: 104729 * (i + 1), links: {} };
+  });
 
   const add = (o: {
     host: string; title: string; starts: number; hours: number; usdc: number; mode: EventMode; capacity: number;
-    guests: string[]; place: string; about: string; theme: EventVisualConfig["themeId"];
+    guests: string[]; place: string; about: string; theme: EventVisualConfig["themeId"]; cover: string;
   }) => {
     const id = s.nextId++;
     s.events.push({
@@ -65,42 +72,42 @@ function seed(): State {
     });
     s.guests[id] = o.guests.map((a, i) => ({ account_id: a, status: "Registered", registered_at: Math.min(now, o.starts) - (6 - i * 0.2) * D }));
     s.names[id] = Object.fromEntries(o.guests.map((a) => [a, s.profiles[a]?.first_name ?? "You"]));
-    s.details[id] = { location: map(o.place), description: o.about, cover_url: null };
+    s.details[id] = { location: map(o.place), description: o.about, cover_url: poster(o.cover) };
     s.visuals[id] = { themeId: o.theme, seed: 1000 + id * 37 };
     return id;
   };
 
   // A past event you went to: closed, so your payout waits in your balance.
   const past = add({
-    host: acct("Maya"), title: "AI Coworking Morning", starts: now - 6 * D, hours: 3, usdc: 5, mode: "Deposit", capacity: 20,
-    guests: [DEMO_ACCOUNT, ...PEOPLE.slice(1, 10).map(acct)], place: "Canggu, Bali",
-    about: "Bring a laptop and one thing you want to ship by lunch. Coffee is on the house.", theme: "studio",
+    host: acct("bstc"), title: "How I AI | Season 2 · Edition 18", starts: now - 6 * D, hours: 3, usdc: 5, mode: "Deposit", capacity: 20,
+    guests: [DEMO_ACCOUNT, ...PEOPLE.slice(1, 10).map(acct)], place: "Seoul Soul Project, Canggu",
+    about: "Season 2 launch night. Builders show the AI tools and workflows they use and how it turns into revenue. One minute each, raw and real.", theme: "paradise", cover: "how-i-ai",
   });
   finalize(s, past, [DEMO_ACCOUNT, ...PEOPLE.slice(1, 6).map(acct)]);
 
   // Your own event: it just ended, so you can check guests in and close it.
   add({
-    host: DEMO_ACCOUNT, title: "Sunset Builders Meetup", starts: now - 3 * H, hours: 2.5, usdc: 10, mode: "Deposit", capacity: 30,
-    guests: PEOPLE.slice(3, 11).map(acct), place: "Echo Beach, Canggu",
-    about: "Short demos at sunset, then dinner. Show up and your deposit comes back with a share of the no-shows'.", theme: "sunset",
+    host: DEMO_ACCOUNT, title: "Cursor Meetup - AI Agent 101", starts: now - 3 * H, hours: 2.5, usdc: 10, mode: "Deposit", capacity: 30,
+    guests: PEOPLE.slice(3, 11).map(acct), place: "Bukit Hub Coworking, Bali",
+    about: "An advanced Cursor AI meetup: pizza and drinks, credits from Cursor, ElevenLabs and friends, and Cursor swag.", theme: "paradise", cover: "cursor-meetup",
   });
 
   // Upcoming events to register for.
   add({
-    host: acct("Leo"), title: "NEAR Builders Night", starts: now + 3 * D, hours: 3, usdc: 5, mode: "Deposit", capacity: 40,
-    guests: PEOPLE.slice(5, 16).map(acct), place: "Ubud, Bali",
-    about: "Lightning talks from teams building on NEAR. Five minutes each, questions after.", theme: "near",
+    host: acct("spacexai"), title: "Grok Bot Workshop Bali - SpaceXAI", starts: now + 3 * D, hours: 3, usdc: 5, mode: "Deposit", capacity: 40,
+    guests: PEOPLE.slice(5, 16).map(acct), place: "Uluwatu, Bali",
+    about: "Designers, PMs, founders, developers and AI beginners: share workflows built with Grok bot, pick up credits and learn from each other.", theme: "paradise", cover: "grok-workshop",
   });
   add({
-    host: acct("Nina"), title: "Rooftop Demo Day", starts: now + 8 * D, hours: 4, usdc: 15, mode: "Ticket", capacity: 60,
-    guests: PEOPLE.slice(0, 23).filter((n) => n !== "Nina").map(acct), place: "Seminyak, Bali",
-    about: "Twelve startups, one rooftop. The ticket includes drinks.", theme: "afterhours",
+    host: acct("nebula"), title: "How to Train and Build AI From Scratch", starts: now + 8 * D, hours: 3, usdc: 15, mode: "Ticket", capacity: 60,
+    guests: PEOPLE.slice(0, 23).map(acct), place: "Nebula Coworking Space, Bali",
+    about: "A hands-on LLM session: build small parts of a GPT-style language model together and see how LLMs work inside.", theme: "paradise", cover: "build-ai",
   });
 
-  s.free.demoBeach1 = {
-    id: "demoBeach1", host: acct("Omar"), created_at: now - 2 * D, title: "Beach Cleanup & Coffee",
-    starts_at: now + 2 * D, ends_at: now + 2 * D + 2 * H, capacity: 40, location: map("Batu Bolong Beach, Canggu"),
-    description: "An hour of picking up plastic, then coffee together. Gloves and bags provided.", cover_url: null,
+  s.free.demoAiCoffee = {
+    id: "demoAiCoffee", host: acct("aialliance"), created_at: now - 2 * D, title: "Bali AI Alliance: Coffee & Connections",
+    starts_at: now + 2 * D, ends_at: now + 2 * D + 2 * H, capacity: 40, location: map("Bokashi Berawa, Canggu"),
+    description: "Meet the people behind AI in Bali: a relaxed afternoon of coffee, ideas and new connections. Your first coffee is on us.", cover_url: poster("ai-alliance"),
     visual: { themeId: "paradise", seed: 4242 }, public: true, approval: false,
     guests: PEOPLE.slice(8, 20).map(acct), requests: [],
   };
@@ -349,7 +356,10 @@ async function api(req: Request, url: URL): Promise<Response> {
       return done();
 
     case "/api/event-visuals":
-      if (!post) return reply({ visuals: Object.fromEntries(ids.filter((id) => s.visuals[id]).map((id) => [id, s.visuals[id]])) });
+      if (!post) return reply({
+        visuals: Object.fromEntries(ids.filter((id) => s.visuals[id]).map((id) => [id, s.visuals[id]])),
+        covers: Object.fromEntries(ids.filter((id) => s.details[id]?.cover_url).map((id) => [id, s.details[id].cover_url])),
+      });
       hosted(body.eventId);
       s.visuals[body.eventId] = body.visual;
       return done();
