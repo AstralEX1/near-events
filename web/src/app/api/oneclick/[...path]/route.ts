@@ -42,7 +42,9 @@ function quoteAllowed(body: Record<string, unknown>, session: string | undefined
       (value) => typeof value === "string" && value.length <= 200 && /^\S+$/.test(value)
     )) return false;
   return (body.swapType === "EXACT_OUTPUT" && body.destinationAsset === USDC_ASSET
-    && body.depositType === "ORIGIN_CHAIN" && body.recipientType === "INTENTS" && body.refundType === "ORIGIN_CHAIN")
+    && body.depositType === "ORIGIN_CHAIN" && body.recipientType === "INTENTS"
+    // A failed swap goes back to the sending wallet, or (sent by hand) to the guest's own Intents account.
+    && (body.refundType === "ORIGIN_CHAIN" || (body.refundType === "INTENTS" && body.refundTo === body.recipient)))
     || (body.swapType === "EXACT_INPUT" && body.originAsset === USDC_ASSET
       && ["ORIGIN_CHAIN", "INTENTS"].includes(String(body.depositType))
       && body.recipientType === "DESTINATION_CHAIN" && body.refundType === "INTENTS")

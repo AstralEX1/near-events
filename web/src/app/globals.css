@@ -155,7 +155,7 @@ button:not(:disabled), summary { cursor: pointer; }
 .gc-reg-icon { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
 .gc-reg-icon[data-tone="good"] { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
 @media (max-width: 420px) { .gc-reg-icon { display: none; } }
-.gc-reg-price { flex-shrink: 0; font-size: 1.25rem; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.gc-reg-price { flex-shrink: 0; white-space: nowrap; font-size: 1.25rem; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 /* A folded list (host's list, door log): the whole row is the tap target, a chevron instead of the browser triangle. */
 .gc-fold > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 500; list-style: none; user-select: none; -webkit-user-select: none; }
 .gc-fold > summary::-webkit-details-marker { display: none; }
@@ -289,3 +289,14 @@ button:not(:disabled), summary { cursor: pointer; }
 @media (max-width: 479px) { .gc-invite-card { min-height: 120px; } }
 /* A sheet owns the bottom edge while it is open. */
 body:has(.gc-theme-drawer[data-open="true"]) .gc-tabbar { display: none; }
+
+/* One-tap checkout: the button is its own progress bar (docs/pay-ux-2026-11-13.md). */
+.gc-progress { position: relative; overflow: hidden; isolation: isolate; }
+.gc-progress.is-busy { cursor: progress; }
+.gc-progress:active:not(.is-busy) { transform: scale(.98); }
+.gc-progress-fill { position: absolute; inset: 0; z-index: -1; background: rgba(0, 0, 0, .16); transform-origin: left; transform: scaleX(0); transition: transform 300ms cubic-bezier(.2, .8, .2, 1); pointer-events: none; }
+.gc-progress-label { display: inline-block; animation: gc-label-in 160ms ease-out; }
+@keyframes gc-label-in { from { opacity: 0; filter: blur(2px); } to { opacity: 1; filter: none; } }
+.gc-pass { animation: gc-pass-in 240ms ease-out; }
+@keyframes gc-pass-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .gc-progress-label, .gc-pass { animation: none; } }

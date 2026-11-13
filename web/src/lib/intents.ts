@@ -124,6 +124,15 @@ export function disconnectEvm(): void {
   } catch {}
 }
 
+/** The chain id the signed-in EVM wallet is on now, or null. */
+export async function evmChainId(): Promise<number | null> {
+  try {
+    return parseInt(String(await ethereum().request({ method: "eth_chainId" })), 16) || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Sends one transaction from the EVM wallet on `chainId` (switching network first); returns its hash. */
 export async function sendFromEvm(chainId: number, tx: object): Promise<string> {
   const eth = ethereum();

@@ -14,6 +14,7 @@ export function DepositRulesTooltip({ ticket, amount, oracle, disputeWindow = "1
     <details className="gc-fold text-sm">
       <summary className="text-accent">{ticket ? "Ticket details" : "Deposit details"}</summary>
       <div className="pb-1 space-y-2 text-muted leading-relaxed">
+        {!ticket && <p className="text-text">Show up, get it back + a no-show share.</p>}
         {ticket ? (
           <p>Your {amount} ticket goes to the host as soon as you register. Tickets are not refunded, even if the host cancels.</p>
         ) : oracle ? (

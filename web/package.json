@@ -17,6 +17,7 @@
     "@hot-labs/near-connect": "^0.12.0",
     "@noble/curves": "2.2.0",
     "@noble/hashes": "2.2.0",
+    "canvas-confetti": "1.9.3",
     "jsqr": "^1.4.0",
     "near-api-js": "^7.4.0",
     "near-api-js-v5": "npm:near-api-js@^5.1.1",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
+    "@types/canvas-confetti": "1.9.0",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19",

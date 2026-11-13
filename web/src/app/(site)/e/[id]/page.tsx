@@ -171,7 +171,6 @@ export default function EventPage() {
               aside={needsBond(event) ? "Not open yet" : Date.now() >= registrationEndsAt(event) ? "Closed" : spots ? `${spots} spot${spots === 1 ? "" : "s"} left` : "Full"}
               icon={ticket ? ICONS.ticket : ICONS.wallet}
               title={ticket ? "Ticket" : "Attendance deposit"}
-              desc={ticket ? "Goes to the host, no refunds" : "Show up, get it back + a no-show share"}
               price={price}
             >
               <RegistrationCard event={event} myStatus={null} onChange={load} explain={false} />
