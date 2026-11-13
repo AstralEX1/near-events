@@ -13,16 +13,24 @@ export default function SiteLayout({ children }: LayoutProps<"/">) {
       </Suspense>
       <main className="gc-main">{children}</main>
       <footer className="gc-footer">
-        <div className="gc-footer-links">
-          <span>Nearvent · no platform fee</span>
-          <Link href="/docs">Docs</Link>
-          <Link href="/demo">Demo</Link>
-          <a href={`${EXPLORER_URL}/address/${EVENTS_CONTRACT}`} target="_blank" rel="noopener">Contract</a>
-          <a href="https://github.com/AstralEX1/near-events" target="_blank" rel="noopener">GitHub</a>
-          <a href="https://near.org/intents" target="_blank" rel="noopener">NEAR Intents</a>
-          <Link href="/video">Video</Link>
-          <Link href="/brand">Brand</Link>
-        </div>
+        {/* Unlabelled groups: product, on-chain, us. The landing footer mirrors this. */}
+        <nav aria-label="Footer" className="gc-footer-links">
+          <div>
+            <Link href="/docs">Docs</Link>
+            <Link href="/docs/website">Integrate</Link>
+            <Link href="/demo">Demo</Link>
+            <Link href="/video">Video</Link>
+          </div>
+          <div>
+            <a href={`${EXPLORER_URL}/address/${EVENTS_CONTRACT}`} target="_blank" rel="noopener">Contract</a>
+            <a href="https://github.com/AstralEX1/near-events" target="_blank" rel="noopener">GitHub</a>
+            <a href="https://near.org/intents" target="_blank" rel="noopener">NEAR Intents</a>
+          </div>
+          <div>
+            <Link href="/brand">Brand</Link>
+            <a href="https://t.me/AstralEX163" target="_blank" rel="noopener">Contact Us</a>
+          </div>
+        </nav>
       </footer>
     </>
   );

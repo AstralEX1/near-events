@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { voidedByCouncil, type EventStatus, type EventView } from "@/lib/near";
-import { useEventVisual } from "@/lib/event-visual-client";
+import { eventCover, useEventVisual } from "@/lib/event-visual-client";
 import { meshGradient, seededRandom, type EventVisualConfig } from "@/lib/event-visuals";
 import { EventPoster } from "@/components/EventVisual";
 
@@ -47,7 +47,7 @@ export function Avatar({ account, size = 32, src, seed }: { account: string; siz
 /** The cover is rendered from the exact title and a stable, off-chain visual choice. */
 export function Cover({ event, className = "", coverUrl = null, visual }: { event: EventView; className?: string; coverUrl?: string | null; visual?: EventVisualConfig }) {
   const savedVisual = useEventVisual(event.id, event.metadata.title);
-  return <EventPoster title={event.metadata.title} visual={visual ?? savedVisual} coverUrl={coverUrl} className={className} />;
+  return <EventPoster title={event.metadata.title} visual={visual ?? savedVisual} coverUrl={coverUrl ?? eventCover(event.id)} className={className} />;
 }
 
 /** Placeholder in the shape of the event page, so content lands where the eye already is. */

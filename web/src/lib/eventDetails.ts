@@ -77,6 +77,15 @@ export async function saveEventDetails(eventId: number, details: EventDetails): 
   await updateFile((store) => void (store[id] = details));
 }
 
+/** Host cover links for a batch of events (feed cards), in one storage read. */
+export async function getEventCovers(eventIds: number[]): Promise<Record<string, string>> {
+  if (!eventIds.length) return {};
+  const found = usesRedis()
+    ? (await redis<(string | null)[]>(["MGET", ...eventIds.map(key)])).map((v) => (v ? JSON.parse(v) as EventDetails : null))
+    : await loadFile().then((store) => eventIds.map((id) => store[key(id)] ?? null));
+  return Object.fromEntries(eventIds.flatMap((id, i) => (found[i]?.cover_url ? [[String(id), found[i]!.cover_url!]] : [])));
+}
+
 /** On-chain event ids whose host chose Private; public listings must leave these out. */
 export async function getPrivateEventIds(): Promise<number[]> {
   if (usesRedis()) return (await redis<string[]>(["SMEMBERS", PRIVATE_SET])).map(Number);

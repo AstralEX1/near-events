@@ -1,5 +1,6 @@
 import { rateLimited } from "@/lib/ratelimit";
 import { getEventVisuals, saveEventVisual } from "@/lib/event-visual-store";
+import { getEventCovers } from "@/lib/eventDetails";
 import { validEventVisual } from "@/lib/event-visuals";
 import { events } from "@/lib/near";
 import { hostAccounts } from "@/lib/daoHost";
@@ -13,7 +14,10 @@ export async function GET(req: Request) {
     return Response.json({ error: "Bad event ids" }, { status: 400 });
   }
   try {
-    return Response.json({ visuals: await getEventVisuals([...new Set(ids)]) }, { headers: { "Cache-Control": "no-store" } });
+    const unique = [...new Set(ids)];
+    // Covers ride along so feed cards show the host's photo; without them the theme poster still works.
+    const [visuals, covers] = await Promise.all([getEventVisuals(unique), getEventCovers(unique).catch(() => ({}))]);
+    return Response.json({ visuals, covers }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json({ error: "Event visuals are temporarily unavailable" }, { status: 503 });
   }

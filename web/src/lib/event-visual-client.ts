@@ -6,6 +6,7 @@ import { fallbackEventVisual, type EventVisualConfig } from "./event-visuals";
 const cache = new Map<number, EventVisualConfig | null>();
 const listeners = new Map<number, Set<(visual: EventVisualConfig | null) => void>>();
 const pending = new Set<number>();
+const covers = new Map<number, string>();
 let scheduled = false;
 
 function publish(id: number, visual: EventVisualConfig | null) {
@@ -27,8 +28,12 @@ async function flushBatch() {
   try {
     const response = await fetch(`/api/event-visuals?ids=${encodeURIComponent(ids.join(","))}`, { cache: "no-store" });
     if (!response.ok) throw new Error("visual lookup failed");
-    const body = await response.json() as { visuals?: Record<string, EventVisualConfig> };
-    for (const id of ids) publish(id, body.visuals?.[String(id)] ?? null);
+    const body = await response.json() as { visuals?: Record<string, EventVisualConfig>; covers?: Record<string, string> };
+    for (const id of ids) {
+      const cover = body.covers?.[String(id)];
+      if (cover) covers.set(id, cover); // before publish, so the re-render it causes sees the cover
+      publish(id, body.visuals?.[String(id)] ?? null);
+    }
   } catch {
     for (const id of ids) publish(id, null);
   }
@@ -50,6 +55,9 @@ function subscribe(id: number, listener: (visual: EventVisualConfig | null) => v
     if (!group.size) listeners.delete(id);
   };
 }
+
+/** The host's cover photo, if any; filled by the batch useEventVisual waits for. */
+export const eventCover = (id: number) => covers.get(id) ?? null;
 
 export function rememberEventVisual(id: number, visual: EventVisualConfig) {
   publish(id, visual);

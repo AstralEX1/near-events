@@ -6,7 +6,7 @@
 
 **▶ [Watch the 30-second product video with sound (MP4, 1080p)](showcase/nearvent-showcase.mp4)**
 
-**👆 [Try the demo yourself: www.nearvent.site/demo](https://www.nearvent.site/demo)** (no wallet, made-up events and 50 demo USDC in your browser)
+**👆 [Try the demo yourself: www.nearvent.site/demo](https://www.nearvent.site/demo)** (no wallet, real BaliSquad AI events with made-up guests and 50 demo USDC in your browser)
 
 ## For judges
 
