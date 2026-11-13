@@ -238,8 +238,17 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
         : due
           ? <span className="gc-chip" data-tone="good">Ready to pay out</span>
           : <span className="gc-chip">Payouts in a minute</span>;
+  const mine = disputes.find((d) => d.challenger === accountId);
   const summary = event.status !== "Submitted"
-    ? null
+    ? event.status === "Finalized" && mine
+      ? mine.upheld === true
+        ? `Your dispute was upheld: your ${deposit} came back plus part of the host bond.`
+        : mine.upheld === false
+          ? `Your dispute was dismissed: its ${deposit} went to the treasury and the guests who came.`
+          : `The council didn’t decide your dispute in time: its ${deposit} came back.`
+      : event.status === "Finalized" && isHost && (event.upheld_disputes ?? 0) > 0
+        ? `The council upheld ${event.upheld_disputes === 1 ? "a dispute" : `${event.upheld_disputes} disputes`}, so your ${formatUsdc(event.host_bond ?? "0")} USDC bond went to ${event.upheld_disputes === 1 ? "the guest who won it" : "the guests who won them"} and the treasury.`
+        : null
     : event.abandoned
       ? isHost
         ? "You published no list in time, so your bond is lost. Guests who came can still prove it."
@@ -250,11 +259,11 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
   const myCheckIn = absent && Array.isArray(doorLog) && doorLog.some((x) => x.account === me.account_id && x.on);
 
   /** One verdict word per dispute; the row's subline says what was claimed. */
-  const verdict = (d: DisputeView): [string, string | undefined] =>
-    d.upheld === true ? ["Upheld", d.attended ? "good" : "warn"]
-      : d.upheld === false ? ["Dismissed", undefined]
-        : event.status === "Submitted" && now < (event.resolve_by ?? 0) ? ["Waiting", "accent"]
-          : ["Expired", undefined];
+  const pending = (d: DisputeView) => d.upheld == null && event.status === "Submitted" && now < (event.resolve_by ?? 0);
+  const verdict = (d: DisputeView) => (d.upheld === true ? "upheld" : d.upheld === false ? "dismissed" : pending(d) ? "" : "expired");
+  /** An upheld claim overrides the host's list; the escrow's own result wins once the event is final. */
+  const cameNow = (g: GuestView, d?: DisputeView) =>
+    event.status === "Finalized" || d?.upheld !== true ? cameOf(event, g) : d.attended;
 
   return box("Who came", aside, (
     <>
@@ -281,13 +290,14 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
       )}
       <div>
         <details className="gc-fold" open={guests.length <= 12 || (windowOpen && !!me) || disputes.length > 0}>
-          <summary>Host’s list <span className="gc-chip">{listed} of {guests.length} came</span></summary>
+          <summary>Host’s list <span className="gc-chip">{event.attended_count} of {guests.length} came</span></summary>
           <ul className="pb-2 max-h-96 overflow-y-auto">
             {guests.map((g) => {
               const d = disputeOf(g.account_id);
               const canDispute = windowOpen && me && !d && g.account_id !== me.account_id && g.listed;
-              const came = cameOf(event, g);
-              const [chip, tone] = d ? verdict(d) : came ? ["Came", "good"] : [event.status === "Submitted" ? "Not on list" : "No-show", undefined];
+              const [chip, tone] = d && pending(d) ? ["Waiting", "accent"]
+                : cameNow(g, d) ? ["Came", "good"]
+                  : [event.status === "Submitted" && d?.upheld !== true ? "Not on list" : "No-show", undefined];
               return (
                 <li key={g.account_id} className="flex items-center gap-3 py-1.5 min-h-12">
                   <Avatar account={g.account_id} size={28} />
@@ -296,6 +306,7 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
                     {d && (
                       <span className="block text-xs text-muted truncate">
                         {d.attended ? (g.account_id === accountId ? "you say you came" : "says they came") : `${d.challenger === accountId ? "you say" : `${shortAccount(d.challenger)} says`} absent`}
+                        {verdict(d) && ` · ${verdict(d)}`}
                       </span>
                     )}
                   </span>
