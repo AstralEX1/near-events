@@ -17,6 +17,7 @@ import type { ConfidentialBalance } from "@/lib/intents";
 import { embedReturnPath } from "@/lib/embed";
 import { guestNamesApi } from "@/lib/guestNamesClient";
 import { shortAccount } from "@/components/ui";
+import { PayWithToken } from "@/components/PayWithToken";
 
 function requireDisplayName(value: string): string {
   const name = value.trim().replace(/\s+/g, " ");
@@ -226,8 +227,21 @@ export default function TopUpAndRegister() {
         </div>
       )}
       {accountId && canRegister && known && !enough && (!needsSignIn || signInFailed) && (
+        <div className="card p-5">
+          {/* Step 1 of 2: any token becomes USDC in the guest's own NEAR Intents account; then the main button registers. */}
+          <PayWithToken
+            accountId={accountId}
+            kind={kind}
+            send={send}
+            amount={deposit - (available ?? 0n)}
+            paymentKey={`near-events:payment:${id}:${accountId}`}
+            onFunded={refreshBalance}
+          />
+        </div>
+      )}
+      {accountId && canRegister && known && !enough && (!needsSignIn || signInFailed) && (
         <div className="card p-5 space-y-4">
-          <h2 className="font-semibold">Top up on near.com</h2>
+          <h2 className="font-semibold">Or Top Up on near.com</h2>
           {!!confidential?.others.length && (
             <p className="text-sm">Your NEAR Intents balance also holds {confidential.others.join(", ")}. On near.com, swap enough of it into USDC.</p>
           )}

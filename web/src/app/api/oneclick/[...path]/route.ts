@@ -9,7 +9,7 @@ const QUOTE_KEYS = new Set([
 ]);
 const GET_PATHS = ["tokens", "status", "account/balances"];
 // auth/authenticate, generate-intent and submit-intent read and move a guest's Confidential USDC.
-const POST_PATHS = ["quote", "auth/authenticate", "generate-intent", "submit-intent"];
+const POST_PATHS = ["quote", "auth/authenticate", "generate-intent", "submit-intent", "deposit/submit"];
 
 const isObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const keysAre = (value: Record<string, unknown>, keys: string[]) =>
@@ -56,6 +56,10 @@ function postAllowed(path: string, body: unknown, session: string | undefined) {
   if (!isObject(body)) return false;
   if (path === "quote") return quoteAllowed(body, session);
   if (path === "auth/authenticate") return keysAre(body, ["signedData"]) && signedData(body.signedData);
+  // A guest's own deposit transaction, so 1Click notices it sooner.
+  if (path === "deposit/submit") {
+    return keysAre(body, ["depositAddress", "txHash"]) && [body.depositAddress, body.txHash].every((v) => typeof v === "string" && /^\S{1,160}$/.test(v));
+  }
   if (!session || body.type !== "swap_transfer") return false;
   if (path === "generate-intent") {
     return keysAre(body, ["type", "standard", "signerId", "depositAddress"]) && typeof body.signerId === "string"
