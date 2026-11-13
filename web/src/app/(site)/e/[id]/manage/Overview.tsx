@@ -3,7 +3,7 @@
 import { SlCopy } from "@/components/SlUi";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { formatUsdc, hostBondFor, isTicket, priceLabel, registrationEndsAt, windowText, type EventView, type GuestView } from "@/lib/near";
+import { formatUsdc, hostBondFor, isTicket, priceLabel, registrationEndsAt, voidedByCouncil, windowText, type EventView, type GuestView } from "@/lib/near";
 import { Avatar, Cover, DateBadge, shortAccount } from "@/components/ui";
 import { cohostsProblem, splitCohosts } from "@/lib/cohostsShared";
 import type { GuestNames } from "@/lib/guestNamesClient";
@@ -497,8 +497,8 @@ function CloseEvent({
   if (event.status === "Cancelled") {
     return (
       <section className="card p-4 space-y-1">
-        <h2 className="font-semibold text-warn">Cancelled</h2>
-        <p className="text-sm text-muted">{ticket ? "Ticket money stays with the host." : "Every deposit was refunded. Guests can withdraw it from their balance."}</p>
+        <h2 className="font-semibold text-warn">{voidedByCouncil(event) ? "Cancelled by the council" : "Cancelled"}</h2>
+        <p className="text-sm text-muted">{ticket ? "Ticket money stays with the host." : `Every deposit was refunded${voidedByCouncil(event) ? ", dispute deposits too" : ""}. Guests can withdraw it from their balance.`}</p>
       </section>
     );
   }

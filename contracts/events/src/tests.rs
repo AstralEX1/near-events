@@ -2484,6 +2484,37 @@ fn refund_of_an_abandoned_event_publishes_an_empty_list_and_punishes_the_bond() 
     }, "Only Deposit events");
 }
 
+/// The council calls a published list off (Alex, 2026-11-13): every deposit, every
+/// dispute bond (decided or not) and the host bond go back; nothing to the treasury.
+#[test]
+fn the_council_can_void_a_published_list() {
+    let (mut c, id) = submitted();
+    assert_eq!(dispute_at(&mut c, id, &accounts(4), &accounts(4), true, now()), 0);
+    assert_eq!(dispute_at(&mut c, id, &accounts(2), &accounts(3), false, now()), 0);
+    verdict(&mut c, id, &accounts(3), false);
+    ctx_at(&dao(), NearToken::from_yoctonear(0), (now() + 1) * 1_000_000);
+    c.void_event(id);
+    assert_eq!(c.get_event(id).unwrap().status, EventStatus::Cancelled);
+    assert_eq!([2, 3, 4].map(|i| c.balance_of(accounts(i)).0), [D + D, D, D + D]);
+    assert_eq!((c.balance_of(accounts(0)).0, c.balance_of(treasury()).0), (H, 0));
+    assert_eq!(c.reserved_bytes, 0);
+    // For regulars a voided list is no event: access rules take finalized events only.
+    rejects(move || { let (mut c, id) = submitted(); ctx_at(&dao(), NearToken::from_yoctonear(0), (now() + 1) * 1_000_000); c.void_event(id); gated(&mut c, rule(vec![id], 0, Some(0), None)); }, "Past events must be finalized");
+
+    let as_dao = |at_ms: u64| ctx_at(&dao(), NearToken::from_yoctonear(0), at_ms * 1_000_000);
+    rejects(|| { let (mut c, id) = submitted(); ctx_at(&accounts(5), NearToken::from_yoctonear(0), now() * 1_000_000); c.void_event(id); }, "Only this event's DAO");
+    rejects(move || { let (mut c, id) = setup(10); as_dao(now()); c.void_event(id); }, "Only a published list");
+    rejects(move || {
+        let (mut c, id) = setup(10);
+        register(&mut c, id, &accounts(2));
+        after_publish_deadline(&mut c, id);
+        as_dao(c.get_event(id).unwrap().submitted_at);
+        c.void_event(id);
+    }, "Only a published list");
+    rejects(move || { let (mut c, id) = submitted(); settle_after_window(&mut c, id); as_dao(now() + 1); c.void_event(id); }, "Only a published list");
+    rejects(move || { let (mut c, id) = submitted(); as_dao(c.get_event(id).unwrap().resolve_by); c.void_event(id); }, "Too late");
+}
+
 /// A court with no bond (Alex, 2026-11-13): registration opens at once, a dispute
 /// still corrects the list, the winner only gets the deposits back, the treasury nothing;
 /// an abandoned event gives every deposit back.
@@ -2943,10 +2974,19 @@ fn model_settle(
     abandoned: bool,
     capacity: u32,
     bond_per_seat: u8,
+    voided: bool,
 ) -> std::collections::BTreeMap<String, u128> {
     let mut out = std::collections::BTreeMap::new();
     let mut add = |who: String, x: u128| *out.entry(who).or_insert(0) += x;
     let h = u128::from(bond_per_seat) * d * capacity as u128;
+    if voided {
+        // Everything goes back: deposits, every dispute bond, the host bond.
+        (0..n).for_each(|i| add(format!("g{i}"), d));
+        disputes.iter().for_each(|x| add(format!("g{}", x.1), d));
+        add("host".into(), h);
+        out.retain(|_, v| *v > 0);
+        return out;
+    }
     let mut fin = listed.to_vec();
     for &(target, _, claim, v) in disputes {
         if v == Some(true) {
@@ -3072,9 +3112,16 @@ fn random_case(seed: u64) {
         }
     }
     let e = c.get_event(id).unwrap();
-    let at = if e.open_disputes > 0 { e.resolve_by } else { e.challenge_ends_at };
-    ctx_at(&accounts(5), NearToken::from_yoctonear(0), (at + r.below(1_000)) * 1_000_000);
-    c.settle(id);
+    // One published list in five: the council voids it before `resolve_by`.
+    let voided = !abandoned && r.below(5) == 0;
+    if voided {
+        ctx_at(&dao(), NearToken::from_yoctonear(0), (e.resolve_by - 1 - r.below(1_000)) * 1_000_000);
+        c.void_event(id);
+    } else {
+        let at = if e.open_disputes > 0 { e.resolve_by } else { e.challenge_ends_at };
+        ctx_at(&accounts(5), NearToken::from_yoctonear(0), (at + r.below(1_000)) * 1_000_000);
+        c.settle(id);
+    }
 
     let mut got = std::collections::BTreeMap::new();
     for i in 0..n {
@@ -3089,8 +3136,8 @@ fn random_case(seed: u64) {
             got.insert(label.to_string(), b);
         }
     }
-    let want = model_settle(n, d, &listed, &disputes, abandoned, capacity, bond_per_seat);
-    assert_eq!(got, want, "seed {seed}: n={n} d={d} bond/seat={bond_per_seat} listed={listed:?} disputes={disputes:?}");
+    let want = model_settle(n, d, &listed, &disputes, abandoned, capacity, bond_per_seat, voided);
+    assert_eq!(got, want, "seed {seed}: n={n} d={d} bond/seat={bond_per_seat} voided={voided} listed={listed:?} disputes={disputes:?}");
     assert_eq!(got.values().sum::<u128>(), money_in, "seed {seed}: money in != money out");
     assert_eq!(c.reserved_bytes, 0, "seed {seed}: reservations left");
 }

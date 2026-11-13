@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { EventStatus, EventView } from "@/lib/near";
+import { voidedByCouncil, type EventStatus, type EventView } from "@/lib/near";
 import { useEventVisual } from "@/lib/event-visual-client";
 import { meshGradient, seededRandom, type EventVisualConfig } from "@/lib/event-visuals";
 import { EventPoster } from "@/components/EventVisual";
@@ -98,10 +98,10 @@ const STATUS_LABEL: Record<EventStatus, string> = {
   Open: "Open", Submitted: "List published", Finalized: "Paid out", Cancelled: "Cancelled", Refunded: "Refunded",
 };
 
-export function StatusPill({ status }: { status: EventStatus }) {
+export function StatusPill({ event }: { event: Pick<EventView, "status" | "submitted_at"> }) {
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLE[status]}`}>
-      {STATUS_LABEL[status]}
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLE[event.status]}`}>
+      {voidedByCouncil(event) ? "Cancelled by the council" : STATUS_LABEL[event.status]}
     </span>
   );
 }

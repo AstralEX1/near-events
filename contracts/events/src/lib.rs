@@ -26,7 +26,9 @@
 //! 4. The event's DAO (a Sputnik DAO whose council votes on proposals) calls
 //!    `resolve_dispute` itself. A dispute it does not decide within
 //!    `resolve_hours` after the window expires: the host's record stands and
-//!    the challenger gets the bond back.
+//!    the challenger gets the bond back. Until `settle` (and `resolve_by`) the DAO
+//!    may also void a published list (`void_event`): every deposit, every dispute
+//!    bond and the host bond go back, nothing to the treasury (status `Cancelled`).
 //! 5. Anyone calls `settle` once the window is over and no dispute is waiting.
 //!    Money (all on internal balances): the pool is split by the final list;
 //!    the host bond goes back to the host, or, if any dispute was upheld,
@@ -667,6 +669,26 @@ impl Contract {
             "dispute_resolved",
             json!({ "event_id": event_id, "target": target, "challenger": challenger, "upheld": upheld }),
         );
+    }
+
+    /// The event's DAO only, through an approved proposal: calls a published list off
+    /// (Alex, 2026-11-13). Every deposit, every dispute bond and the host bond go back;
+    /// nothing to the treasury. Not for an abandoned event: its empty list already
+    /// refunds everyone nobody proves, and a void would hand that host the bond back.
+    pub fn void_event(&mut self, event_id: u64) {
+        let event = self.event(event_id);
+        require!(event.rules.dao.as_ref() == Some(&env::predecessor_account_id()), "Only this event's DAO");
+        require!(event.status == EventStatus::Submitted && !event.abandoned, "Only a published list can be voided");
+        require!(env::block_timestamp_ms() < resolve_by(event), "Too late: the event can be settled");
+        let deposit = event.deposit;
+        for i in 0..event.guest_count {
+            let account = self.guest_index[&(event_id, i)].clone();
+            if let Some(dispute) = self.guests[&(event_id, account)].dispute.clone() {
+                self.credit(&dispute.challenger, deposit);
+            }
+        }
+        emit("voided", json!({ "event_id": event_id }));
+        self.close_with_refunds(event_id, EventStatus::Cancelled);
     }
 
     /// Pays out a Deposit event once the dispute window is over and no

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { formatUsdc, isTicket, type EventView, type GuestView } from "@/lib/near";
+import { formatUsdc, isTicket, voidedByCouncil, type EventView, type GuestView } from "@/lib/near";
 import { Avatar, shortAccount } from "./ui";
 import { AccountQr } from "./Qr";
 
@@ -37,11 +37,13 @@ export function GuestGrid({ event, guests, me }: { event: EventView; guests: Gue
   }, [guests, query, me]);
 
   const line =
-    event.status !== "Finalized"
-      ? spotsLine(event)
-      : event.attended_count === 0 && !isTicket(event)
-        ? "Nobody showed up · deposits returned"
-        : `${event.attended_count} of ${event.guest_count} showed up`;
+    voidedByCouncil(event)
+      ? "Cancelled by the council · everyone got their deposit back"
+      : event.status !== "Finalized"
+        ? spotsLine(event)
+        : event.attended_count === 0 && !isTicket(event)
+          ? "Nobody showed up · deposits returned"
+          : `${event.attended_count} of ${event.guest_count} showed up`;
 
   return (
     <div className="space-y-4 pt-3 border-t border-border">

@@ -88,6 +88,7 @@ export default function DocsHome() {
             ["Nobody showed up?", "Everyone gets their deposit back."],
             ["The host never publishes who came?", "3 days after the end (by default), anyone can start the refund. The list then counts as empty, and guests who came have 12 hours to prove it. If nobody does, everyone gets the deposit back. If someone does, the guests who proved it split the pool."],
             ["I came but was marked absent.", "Open a dispute on the event page within 12 hours (by default) after the host publishes the list. It locks one deposit, and a council of 5 decides. If it agrees, you get your share and your deposit back. If it disagrees, you lose the deposit."],
+            ["Can the council cancel an event?", "Yes, after the host publishes the list and before the council’s deadline. Every guest gets their deposit back, and so does everyone who opened a dispute. Nothing is paid out."],
             ["Fees?", "None from Nearvent."],
           ]}
         />

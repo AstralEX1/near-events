@@ -493,7 +493,13 @@ Who does what: **Alex** signs and funds (real money). Claude has prepared everyt
    - `event_relayer.near` has 0.45 NEAR today; top it up to at least 5 NEAR. It pays gas for settle, refund, DAO proposals and Intents relays.
    - The DAO: about 5 NEAR (step 5).
    - The escrow: optional, a plain transfer to raise the free-tier pool above 1.67 NEAR.
-9. **Check (read-only):**
+9. **Council: call an event off (`void_event`, when needed).** A council member proposes, 3 of 5 approve; every deposit and every dispute deposit go back (and the host bond, if any). Allowed after the host publishes the list and before the court deadline (`resolve_by` in `get_event`), not for an event whose host published nothing. The keeper never proposes this. With `ID` the event id:
+   ```bash
+   ARGS=$(printf '{"event_id":%s}' "$ID" | base64)
+   near contract call-function as-transaction nearvent-court.sputnik-dao.near add_proposal json-args "{\"proposal\":{\"description\":\"Void Nearvent event $ID: <reason>\",\"kind\":{\"FunctionCall\":{\"receiver_id\":\"escrow.lold.near\",\"actions\":[{\"method_name\":\"void_event\",\"args\":\"$ARGS\",\"deposit\":\"0\",\"gas\":\"200000000000000\"}]}}}}" prepaid-gas '100 Tgas' attached-deposit '<proposal_bond from get_policy> yoctoNEAR' sign-as <member>.near network-config mainnet sign-with-keychain send
+   ```
+   Then three members approve it in the Sputnik UI or with `act_proposal` `{"id":<id>,"action":"VoteApprove","proposal":<kind from get_proposal>}` (300 Tgas). 200 Tgas should cover the worst case: a void is a cancel (76.5 Tgas at 300 guests) plus one pass over the disputes, lighter than a full settle (149 Tgas). Not measured; if the proposal fails for gas, nothing moves: propose again with 280 Tgas. The site then shows "Cancelled by the council".
+10. **Check (read-only):**
    ```bash
    NETWORK=mainnet EVENTS_CONTRACT=escrow.lold.near RELAYER_ACCOUNT=event_relayer.near OWNER=lold.near node web/scripts/check-release.mjs
    ```

@@ -8,6 +8,8 @@ export type GuestStatus = "Registered" | "Attended";
 export type EventMode = "Deposit" | "Ticket";
 
 export const isTicket = (e: { mode?: EventMode }) => e.mode === "Ticket";
+/** The council called a published list off (`void_event`): hosts can only cancel before publishing. */
+export const voidedByCouncil = (e: { status: EventStatus; submitted_at?: number }) => e.status === "Cancelled" && (e.submitted_at ?? 0) > 0;
 
 /** What the escrow keeps about an event. Location, description and cover live off-chain (api/event-details). */
 export interface EventMetadata {

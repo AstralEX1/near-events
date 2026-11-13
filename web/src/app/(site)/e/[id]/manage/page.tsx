@@ -295,7 +295,7 @@ function ManageEvent() {
           </p>
           <div className="flex items-center gap-2.5 mt-1 min-w-0">
             <h1 className="gc-page-title break-words">{event.metadata.title}</h1>
-            {event.status !== "Open" && <StatusPill status={event.status} />}
+            {event.status !== "Open" && <StatusPill event={event} />}
           </div>
         </div>
         <Link href={`/e/${id}`} className="btn btn-ghost !py-2 text-sm shrink-0" target="_blank">

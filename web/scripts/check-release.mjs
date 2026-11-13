@@ -100,6 +100,8 @@ if (ESCROW) {
     // Only the council votes: another role rejecting an honest proposal would also block it (the keeper never re-proposes a rejected one).
     const voters = policy.roles.filter((x) => x.name !== "council" && x.permissions.some((p) => /^(\*|call):(VoteApprove|VoteReject|VoteRemove|\*)$/.test(p)));
     if (voters.length) throw new Error(`roles besides the council can vote: ${voters.map((x) => x.name).join(", ")}`);
+    // A void (`void_event`) is proposed by hand by a council member.
+    if (!councilRole?.permissions.some((p) => /^(\*|call):(AddProposal|\*)$/.test(p))) throw new Error("the council cannot propose a FunctionCall (needed for void_event)");
     if (r.dao === RELAYER || r.dao === OWNER) throw new Error("the court is the relayer or the owner");
     return `court ${r.dao}, council ${council.length}, treasury ${r.treasury}, bond ${r.bond_per_seat} deposit(s) per seat${r.bond_per_seat < 2 ? " (below 2 a false list can pay at low turnout)" : ""}, ${hours}`;
   });

@@ -129,7 +129,7 @@ export default function EventPage() {
         <section className="space-y-6 min-w-0">
           <div className="flex items-start gap-2">
             <div className="min-w-0">
-              {!open && <StatusPill status={event.status} />}
+              {!open && <StatusPill event={event} />}
               <h1 className="gc-event-title mt-1" data-long={event.metadata.title.length > 36 || undefined}>{event.metadata.title}</h1>
             </div>
             <div className="ml-auto shrink-0 flex items-center gap-1.5">

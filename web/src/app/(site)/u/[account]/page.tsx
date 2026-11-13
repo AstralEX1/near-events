@@ -99,7 +99,7 @@ function List({ title, rows, empty }: { title: string; rows: Row[]; empty?: stri
                 <div className="font-medium truncate">{r.event.metadata.title}</div>
                 <div className="text-sm text-muted">{new Date(r.event.metadata.starts_at).toLocaleDateString()}</div>
               </div>
-              {l ? <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${l[1]}`}>{l[0]}</span> : <StatusPill status={r.event.status} />}
+              {l ? <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${l[1]}`}>{l[0]}</span> : <StatusPill event={r.event} />}
             </Link>
           );
         })}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { bondPerSeatText, cameOf, events, formatUsdc, hostBondFor, isTicket, needsBond, registrationEndsAt, usdc, windowText, type DisputeView, type EventView, type GuestView } from "@/lib/near";
+import { bondPerSeatText, cameOf, events, formatUsdc, hostBondFor, isTicket, needsBond, registrationEndsAt, usdc, voidedByCouncil, windowText, type DisputeView, type EventView, type GuestView } from "@/lib/near";
 import { EVENTS_CONTRACT, EXPLORER_URL, USDC_CONTRACT } from "@/lib/config";
 import { useWallet, type Call } from "@/lib/wallet";
 import { bondFromIntents, disputeFromIntents } from "@/lib/intents";
@@ -230,8 +230,10 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
 
   const listed = guests.filter((g) => g.listed).length;
   const open_ = event.open_disputes ?? 0;
+  // The council called the list off: shown read-only, nothing to dispute or settle.
+  const voided = voidedByCouncil(event);
   const aside = event.status !== "Submitted"
-    ? "Final"
+    ? voided ? "Cancelled" : "Final"
     : windowOpen
       ? <span className="gc-chip" data-tone="accent">{event.abandoned ? "Proofs" : "Disputes"} until {soon(event.challenge_ends_at!)}</span>
       : open_ > 0 && now < (event.resolve_by ?? 0)
@@ -240,7 +242,7 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
           ? <span className="gc-chip" data-tone="good">Ready to pay out</span>
           : <span className="gc-chip">Payouts in a minute</span>;
   const summary = event.status !== "Submitted"
-    ? null
+    ? voided ? "The council cancelled this event, so the list below pays nothing. Every deposit went back, dispute deposits too." : null
     : event.abandoned
       ? isHost
         ? `You published no list in time${bonded ? ", so your bond is lost" : ""}. Guests who came can still prove it.`
@@ -255,7 +257,7 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
     d.upheld === true ? ["Upheld", d.attended ? "good" : "warn"]
       : d.upheld === false ? ["Dismissed", undefined]
         : event.status === "Submitted" && now < (event.resolve_by ?? 0) ? ["Waiting", "accent"]
-          : ["Expired", undefined];
+          : [voided ? "Refunded" : "Expired", undefined];
 
   return box("Who came", aside, (
     <>
@@ -287,8 +289,8 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
             {guests.map((g) => {
               const d = disputeOf(g.account_id);
               const canDispute = windowOpen && me && !d && g.account_id !== me.account_id && g.listed;
-              const came = cameOf(event, g);
-              const [chip, tone] = d ? verdict(d) : came ? ["Came", "good"] : [event.status === "Submitted" ? "Not on list" : "No-show", undefined];
+              const came = voided ? !!g.listed : cameOf(event, g);
+              const [chip, tone] = d ? verdict(d) : came ? [voided ? "On list" : "Came", "good"] : [event.status === "Submitted" || voided ? "Not on list" : "No-show", undefined];
               return (
                 <li key={g.account_id} className="flex items-center gap-3 py-1.5 min-h-12">
                   <Avatar account={g.account_id} size={28} />

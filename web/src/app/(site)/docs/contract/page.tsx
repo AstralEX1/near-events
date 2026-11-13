@@ -93,6 +93,7 @@ export default async function ContractDocs() {
             [<Mono key="2b">ft_transfer_call</Mono>, "Guest, during the dispute window", <>Opens a dispute · <Mono>{`{"action":"dispute","event_id":N,"target":"…","attended":true}`}</Mono></>],
             [<Mono key="3">finalize</Mono>, "Host, by the deadline (3 days after the end by default)", "Publishes the list of who came (ticket: closes the event)"],
             [<Mono key="3a">resolve_dispute</Mono>, "The event’s DAO", "Records the council’s verdict on one dispute"],
+            [<Mono key="3a2">void_event</Mono>, "The event’s DAO, before the court deadline", "Calls the published list off: every deposit and dispute deposit goes back"],
             [<Mono key="3b">settle</Mono>, "Anyone, after the dispute window", "Pays out by the final list"],
             [<Mono key="3c">refund</Mono>, "Anyone, after that deadline", "Publishes an empty list for a host who published none"],
             [<Mono key="4">cancel</Mono>, "Host · ticket: anyone after 30 days", "Refunds every deposit (tickets: no refund)"],

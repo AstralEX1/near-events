@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { events, formatUsdc, hostBondFor, hoursText, needsBond, registrationEndsAt, registrationOpen, usdc, windowText, bondPerSeatText, type EventView, type GuestStatus, isTicket } from "@/lib/near";
+import { events, formatUsdc, hostBondFor, hoursText, needsBond, registrationEndsAt, registrationOpen, usdc, windowText, bondPerSeatText, voidedByCouncil, type EventView, type GuestStatus, isTicket } from "@/lib/near";
 import { EVENTS_CONTRACT, HAS_FAUCET, TEST_EVM_FAUCET_LIMIT, USDC_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
@@ -194,7 +194,11 @@ export function RegistrationCard({
   } else if (event.status === "Cancelled") {
     body = (
       <div className="space-y-2">
-        <p className="text-sm">This event was cancelled. Refunds were credited to guests’ Nearvent balances.</p>
+        <p className="text-sm">
+          {voidedByCouncil(event)
+            ? `Cancelled by the council · everyone got their deposit back.${myStatus ? " Yours is in your Nearvent balance." : ""}`
+            : "This event was cancelled. Refunds were credited to guests’ Nearvent balances."}
+        </p>
         {!accountId ? (
           <SignInFolded hint="Registered? Sign in to see your refund." onDone={refreshAfterSignIn} />
         ) : balanceLoading ? (
