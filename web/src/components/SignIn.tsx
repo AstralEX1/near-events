@@ -119,6 +119,8 @@ export function SignInOptions({ onDone, demo = true }: { onDone?: () => void; de
           )}
         </>
       )}
+      {/* Sign-in = connect + one signed message (lib/wallet.tsx signInAs). */}
+      <p className="text-xs text-muted">You sign one message in your wallet. It&apos;s free and keeps you signed in for a day.</p>
       {error && <p className="text-xs text-warn break-words">{error}</p>}
     </div>
   );

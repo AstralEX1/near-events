@@ -37,7 +37,8 @@ function MyEvents({ accountId }: { accountId: string }) {
   const [mine, setMine] = useState<Mine[] | null>(null);
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
 
-  const load = useCallback(async () => {
+  /** `ask`: a click may open the wallet for a fresh sign-in; loading the page never does. */
+  const load = useCallback(async (ask = false) => {
     const issues: string[] = [];
     const results = await Promise.allSettled([
       events.balance(accountId).then((value) => setBalance(BigInt(value))),
@@ -47,8 +48,8 @@ function MyEvents({ accountId }: { accountId: string }) {
         const now = Date.now();
         const [all, free] = await Promise.all([
           events.list(),
-          // EVM wallets sign for a token only when they host or RSVP; don't open the wallet just to list.
-          kind === "evm" && !savedStaffToken(accountId) ? Promise.resolve([]) : staffToken()
+          // Wallets got their token at sign-in; after a day only a click (Try Again) asks again. Google/email proves here once.
+          (kind !== "email" && !ask && !savedStaffToken(accountId) ? Promise.reject(new Error()) : staffToken())
             .then((token) => fetch("/api/free-events?mine=1", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }))
             .then(async (r) => r.ok ? (await r.json()).events as (FreeEvent & { going: boolean })[] : Promise.reject(new Error()))
             .catch((): (FreeEvent & { going: boolean })[] => {
@@ -92,7 +93,7 @@ function MyEvents({ accountId }: { accountId: string }) {
         <div className="space-y-2"><p className="gc-eyebrow">Your corner of Nearvent</p><h1 className="gc-page-title">My events</h1></div>
         <Link className="btn btn-accent" href="/create">Create event</Link>
       </div>
-      {loadErrors.length > 0 && <div role="status" className="card p-4 space-y-2 text-sm"><p>{loadErrors.join(" ")}</p><button className="text-accent underline" onClick={() => void load()}>Try again</button></div>}
+      {loadErrors.length > 0 && <div role="status" className="card p-4 space-y-2 text-sm"><p>{loadErrors.join(" ")}</p><button className="text-accent underline" onClick={() => void load(true)}>Try again</button></div>}
       {mine === null && loadErrors.length === 0 && <p className="text-muted" role="status">Finding your events…</p>}
       {mine !== null && <MyEventList mine={mine} />}
       <section id="funds" className="card p-6 sm:p-8 space-y-5 scroll-mt-24">

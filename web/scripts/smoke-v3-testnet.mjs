@@ -291,7 +291,7 @@ steps["demo-checkin"] = async () => {
   const nonce = new Uint8Array(32);
   crypto.getRandomValues(nonce);
   new DataView(nonce.buffer).setBigUint64(0, BigInt(Date.now()));
-  const signed = await signMessage({ signerAccount: account(DEMO_HOST), payload: { message: "Authorize event controls on Nearvent", recipient: ESCROW, nonce } });
+  const signed = await signMessage({ signerAccount: account(DEMO_HOST), payload: { message: "Sign in to Nearvent", recipient: ESCROW, nonce } });
   const signature = typeof signed.signature === "string" ? signed.signature : Buffer.from(signed.signature).toString("base64");
   const session = await fetch(`${SITE}/api/checkin/session`, { method: "POST", body: JSON.stringify({ wallet: { accountId: DEMO_HOST, publicKey: signed.publicKey.toString(), signature, nonce: Buffer.from(nonce).toString("base64") } }) });
   const { token, error } = await session.json();

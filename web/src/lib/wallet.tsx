@@ -7,6 +7,7 @@ import { STAFF_MESSAGE, evmStaffMessage } from "./staffShared";
 import { useRouter } from "next/navigation";
 import { connectEvm, disconnectEvm, evmAccount, hostFromIntents, personalSign, watchEvmAccount } from "./intents";
 import { FREE_MAX_CAPACITY, FREE_MAX_DAYS, FREE_MAX_EVENTS } from "./near";
+import { toast } from "@/components/SlUi";
 import { RETURN_KEY, fastAuthEnsure, fastAuthLogin, fastAuthLogout, fastAuthProve, fastAuthRestore, fastAuthSend } from "./fastauth";
 import { demoLogin, demoLogout, demoRestore, demoSend } from "./demoBackend";
 
@@ -57,19 +58,19 @@ interface WalletState {
   /** Signs and sends calls, one transaction each, in order. */
   send: (calls: Call[]) => Promise<void>;
   /**
-   * A server token for signed-in saves (free events, RSVPs, names, door check-in).
-   * NEAR wallets sign one message during sign-in; Google/email proves once with an
-   * unsent transaction; EVM wallets sign one message the first time it is needed.
-   * The token is reused for 30 days.
+   * The 1-day session token for signed-in saves (free events, RSVPs, names, profile, door check-in).
+   * NEAR and EVM wallets get it at sign-in (one signed message); Google/email proves the first time
+   * it is needed (an unsent transaction). After a day the next save asks the wallet once more.
    */
   staffToken: () => Promise<string>;
   /** NEP-413 signature by the NEAR wallet (kind "wallet") of `message` for `recipient`; no transaction. */
   signMessage: (message: string, recipient: string, nonce: Uint8Array) => Promise<{ publicKey: string; signature: string }>;
 }
 
-const tokenKey = (accountId: string) => `near-events:staff:${accountId}`;
+// "session", not the old "staff" key: tokens saved under that one are 30-day ones the server now refuses.
+const tokenKey = (accountId: string) => `near-events:session:${accountId}`;
 
-/** The server token from an earlier proof (30 days) so later actions never ask the wallet again. */
+/** The session token from sign-in (1 day), so later actions never ask the wallet again. */
 export function savedStaffToken(accountId: string): string | null {
   try {
     const saved = JSON.parse(localStorage.getItem(tokenKey(accountId)) ?? "null") as { token: string; until: number } | null;
@@ -94,8 +95,8 @@ async function exchangeProof(proof: object, accountId: string): Promise<string> 
   if (!res.ok) throw new Error(json.error ?? "Could not sign in");
   if (json.accountId !== accountId) throw new Error(`The wallet signed as ${json.accountId}, not ${accountId}.`);
   try {
-    // The token carries its own expiry (account.exp.sig); refresh an hour early.
-    localStorage.setItem(tokenKey(accountId), JSON.stringify({ token: json.token, until: Number(String(json.token).split(".")[1]) * 1000 - 60 * 60 * 1000 }));
+    // The token carries its own expiry (account.exp.sig); renew a few minutes early.
+    localStorage.setItem(tokenKey(accountId), JSON.stringify({ token: json.token, until: Number(String(json.token).split(".")[1]) * 1000 - 5 * 60 * 1000 }));
   } catch {}
   return json.token as string;
 }
@@ -113,6 +114,20 @@ async function proveWallet(c: NearConnector, accountId: string): Promise<string>
   }, accountId);
 }
 
+/** One signed message (no transaction) that proves `accountId` to our server; returns the session token. */
+function prove(k: Kind | null, accountId: string, c: NearConnector | null): Promise<string> {
+  if (k === "email") return fastAuthProve().then((mpc) => exchangeProof({ mpc }, accountId));
+  if (k === "wallet") {
+    if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");
+    return proveWallet(c, accountId);
+  }
+  if (k === "evm") {
+    const at = Date.now();
+    return personalSign(accountId, evmStaffMessage(accountId, at)).then((signature) => exchangeProof({ evm: { address: accountId, at, signature } }, accountId));
+  }
+  throw new Error("Sign out and sign in again.");
+}
+
 const WalletContext = createContext<WalletState | null>(null);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
@@ -121,7 +136,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [kind, setKind] = useState<Kind | null>(null);
   const [ready, setReady] = useState(false);
-  /** True only while the user is picking a wallet, so a restored old wallet session can't replace a Google/email sign-in. */
+  /** True while signIn() connects the wallet the user picked; it finishes that sign-in itself. */
   const connecting = useRef(false);
 
   const remember = (k: Kind | null, id: string | null) => {
@@ -135,6 +150,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  /**
+   * Sign-in = the wallet connection plus one signed message (the 1-day session). Without that
+   * signature nobody is signed in: a decline disconnects the wallet again. An account with a live
+   * session on this device signs in without a prompt.
+   */
+  const signInAs = useRef(async (k: "wallet" | "evm", id: string) => {
+    if (!savedStaffToken(id)) {
+      // Until the new account signs, nobody is signed in: an old account's session never stands in for it.
+      remember(null, null);
+      try {
+        if (k === "wallet" && wrongNetwork(id)) throw new Error(wrongNetworkMessage(id));
+        await prove(k, id, connector.current);
+      } catch (e) {
+        if (k === "evm") disconnectEvm();
+        else await connector.current?.disconnect().catch(() => {});
+        throw e;
+      }
+    }
+    if (k === "wallet") fastAuthLogout().catch(() => {});
+    remember(k, id);
+  });
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -145,21 +182,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         network: NETWORK,
         footerBranding: null,
         excludedWallets: ["ethereum-wallets"],
+        // Sign-in is a signed message, so only wallets that can sign one are offered.
+        features: { signMessage: true },
       });
       connector.current = c;
       c.on("wallet:signIn", (t) => {
+        // A connect the user started is finished by signIn(); this catches the rest (a wallet's own in-app browser).
+        if (connecting.current) return;
         let saved: string | null = null;
         try {
           saved = localStorage.getItem(KIND_KEY);
         } catch {}
-        if ((saved === "email" || saved === "demo") && !connecting.current) return;
-        const userPicked = connecting.current;
-        connecting.current = false;
-        fastAuthLogout().catch(() => {});
-        const id = t.accounts[0]?.accountId ?? null;
-        remember("wallet", id);
-        // Prove the account as part of sign-in, so creating events, RSVPs and saves never open the wallet later.
-        if (userPicked && id && !savedStaffToken(id)) proveWallet(c, id).catch(() => {});
+        if (saved === "email" || saved === "demo") return;
+        const id = t.accounts[0]?.accountId;
+        if (id) signInAs.current("wallet", id).catch(() => {});
       });
       c.on("wallet:signOut", () => remember(null, null));
       let saved: string | null = null;
@@ -174,8 +210,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const id = demoRestore();
         if (!cancelled && id) restore("demo", id);
       } else if (saved === "evm") {
+        // A wallet still connected but without a live session (over a day old) is signed out: Sign In asks once.
         const id = await evmAccount();
-        if (!cancelled && id) restore("evm", id);
+        if (!cancelled && id && savedStaffToken(id)) restore("evm", id);
       } else if (saved === "email" || returningFromAuth0) {
         const id = await fastAuthRestore();
         if (!cancelled && id) restore("email", id);
@@ -188,7 +225,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         try {
           const wallet = await c.wallet();
           const accounts = await wallet.getAccounts();
-          if (!cancelled && accounts[0]) restore("wallet", accounts[0].accountId);
+          if (!cancelled && accounts[0] && savedStaffToken(accounts[0].accountId)) restore("wallet", accounts[0].accountId);
         } catch {
           // Not signed in yet.
         }
@@ -201,20 +238,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Switching account in the wallet switches it here too, as on other dApps. EVM wallets announce it
+  // Switching account in the wallet signs in as that account, as on other dApps. EVM wallets announce it
   // (accountsChanged); NEAR Connect has no such event, so NEAR wallets are re-read when the tab gets focus.
   useEffect(() => {
     if (kind === "evm") {
       return watchEvmAccount((address) => {
-        if (!address) disconnectEvm();
-        remember(address ? "evm" : null, address);
+        if (address === accountId) return;
+        if (address) signInAs.current("evm", address).catch(() => {});
+        else {
+          disconnectEvm();
+          remember(null, null);
+        }
       });
     }
     if (kind !== "wallet") return;
     const check = async () => {
       const wallet = await connector.current?.wallet().catch(() => null);
       const id = (await wallet?.getAccounts().catch(() => null))?.[0]?.accountId;
-      if (id && id !== accountId) remember("wallet", id);
+      if (id && id !== accountId) signInAs.current("wallet", id).catch(() => {});
     };
     window.addEventListener("focus", check);
     return () => window.removeEventListener("focus", check);
@@ -222,11 +263,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [kind, accountId]);
 
   const signIn = useCallback(async () => {
+    const c = connector.current;
+    if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");
     connecting.current = true;
-    await connector.current?.connect().catch((e) => {
+    try {
+      const wallet = await c.connect();
+      const id = (await wallet.getAccounts())[0]?.accountId;
+      if (!id) throw new Error("The wallet returned no account. Try again.");
+      await signInAs.current("wallet", id);
+    } finally {
       connecting.current = false;
-      throw e;
-    });
+    }
   }, []);
 
   const signInWithEmail = useCallback(async () => {
@@ -237,7 +284,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithEvm = useCallback(async (wallet?: string) => {
-    remember("evm", await connectEvm(wallet));
+    await signInAs.current("evm", await connectEvm(wallet));
   }, []);
 
   const signInWithDemo = useCallback(async (next?: string) => {
@@ -342,20 +389,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const saved = savedStaffToken(accountId);
     if (saved) return saved;
 
-    if (kind === "email" || (kind == null && isImplicit(accountId))) {
-      return exchangeProof({ mpc: await fastAuthProve() }, accountId);
-    }
-    if (kind === "wallet") {
-      const c = connector.current;
-      if (!c) throw new Error("Wallet is still loading. Wait a second and try again.");
-      return proveWallet(c, accountId);
-    }
-    if (kind === "evm") {
-      const at = Date.now();
-      const signature = await personalSign(accountId, evmStaffMessage(accountId, at));
-      return exchangeProof({ evm: { address: accountId, at, signature } }, accountId);
-    }
-    throw new Error("Sign out and sign in again.");
+    const k = kind ?? (isImplicit(accountId) ? "email" : null);
+    // A wallet session started over a day ago (this tab stayed open): one signature renews it.
+    if (k === "wallet" || k === "evm") toast("Your sign-in ended after a day", "Sign the message in your wallet to continue. It's free.", "info");
+    return prove(k, accountId, connector.current);
   }, [kind, accountId]);
 
   const signMessage = useCallback(async (message: string, recipient: string, nonce: Uint8Array) => {
