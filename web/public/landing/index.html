@@ -292,7 +292,10 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .final .wrap { display: flex; flex-direction: column; align-items: center; gap: 22px; }
 .final h2 { font-size: clamp(40px, 6.4vw, 80px); font-weight: 750; letter-spacing: -0.045em; line-height: 1; }
 footer { border-top: 1px solid var(--line); padding-block: 24px 28px; font-size: 13px; color: var(--muted); }
-footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+footer .wrap { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 20px; }
+footer nav { display: flex; gap: clamp(28px, 6vw, 64px); }
+footer nav div { display: flex; flex-direction: column; gap: 10px; }
+footer a { text-decoration: none; } /* plain gray links, like the app footer */
 </style>
 
 <div class="hero">
@@ -632,15 +635,25 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; }
 </main>
 
 <footer><div class="wrap">
-  <!-- same links as the app footer (src/app/(site)/layout.tsx) -->
+  <!-- same links and groups as the app footer (src/app/(site)/layout.tsx) -->
   <span>Nearvent · no platform fee</span>
-  <a href="/docs">Docs</a>
-  <a href="/demo">Demo</a>
-  <a href="https://nearblocks.io/address/escrow.lold.near" target="_blank" rel="noopener">Contract</a>
-  <a href="https://github.com/AstralEX1/near-events" target="_blank" rel="noopener">GitHub</a>
-  <a href="https://near.org/intents" target="_blank" rel="noopener">NEAR Intents</a>
-  <a href="/video">Video</a>
-  <a href="/brand">Brand</a>
+  <nav aria-label="Footer">
+    <div>
+      <a href="/docs">Docs</a>
+      <a href="/docs/website">Integrate</a>
+      <a href="/demo">Demo</a>
+      <a href="/video">Video</a>
+    </div>
+    <div>
+      <a href="https://nearblocks.io/address/escrow.lold.near" target="_blank" rel="noopener">Contract</a>
+      <a href="https://github.com/AstralEX1/near-events" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://near.org/intents" target="_blank" rel="noopener">NEAR Intents</a>
+    </div>
+    <div>
+      <a href="/brand">Brand</a>
+      <a href="https://t.me/AstralEX163" target="_blank" rel="noopener">Contact Us</a>
+    </div>
+  </nav>
 </div></footer>
 
 <script>
