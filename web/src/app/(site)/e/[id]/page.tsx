@@ -6,14 +6,16 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, isTicket, needsBond, registrationEndsAt, registrationOpen, type EventView, type GuestView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
-import { Avatar, Cover, DateBadge, EventSkeleton, StatusPill, formatWhen, shortAccount } from "@/components/ui";
+import { Cover, DateBadge, EventSkeleton, StatusPill, formatWhen } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
 import { GuestGrid } from "@/components/EventParts";
 import { EVENTS_CONTRACT, EXPLORER_URL } from "@/lib/config";
 import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
 import type { EventDetails } from "@/lib/eventImport";
 import { PublicText } from "@/components/PublicText";
-import { GoingList, ICONS, LocationRow, LocationSection, RegisterBox, Section } from "@/components/EventSections";
+import { GoingList, ICONS, LocationRow, LocationSection, PersonLink, RegisterBox, Section } from "@/components/EventSections";
+import { getProfiles } from "@/lib/profilesClient";
+import type { Profile } from "@/lib/profilesShared";
 import { guestNamesApi, type GuestNames } from "@/lib/guestNamesClient";
 import { useEventVisual } from "@/lib/event-visual-client";
 import { EventPageBackground } from "@/components/EventVisual";
@@ -40,6 +42,8 @@ export default function EventPage() {
   const [hostTeam, setHostTeam] = useState<string[]>([]);
   const [hostRecord, setHostRecord] = useState<{ hosted: number; guestsCame: number; abandoned: number } | null>(null);
   const [names, setNames] = useState<GuestNames>({});
+  // Profiles of the host and door team, for their names and photos.
+  const [people, setPeople] = useState<Record<string, Profile>>({});
   const visual = useEventVisual(id, event?.metadata.title ?? "");
 
   const load = useCallback(async () => {
@@ -67,7 +71,7 @@ export default function EventPage() {
       void events.all()
         .then((all) => setHostRecord({ ...hostedStats(all, e.host), abandoned: all.filter((x) => x.host === e.host && x.abandoned).length }))
         .catch(() => {});
-      void team.then(setDoorTeam);
+      void team.then((t) => { setDoorTeam(t); return getProfiles([e.host, ...t]); }).then(setPeople).catch(() => {});
       void guestNames.then(setNames);
       void publicDetails.then((d) => {
         setDetails(d ?? null);
@@ -103,12 +107,9 @@ export default function EventPage() {
           <Section label="Hosted by">
             <div className="space-y-2.5">
               {[event.host, ...doorTeam].map((a, i) => (
-                <Link key={a} href={`/u/${encodeURIComponent(a)}`} className="flex items-center gap-2 text-sm hover:text-accent">
-                  <Avatar account={a} size={24} />
-                  <span className="truncate font-medium">{shortAccount(a)}</span>
-                  {i === 0 && isDaoAccount(a) && <span className="text-xs text-muted">DAO</span>}
-                  {i > 0 && <span className="text-xs text-muted">door</span>}
-                </Link>
+                <PersonLink key={a} account={a} profile={people[a]} note={
+                  i === 0 ? isDaoAccount(a) && <span className="text-xs text-muted">DAO</span> : <span className="text-xs text-muted">door</span>
+                } />
               ))}
               {hostRecord && (
                 <p className="text-xs text-muted">

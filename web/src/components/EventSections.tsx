@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
-import { shortAccount } from "./ui";
+import Link from "next/link";
+import { Avatar, shortAccount } from "./ui";
 import { SlAvatars } from "./SlUi";
 import { LocationValue } from "./PublicText";
 import { goingLine, mapPlaceName, mapQuery } from "@/lib/eventLines";
+import { displayName, type Profile } from "@/lib/profilesShared";
 
 // Event page blocks, after Luma's event page: a small muted label over a hairline,
 // then the content. Shared by paid (/e/<id>) and free (/f/<id>) events.
@@ -13,6 +15,19 @@ export function Section({ label, id, children }: { label: ReactNode; id?: string
       <h2 className="label pb-2 mb-3 border-b border-border">{label}</h2>
       {children}
     </section>
+  );
+}
+
+/** A host or door-team member: profile photo, name and @username, linking to their page. */
+export function PersonLink({ account, profile, note }: { account: string; profile?: Profile; note?: ReactNode }) {
+  const name = displayName(profile);
+  return (
+    <Link href={`/u/${encodeURIComponent(account)}`} className="flex items-center gap-2 text-sm hover:text-accent">
+      <Avatar account={account} src={profile?.avatar_url} seed={profile?.avatar_seed} size={24} />
+      <span className="truncate font-medium">{name ?? shortAccount(account)}</span>
+      {profile?.username && name !== `@${profile.username}` && <span className="truncate text-muted">@{profile.username}</span>}
+      {note}
+    </Link>
   );
 }
 

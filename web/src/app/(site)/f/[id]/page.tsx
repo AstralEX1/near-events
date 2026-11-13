@@ -8,10 +8,10 @@ import { useFreeEvent } from "@/lib/freeEventsClient";
 import { getProfiles } from "@/lib/profilesClient";
 import type { Profile } from "@/lib/profilesShared";
 import { LOCAL_TZ, city, gmtLabel } from "@/lib/time";
-import { Avatar, DateBadge, EventSkeleton, formatWhen, shortAccount } from "@/components/ui";
+import { DateBadge, EventSkeleton, formatWhen } from "@/components/ui";
 import { EventPageBackground, EventPoster } from "@/components/EventVisual";
 import { PublicText } from "@/components/PublicText";
-import { GoingList, ICONS, LocationRow, LocationSection, RegisterBox, Section } from "@/components/EventSections";
+import { GoingList, ICONS, LocationRow, LocationSection, PersonLink, RegisterBox, Section } from "@/components/EventSections";
 import { SignInOptions } from "@/components/SignIn";
 
 /** A free event: same Luma layout as /e/<id>, but RSVP is a click, with nothing on chain. */
@@ -20,8 +20,8 @@ export default function FreeEventPage() {
   const { accountId, event, busy, error, post } = useFreeEvent(id);
   const [choosing, setChoosing] = useState(false);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
-  const guestKey = (event?.guests ?? []).slice(0, 100).join(",");
-  // Guest names and photos come from their profiles; a failed load just keeps account names.
+  const guestKey = [event?.host, ...(event?.guests ?? []).slice(0, 99)].filter(Boolean).join(",");
+  // Host and guest names and photos come from their profiles; a failed load just keeps account names.
   useEffect(() => {
     if (guestKey) getProfiles(guestKey.split(",")).then(setProfiles, () => {});
   }, [guestKey]);
@@ -93,10 +93,7 @@ export default function FreeEventPage() {
         <aside className="space-y-6">
           <EventPoster title={event.title} visual={event.visual} coverUrl={event.cover_url} className="aspect-square w-full rounded-2xl shadow-sm" />
           <Section label="Hosted by">
-            <Link href={`/u/${encodeURIComponent(event.host)}`} className="flex items-center gap-2 text-sm hover:text-accent">
-              <Avatar account={event.host} size={24} />
-              <span className="truncate font-medium">{shortAccount(event.host)}</span>
-            </Link>
+            <PersonLink account={event.host} profile={profiles[event.host]} />
           </Section>
           <GoingList
             accounts={guests}

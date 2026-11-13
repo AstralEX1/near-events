@@ -1,5 +1,7 @@
 import type { Profile } from "./profilesShared";
 
+export const PROFILE_SAVED = "nearvent:profile-saved";
+
 /** Profiles for up to 100 accounts in one request; accounts without a profile are left out. */
 export async function getProfiles(accounts: string[]): Promise<Record<string, Profile>> {
   const unique = [...new Set(accounts)];
@@ -18,6 +20,8 @@ export async function saveProfile(profile: Profile, token: string): Promise<Prof
   });
   const json = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(json.error ?? "Could not save your profile");
+  // The header's account button shows the new photo without a reload.
+  window.dispatchEvent(new Event(PROFILE_SAVED));
   return json.profile as Profile;
 }
 

@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@/lib/wallet";
 import { Avatar } from "./ui";
 import { SignInMenu } from "./SignIn";
 import { Icon } from "./EventSections";
 import { Logo } from "./Logo";
 import { AppearancePicker } from "./AppearancePicker";
+import { PROFILE_SAVED, getProfiles } from "@/lib/profilesClient";
+import type { Profile } from "@/lib/profilesShared";
 
 // Lucide paths (ISC).
 const COMPASS = ["M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20", "m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"];
@@ -25,15 +27,24 @@ function NavLabel({ icon, label }: { icon: string[]; label: string }) {
 export function Header() {
   const { accountId, kind, signOut } = useWallet();
   const path = usePathname() || "/";
-  return <HeaderContent accountId={accountId} signOut={signOut} path={path} demo={kind === "demo"} />;
+  const [profile, setProfile] = useState<Profile | null>(null);
+  useEffect(() => {
+    setProfile(null);
+    if (!accountId) return;
+    const load = () => getProfiles([accountId]).then((p) => setProfile(p[accountId] ?? null), () => {});
+    load();
+    window.addEventListener(PROFILE_SAVED, load);
+    return () => window.removeEventListener(PROFILE_SAVED, load);
+  }, [accountId]);
+  return <HeaderContent accountId={accountId} profile={profile} signOut={signOut} path={path} demo={kind === "demo"} />;
 }
 
 export function HeaderPreview({ path = "/e/4", accountId = null }: { path?: string; accountId?: string | null }) {
   return <HeaderContent accountId={accountId} path={path} preview />;
 }
 
-function HeaderContent({ accountId, signOut, path, preview = false, demo = false }: {
-  accountId: string | null; signOut?: () => void; path: string; preview?: boolean; demo?: boolean;
+function HeaderContent({ accountId, profile, signOut, path, preview = false, demo = false }: {
+  accountId: string | null; profile?: Profile | null; signOut?: () => void; path: string; preview?: boolean; demo?: boolean;
 }) {
   const account = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
@@ -67,7 +78,7 @@ function HeaderContent({ accountId, signOut, path, preview = false, demo = false
         <div className="ml-auto sm:ml-0"><AppearancePicker /></div>
         {accountId ? (
           <details ref={account} key={`account:${path}`} className="gc-account" onKeyDown={(event) => { if (event.key === "Escape") event.currentTarget.open = false; }}>
-            <summary aria-label="Your account"><Avatar account={accountId} size={26} /><span className="hidden md:inline">My Profile</span></summary>
+            <summary aria-label="Your account"><Avatar account={accountId} src={profile?.avatar_url} seed={profile?.avatar_seed} size={26} /><span className="hidden md:inline">My Profile</span></summary>
             <div className="gc-account-panel">
               <Link href="/profile"><NavLabel icon={USER} label="My Profile" /></Link>
               {!preview && <button type="button" onClick={signOut}>{demo ? "Exit Demo" : "Sign Out"}</button>}

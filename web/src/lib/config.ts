@@ -29,8 +29,6 @@ export const INTENTS_CONTRACT: string | null =
   process.env.NEXT_PUBLIC_INTENTS_CONTRACT ?? (MAINNET ? "intents.near" : "verifier.tidepool-sandbox.testnet");
 /** Every payment and payout goes through NEAR Intents when a verifier is set. */
 export const HAS_INTENTS = !!INTENTS_CONTRACT;
-/** Live swaps fund the signed-in guest's Intents balance before registration. */
-export const LIVE_EVENT_SWAPS = MAINNET;
 /**
  * NEAR Auth (Google/email) Auth0 client. Testnet can use the shared client from
  * docs.auth.near.org (it only allows http://localhost:3000); mainnet needs our own.

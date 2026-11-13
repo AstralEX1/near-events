@@ -345,7 +345,7 @@ export function RegistrationCard({
           {busy ? stage ?? "Working…" : `${action} · ${price}`}
         </button>
         <p className="text-xs text-muted text-center">
-          Paid through NEAR Intents. No USDC on NEAR? You can use a supported token and network.
+          Paid in USDC on NEAR. No USDC? Top up on near.com.
         </p>
       </div>
     );
