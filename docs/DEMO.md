@@ -3,8 +3,10 @@
 Record on https://www.nearvent.site/demo (same as Sign In → **Try with a demo account**).
 The demo runs in the browser on made-up data (50 demo USDC, a past event with a
 payout, your just-ended event to check in and close, upcoming Deposit / Ticket /
-Free events) and touches no server, relayer or chain. Do not present mainnet payments as live
-until the paid checks in [`DEPLOY.md`](DEPLOY.md#mainnet-release) pass. (Updated 2026-11-11, Claude)
+Free events, and a Regulars-first edition you may join because you came to the last
+one; after you close your event, Create Event offers Regulars first / only; Profile →
+Wallets links a made-up EVM wallet) and touches no server, relayer or chain. Do not present mainnet payments as live
+until the paid checks in [`DEPLOY.md`](DEPLOY.md#mainnet-release) pass. (Updated 2026-11-13, Claude)
 
 | Time | Show | Say |
 |---|---|---|
