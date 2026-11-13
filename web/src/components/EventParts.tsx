@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { formatUsdc, isTicket, type EventView, type GuestView } from "@/lib/near";
+import { bondPerSeatText, formatUsdc, isTicket, windowHours, type EventView, type GuestView } from "@/lib/near";
 import { Avatar, shortAccount } from "./ui";
 import { AccountQr } from "./Qr";
 
@@ -49,7 +49,7 @@ export function RulesBox({ event }: { event: EventView }) {
           </li>
           {event.dao ? (
             <li>
-              After the event the host publishes who came. Guests have 12 hours to dispute it, and a council of 5 decides.
+              After the event the host publishes who came. Guests have {windowHours(event)} hours to dispute it, and a council of 5 decides.
               Then your deposit and share are credited to your Nearvent balance. You can then withdraw.
             </li>
           ) : (
@@ -63,8 +63,8 @@ export function RulesBox({ event }: { event: EventView }) {
           <li>You can’t cancel once you’re registered.</li>
           {event.dao ? (
             <>
-              <li>Registration closes when the event starts. The host’s list counts unless a guest disputes it. Marked absent by mistake? Open a dispute within 12 hours.</li>
-              <li>The host locks a bond of one deposit per seat and loses it if proven wrong. If the host cancels before the start or publishes no list within 3 days, you get your deposit back.</li>
+              <li>Registration closes when the event starts. The host’s list counts unless a guest disputes it. Marked absent by mistake? Open a dispute within {windowHours(event)} hours.</li>
+              <li>The host locks a bond of {bondPerSeatText(event)} and loses it if proven wrong. If the host cancels before the start or publishes no list within 3 days, you get your deposit back.</li>
             </>
           ) : (
             <>

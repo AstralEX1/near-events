@@ -90,11 +90,20 @@ fn treasury() -> AccountId {
     "treasury.testnet".parse().unwrap()
 }
 
-/// `Contract::new` plus `configure_disputes`, as every v3 deployment starts.
+/// The default deadlines (`Rules::new`), as the tests' clock sees them.
+const CHALLENGE_WINDOW_MS: u64 = 12 * ORACLE_HOUR_MS;
+const SUBMIT_DEADLINE_MS: u64 = 72 * ORACLE_HOUR_MS;
+const RESOLVE_GRACE_MS: u64 = 168 * ORACLE_HOUR_MS;
+
+/// The default rules with the test court: one deposit per seat.
+fn court_rules() -> Rules {
+    Rules { dao: Some(dao()), treasury: treasury(), bond_per_seat: 1, ..Rules::new(owner()) }
+}
+
+/// `Contract::new` plus `set_rules` with a court, as a v3 deployment starts.
 fn new_contract(usdc: AccountId, intents: Option<AccountId>, relayer: Option<AccountId>, owner: AccountId) -> Contract {
     let mut c = Contract::new(usdc, intents, relayer, owner);
-    c.dao = Some(dao());
-    c.treasury = treasury();
+    c.rules = court_rules();
     c
 }
 
@@ -1434,8 +1443,9 @@ fn storage_reserves_cover_the_measured_worst_case() {
     let long = |n: u32| -> AccountId { format!("{:064x}", n).parse().unwrap() };
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = new_contract(usdc(), None, None, owner());
-    c.dao = Some(long(7_777));
-    c.treasury = long(8_888);
+    c.rules.dao = Some(long(7_777));
+    c.rules.treasury = long(8_888);
+    c.rules.bond_per_seat = 1;
     c.events.flush();
     let host = long(9_999);
     ctx(&host, NearToken::from_yoctonear(0));
@@ -1594,13 +1604,32 @@ fn migrate_keeps_the_state() {
 /// at block 224210379; `docs/oracle-upgrade/evidence/mainnet-readonly.json`).
 const MAINNET_ROOT: &str = "QAAAADE3MjA4NjI4Zjg0ZjVkNmFkMzNmMGRhM2JiYmViMjdmZmNiMzk4ZWFjNTAxYTMxYmQ2YWQyMDExZTM2MTMzYTEBDAAAAGludGVudHMubmVhcgAAAAABAAAAAAEAAAABAQAAAAIBAAAAAwAAAAAAAAAAAQAAAAUBEgAAAGV2ZW50X3JlbGF5ZXIubmVhcgkAAABsb2xkLm5lYXIAAAEAAAAGAAEAAAAHAQAAAAg=";
 
-/// The mainnet root of the v2 layout does not decode as v3, so an in-place
-/// upgrade of a v2 escrow fails and its own code stays: v3 needs a new account.
+/// The mainnet root (v2 layout, no events) upgrades in place: everything is
+/// kept and the escrow starts with the default rules and no court.
 #[test]
-#[should_panic(expected = "deploy v3 to a new account")]
-fn migrate_refuses_the_v2_mainnet_root() {
+fn migrate_upgrades_the_v2_mainnet_root_in_place() {
     let raw: near_sdk::json_types::Base64VecU8 = serde_json::from_str(&format!("\"{MAINNET_ROOT}\"")).unwrap();
     assert_eq!(raw.0.len(), 176);
+    ctx(&accounts(0), NearToken::from_yoctonear(0));
+    env::storage_write(b"STATE", &raw.0);
+    let c = Contract::migrate();
+    let cfg = c.get_config();
+    assert_eq!(cfg.owner.as_str(), "lold.near");
+    assert_eq!(cfg.relayer.as_ref().map(|a| a.as_str()), Some("event_relayer.near"));
+    assert_eq!(cfg.intents.as_ref().map(|a| a.as_str()), Some("intents.near"));
+    assert_eq!(cfg.rules, Rules::new("lold.near".parse().unwrap()));
+    assert_eq!(cfg.oracle_hour_ms, ORACLE_HOUR_MS);
+    assert_eq!(c.events.len(), 0);
+}
+
+/// v2 `Event` records do not decode as v3: an old escrow with events refuses the upgrade.
+#[test]
+#[should_panic(expected = "Events exist")]
+fn migrate_refuses_a_v2_root_with_events() {
+    let mut raw: near_sdk::json_types::Base64VecU8 = serde_json::from_str(&format!("\"{MAINNET_ROOT}\"")).unwrap();
+    // `events` is the third field: usdc (4 + 64), intents (1 + 4 + 12), then the Vector's length.
+    let at = 4 + 64 + 1 + 4 + 12;
+    raw.0[at..at + 4].copy_from_slice(&1u32.to_le_bytes());
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     env::storage_write(b"STATE", &raw.0);
     Contract::migrate();
@@ -1615,7 +1644,7 @@ fn migrate_keeps_a_v3_escrow_with_events() {
     env::state_write(&c);
     let migrated = Contract::migrate();
     assert_eq!(migrated.get_event(id).unwrap().guest_count, 1);
-    assert_eq!(migrated.get_config().dao, Some(dao()));
+    assert_eq!(migrated.get_config().rules, court_rules());
 }
 
 // --------------------------------------------------------- access rules
@@ -2280,7 +2309,7 @@ fn host_bond_rules() {
         raw_pay_at(&mut c, &accounts(0), H, &bond_msg(id), 1_000_000);
         raw_pay_at(&mut c, &accounts(0), H, &bond_msg(id), 1_000_000);
     }, "already paid");
-    rejects(|| { let (mut c, id) = setup_tickets(10); raw_pay_at(&mut c, &accounts(0), H, &bond_msg(id), 1_000_000); }, "Only Deposit events");
+    rejects(|| { let (mut c, id) = setup_tickets(10); raw_pay_at(&mut c, &accounts(0), H, &bond_msg(id), 1_000_000); }, "takes no host bond");
     rejects(|| { let (mut c, id) = setup(10); raw_pay_at(&mut c, &accounts(0), H, &bond_msg(id), meta().starts_at); }, "Registration has closed");
     rejects(|| { let (mut c, _) = setup(10); raw_pay_at(&mut c, &accounts(0), H, &bond_msg(9), 1_000_000); }, "Event not found");
 }
@@ -2297,44 +2326,84 @@ fn host_cannot_take_a_seat() {
     assert_eq!(pay(&mut c, &accounts(0), TICKET, &format!(r#"{{"action":"register","event_id":{id}}}"#)), TICKET);
 }
 
+/// Without a court (the default after `new` or an upgrade) a Deposit event works as
+/// before v3: no bond, the host's list pays out when published.
 #[test]
-fn deposit_events_need_the_dispute_dao() {
+fn without_a_court_the_list_is_final_at_publish() {
+    ctx(&accounts(0), NearToken::from_yoctonear(0));
+    let mut c = Contract::new(usdc(), None, None, owner());
+    let id = c.create_event(meta(), U128(D), 10, None, None);
+    let e = c.get_event(id).unwrap();
+    assert_eq!((e.dao, e.bond_due.0, e.registration_ends_at), (None, 0, meta().starts_at));
+    let reg = format!(r#"{{"action":"register","event_id":{id}}}"#);
+    for g in [accounts(2), accounts(3)] {
+        assert_eq!(raw_pay_at(&mut c, &g, D, &reg, 1_000_000), 0, "no bond needed");
+    }
     rejects(|| {
         ctx(&accounts(0), NearToken::from_yoctonear(0));
         let mut c = Contract::new(usdc(), None, None, owner());
-        c.create_event(meta(), U128(D), 10, None, None);
-    }, "no dispute DAO");
-    // Ticket events do not need one.
-    ctx(&accounts(0), NearToken::from_yoctonear(0));
-    let mut c = Contract::new(usdc(), None, None, owner());
-    let id = c.create_event(meta(), U128(D), 10, Some(EventMode::Ticket), None);
-    assert_eq!(c.get_event(id).unwrap().dao, None);
+        let id = c.create_event(meta(), U128(D), 10, None, None);
+        raw_pay_at(&mut c, &accounts(0), D, &bond_msg(id), 1_000_000);
+    }, "takes no host bond");
+    ctx_ended(&accounts(0));
+    c.finalize(id, vec![accounts(2)]);
+    let e = c.get_event(id).unwrap();
+    assert_eq!(e.status, EventStatus::Finalized);
+    assert_eq!(c.balance_of(accounts(2)).0, 2 * D);
+    assert_eq!(c.balance_of(accounts(3)).0, 0);
+    // Abandoned without a court: everyone is refunded at once, nobody can dispute.
+    ctx(&accounts(1), NearToken::from_yoctonear(0));
+    let id = c.create_event(meta(), U128(D), 10, None, None);
+    raw_pay_at(&mut c, &accounts(2), D, &format!(r#"{{"action":"register","event_id":{id}}}"#), 1_000_000);
+    ctx_at(&accounts(5), NearToken::from_yoctonear(0), (meta().ends_at + SUBMIT_DEADLINE_MS + 1) * 1_000_000);
+    c.refund(id);
+    assert_eq!(c.get_event(id).unwrap().status, EventStatus::Finalized);
+    assert_eq!(c.balance_of(accounts(2)).0, 2 * D + D);
 }
 
 #[test]
-fn configure_disputes_is_for_the_owner_and_future_events() {
+fn set_rules_is_for_the_owner_and_future_events() {
     let (mut c, old) = setup(10);
     let other: AccountId = "new-court.sputnik-dao.testnet".parse().unwrap();
+    let new_rules = Rules { dao: Some(other.clone()), treasury: accounts(1), bond_per_seat: 2, challenge_hours: 24, ..court_rules() };
     ctx(&owner(), one_yocto());
-    c.configure_disputes(Some(other.clone()), accounts(1));
-    let cfg = c.get_config();
-    assert_eq!((cfg.dao, cfg.treasury), (Some(other.clone()), accounts(1)));
+    c.set_rules(new_rules.clone());
+    assert_eq!(c.get_config().rules, new_rules);
     ctx(&accounts(0), NearToken::from_near(1));
     let new = c.create_event(meta(), U128(D), 10, None, None);
-    assert_eq!(c.get_event(old).unwrap().dao, Some(dao()), "a running event keeps its DAO");
-    assert_eq!(c.get_event(old).unwrap().treasury, Some(treasury()), "and its treasury");
-    assert_eq!(c.get_event(new).unwrap().dao, Some(other));
-    assert_eq!(c.get_event(new).unwrap().treasury, Some(accounts(1)));
-    rejects(|| { let (mut c, _) = setup(10); ctx(&accounts(1), one_yocto()); c.configure_disputes(None, accounts(1)); }, "Only the owner");
-    rejects(|| { let (mut c, _) = setup(10); ctx(&owner(), NearToken::from_yoctonear(0)); c.configure_disputes(None, accounts(1)); }, "1 yoctoNEAR");
-    // `None` pauses Deposit events.
-    rejects(|| {
-        let (mut c, _) = setup(10);
-        ctx(&owner(), one_yocto());
-        c.configure_disputes(None, owner());
-        ctx(&accounts(0), NearToken::from_near(1));
-        c.create_event(meta(), U128(D), 10, None, None);
-    }, "no dispute DAO");
+    let (o, n) = (c.get_event(old).unwrap(), c.get_event(new).unwrap());
+    assert_eq!((o.dao, o.treasury, o.bond_due.0), (Some(dao()), Some(treasury()), 10 * D), "a running event keeps its rules");
+    assert_eq!((n.dao, n.treasury, n.bond_due.0), (Some(other), Some(accounts(1)), 20 * D));
+    assert_eq!(n.rules.challenge_hours, 24);
+    // Tickets never get a court or a bond.
+    let t = c.create_event(meta(), U128(D), 10, Some(EventMode::Ticket), None);
+    assert_eq!((c.get_event(t).unwrap().dao, c.get_event(t).unwrap().bond_due.0), (None, 0));
+    rejects(|| { let (mut c, _) = setup(10); ctx(&accounts(1), one_yocto()); c.set_rules(court_rules()); }, "Only the owner");
+    rejects(|| { let (mut c, _) = setup(10); ctx(&owner(), NearToken::from_yoctonear(0)); c.set_rules(court_rules()); }, "1 yoctoNEAR");
+}
+
+/// Combinations that would reopen a hole are refused in one place (`Rules::check`).
+#[test]
+fn set_rules_refuses_unsafe_combinations() {
+    let bad = [
+        (Rules { bond_per_seat: 0, ..court_rules() }, "needs a host bond"),
+        (Rules { dao: None, ..court_rules() }, "needs a host bond"),
+        (Rules { close_at_start: false, ..court_rules() }, "close at the start"),
+        (Rules { treasury: dao(), ..court_rules() }, "court cannot receive"),
+        (Rules { bond_per_seat: 11, ..court_rules() }, "out of range"),
+        (Rules { challenge_hours: 0, ..court_rules() }, "out of range"),
+        (Rules { challenge_hours: 169, ..court_rules() }, "out of range"),
+        (Rules { submit_hours: 0, ..court_rules() }, "out of range"),
+        (Rules { resolve_hours: 0, ..court_rules() }, "out of range"),
+        (Rules { resolve_hours: 721, ..court_rules() }, "out of range"),
+    ];
+    for (rules, msg) in bad {
+        rejects(move || { let (mut c, _) = setup(10); ctx(&owner(), one_yocto()); c.set_rules(rules); }, msg);
+    }
+    // Without a court the host is trusted as before v3, and registration may run to the end.
+    let (mut c, _) = setup(10);
+    ctx(&owner(), one_yocto());
+    c.set_rules(Rules { close_at_start: false, ..Rules::new(owner()) });
 }
 
 #[test]
@@ -2566,7 +2635,7 @@ fn resolve_rules() {
         dispute_at(&mut c, id, &accounts(4), &accounts(4), true, now());
         let other: AccountId = "new-court.sputnik-dao.testnet".parse().unwrap();
         ctx(&owner(), one_yocto());
-        c.configure_disputes(Some(other.clone()), treasury());
+        c.set_rules(Rules { dao: Some(other.clone()), ..court_rules() });
         ctx_ended(&other);
         c.resolve_dispute(id, accounts(4), true);
     }, "Only this event's DAO");
@@ -2769,7 +2838,7 @@ fn every_seat_disputed_releases_all_reservations() {
 #[test]
 fn paid_event_refunds_unused_dispute_space() {
     let mut c = fresh(true);
-    c.dao = Some(dao());
+    c.rules = court_rules();
     let cost = c.create_event_cost(accounts(0), 60, None).0;
     ctx(&accounts(0), NearToken::from_yoctonear(cost));
     let id = c.create_event(meta(), U128(D), 60, None, None);
@@ -2980,7 +3049,7 @@ fn the_court_cannot_host_or_take_the_treasury() {
     rejects(|| {
         let (mut c, _) = setup(10);
         ctx(&owner(), one_yocto());
-        c.configure_disputes(Some(dao()), dao());
+        c.set_rules(Rules { treasury: dao(), ..court_rules() });
     }, "court cannot receive");
     // A DAO may still sell tickets.
     ctx(&dao(), NearToken::from_near(1));
@@ -2993,7 +3062,8 @@ fn the_deposit_bound_keeps_every_split_in_u128() {
     // The largest product: 300 dismissed bonds × CHALLENGER_TREASURY_BPS.
     let d = u128::MAX / 1_000_000_000;
     assert!((d * 300).checked_mul(CHALLENGER_TREASURY_BPS).is_some());
-    assert!((d * u128::from(MAX_CAPACITY) * HOST_BOND_PER_SEAT).checked_mul(HOST_TREASURY_BPS).is_some());
+    // The largest bond: 10 deposits per seat (the `Rules` limit) × 300 seats.
+    assert!((d * u128::from(MAX_CAPACITY) * 10).checked_mul(HOST_TREASURY_BPS).is_some());
     assert!(d.checked_mul(u128::from(MAX_CAPACITY)).is_some());
     rejects(|| {
         ctx(&accounts(0), NearToken::from_near(1));
@@ -3008,7 +3078,7 @@ fn the_deposit_bound_keeps_every_split_in_u128() {
 fn a_running_event_keeps_its_treasury() {
     let (mut c, id) = g3();
     ctx(&owner(), one_yocto());
-    c.configure_disputes(Some(dao()), accounts(0));
+    c.set_rules(Rules { treasury: accounts(0), ..court_rules() });
     verdict(&mut c, id, &accounts(4), true);
     settle_after_window(&mut c, id);
     assert_eq!(c.balance_of(treasury()).0, H / 2);

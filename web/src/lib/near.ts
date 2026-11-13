@@ -40,8 +40,10 @@ export interface EventView {
   treasury?: string | null;
   /** USDC locked by the host; registration opens once it equals `bond_due`. */
   host_bond?: string;
-  /** The bond this event needs: one deposit per seat (v3); 0 for Ticket. */
+  /** The bond this event needs: `rules.bond_per_seat` deposits per seat (v3); 0 for Ticket or without a court. */
   bond_due?: string;
+  /** The owner's rules copied when the event was created (v3). */
+  rules?: { dao: string | null; treasury: string; bond_per_seat: number; close_at_start: boolean; challenge_hours: number; submit_hours: number; resolve_hours: number };
   /** Registration closes at this time: `starts_at` for Deposit (v3), `ends_at` for Ticket. */
   registration_ends_at?: number;
   /** When the host published the list; 0 before. */
@@ -82,6 +84,13 @@ export interface DisputeView {
 
 /** Mirrors the escrow (v3). */
 export const hostBondFor = (e: { bond_due?: string }) => e.bond_due ?? "0";
+/** How long guests may dispute the published list (v3 rules; 12 h by default). */
+export const windowHours = (e: Pick<EventView, "rules">) => e.rules?.challenge_hours ?? 12;
+/** "one deposit per seat" / "2 deposits per seat". */
+export const bondPerSeatText = (e: Pick<EventView, "rules">) => {
+  const n = e.rules?.bond_per_seat ?? 1;
+  return n === 1 ? "one deposit per seat" : `${n} deposits per seat`;
+};
 /** Older escrows take guests until the end. */
 export const registrationEndsAt = (e: Pick<EventView, "registration_ends_at" | "metadata">) => e.registration_ends_at ?? e.metadata.ends_at;
 /** Deposit events that still need the host bond before guests can register. */

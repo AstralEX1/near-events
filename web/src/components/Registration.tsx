@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { events, formatUsdc, hostBondFor, needsBond, registrationEndsAt, usdc, type EventView, type GuestStatus, isTicket } from "@/lib/near";
+import { events, formatUsdc, hostBondFor, needsBond, registrationEndsAt, usdc, windowHours, bondPerSeatText, type EventView, type GuestStatus, isTicket } from "@/lib/near";
 import { EVENTS_CONTRACT, HAS_FAUCET, TEST_EVM_FAUCET_LIMIT, USDC_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
@@ -357,8 +357,8 @@ export function RegistrationCard({
         )}
       {open && (
         <div className="space-y-1.5 text-sm text-muted leading-relaxed">
-          {explain && <p>{ticket ? "A paid ticket. The money goes to the host when you register; tickets are not refunded." : "Get checked in and receive your deposit plus a share of no-shows once the host’s list has stood for 12 hours. Miss it, and your deposit goes to the guests who came. Marked absent by mistake? Dispute it."}</p>}
-          <DepositRulesTooltip ticket={ticket} amount={price} oracle={!!event.dao} />
+          {explain && <p>{ticket ? "A paid ticket. The money goes to the host when you register; tickets are not refunded." : event.dao ? `Get checked in and receive your deposit plus a share of no-shows once the host’s list has stood for ${windowHours(event)} hours. Miss it, and your deposit goes to the guests who came. Marked absent by mistake? Dispute it.` : "Get checked in and receive your deposit plus a share of no-shows when the host closes the event. Miss it, and your deposit goes to the guests who came."}</p>}
+          <DepositRulesTooltip ticket={ticket} amount={price} oracle={!!event.dao} hours={windowHours(event)} perSeat={bondPerSeatText(event)} />
         </div>
       )}
     </div>

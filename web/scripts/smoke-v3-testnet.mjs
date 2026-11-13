@@ -22,6 +22,8 @@ const OWNER = n("atia-nv1109");
 const COUNCIL = ["steve-nv1109", "chawki-nv1109", "jacqueline-nv1109", "tp6guest1-nv1110", "tp6host-nv1110"].map(n);
 const BOT = n("relayer-nearevents-11022103");
 const [HOST_A, HOST_B] = [n("yusak-nv1109"), n("alexandre-nv1109")];
+/** The default rules with the rehearsal court. */
+const COURT_RULES = { dao: DAO, treasury: OWNER, bond_per_seat: 1, close_at_start: true, challenge_hours: 12, submit_hours: 72, resolve_hours: 168 };
 const [STAN, HEBERT, G2] = [n("stan-nv1109"), n("hebert-nv1109"), n("tp6guest2-nv1110")];
 
 const provider = new JsonRpcProvider({ url: "https://test.rpc.fastnear.com" });
@@ -99,7 +101,7 @@ const steps = {
     assert.equal(await vote("auto-update off", pid, "VoteApprove", COUNCIL.slice(0, 3)), "Approved");
     const info = await view(DAO, "get_factory_info");
     assert.equal(info.auto_update, false);
-    await tx("configure_disputes", OWNER, ESCROW, "configure_disputes", { dao: DAO, treasury: OWNER }, { deposit: 1n });
+    await tx("set_rules (court)", OWNER, ESCROW, "set_rules", { rules: COURT_RULES }, { deposit: 1n });
     console.log("config", await view(ESCROW, "get_config"));
   },
 
@@ -214,7 +216,7 @@ const steps = {
 // empty list, a guest who came proves it, the council agrees, settle.
 const HOST_X = HEBERT;
 steps.abandon = async () => {
-  if (!(await view(ESCROW, "get_config")).dao) await tx("configure_disputes", OWNER, ESCROW, "configure_disputes", { dao: DAO, treasury: OWNER }, { deposit: 1n });
+  if (!(await view(ESCROW, "get_config")).rules?.dao) await tx("set_rules (court)", OWNER, ESCROW, "set_rules", { rules: COURT_RULES }, { deposit: 1n });
   const now = Date.now();
   const out = await tx("create X (abandoned, then proven)", HOST_X, ESCROW, "create_event", { metadata: { title: "v3 rehearsal X", starts_at: now + 60_000, ends_at: now + 180_000 }, deposit: D.toString(), capacity: 10 });
   state.X = JSON.parse(Buffer.from(out.status.SuccessValue, "base64").toString());

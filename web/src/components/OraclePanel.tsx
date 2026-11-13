@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { events, formatUsdc, hostBondFor, isTicket, needsBond, registrationEndsAt, usdc, type DisputeView, type EventView, type GuestView } from "@/lib/near";
+import { bondPerSeatText, events, formatUsdc, hostBondFor, isTicket, needsBond, registrationEndsAt, usdc, windowHours, type DisputeView, type EventView, type GuestView } from "@/lib/near";
 import { EVENTS_CONTRACT, EXPLORER_URL, USDC_CONTRACT } from "@/lib/config";
 import { useWallet, type Call } from "@/lib/wallet";
 import { bondFromIntents, disputeFromIntents } from "@/lib/intents";
@@ -143,7 +143,7 @@ export function OraclePanel({ event, guests, hostTeam, onChange }: {
     body = isHost ? (
       <div className="space-y-2">
         <p className="text-sm">
-          Lock a host bond of <b>{formatUsdc(bond)} USDC</b> (one deposit per seat) to open registration before the
+          Lock a host bond of <b>{formatUsdc(bond)} USDC</b> ({bondPerSeatText(event)}) to open registration before the
           event starts. You get it back after the event, unless a guest proves your list wrong to the council.
         </p>
         {kind === "email" ? (
@@ -166,14 +166,14 @@ export function OraclePanel({ event, guests, hostTeam, onChange }: {
       <div className="space-y-2">
         <p className="text-sm">
           The host did not publish who came by {when(event.submit_by!)}, so the host bond is lost. Anyone can start the
-          refund: it publishes an empty list, and for 12 hours guests who came can still prove it. Everyone else gets the
+          refund: it publishes an empty list, and for {windowHours(event)} hours guests who came can still prove it. Everyone else gets the
           deposit back with a share of the bond.
         </p>
         <button className="btn btn-accent" disabled={!!busy} onClick={() => settleNow("refund")}>{busy === "refund" ? "Starting…" : "Start the refund"}</button>
       </div>
     ) : (
       <p className="text-sm text-muted">
-        {isHost ? "Publish who came from Manage" : "The host publishes who came"} by {when(event.submit_by!)}. Then guests have 12 hours to dispute it.
+        {isHost ? "Publish who came from Manage" : "The host publishes who came"} by {when(event.submit_by!)}. Then guests have {windowHours(event)} hours to dispute it.
       </p>
     );
   } else if (event.status === "Submitted" || filed > 0) {

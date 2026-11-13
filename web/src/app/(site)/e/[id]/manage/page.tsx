@@ -4,7 +4,7 @@ import { SlCopy, confirmAction } from "@/components/SlUi";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
-import { events, formatUsdc, isTicket, type EventView, type GuestView } from "@/lib/near";
+import { events, formatUsdc, isTicket, windowHours, type EventView, type GuestView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { checkIns } from "@/lib/checkinsClient";
 import { useWallet } from "@/lib/wallet";
@@ -254,11 +254,15 @@ function ManageEvent() {
       if (currentGuests.length !== fresh.guest_count) throw new Error("Guest list changed. Try closing the event again.");
       const attended = currentGuests.filter((g) => marks[g.account_id]).map((g) => g.account_id);
       const currentPool = BigInt(fresh.total_pool);
+      // With a court the list waits out the dispute window; without one it pays out now.
+      const after = fresh.dao
+        ? `Guests can dispute any record for ${windowHours(fresh)} hours; the council decides. A record they prove wrong costs you your whole bond. Then anyone settles the payouts.`
+        : "Payouts go out now.";
       const confirmation = ticket
         ? `Close the event?\n\n${fresh.guest_count} tickets · ${formatUsdc(currentPool)} USDC is already in your balance.\n\nThis cannot be undone.`
         : attended.length === 0
-          ? "Publish the list with nobody checked in?\n\nGuests can dispute it for 12 hours. If nobody came, every deposit goes back to its guest.\n\nThis cannot be undone."
-          : `Publish who came?\n\n${attended.length} of ${fresh.guest_count} checked in.\nPool: ${formatUsdc(currentPool)} USDC, ${formatUsdc(currentPool / BigInt(attended.length))} USDC each if nobody disputes.\n\nGuests can dispute any record for 12 hours; the council decides. A record they prove wrong costs you your whole bond. Then anyone settles the payouts.\n\nThis cannot be undone.`;
+          ? `Publish the list with nobody checked in?\n\nIf nobody came, every deposit goes back to its guest. ${after}\n\nThis cannot be undone.`
+          : `Publish who came?\n\n${attended.length} of ${fresh.guest_count} checked in.\nPool: ${formatUsdc(currentPool)} USDC, ${formatUsdc(currentPool / BigInt(attended.length))} USDC each${fresh.dao ? " if nobody disputes" : ""}.\n\n${after}\n\nThis cannot be undone.`;
       await run("finalize", { event_id: id, attended }, confirmation);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

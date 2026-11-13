@@ -169,10 +169,16 @@ async fn new_escrow(worker: &Worker<Sandbox>, usdc: &Contract, payer: &Account) 
     Ok((events, owner, dao))
 }
 
+/// The default rules with a court: one deposit per seat, 12 h window, 72 h to publish, 7 days for the court.
+fn court_rules(dao: &AccountId, treasury: &AccountId) -> Value {
+    json!({ "dao": dao, "treasury": treasury, "bond_per_seat": 1, "close_at_start": true,
+            "challenge_hours": 12, "submit_hours": 72, "resolve_hours": 168 })
+}
+
 /// The treasury is the owner in these tests.
 async fn configure(owner: &Account, events: &Contract, dao: &AccountId) -> anyhow::Result<()> {
-    owner.call(events.id(), "configure_disputes")
-        .args_json(json!({ "dao": dao, "treasury": owner.id() }))
+    owner.call(events.id(), "set_rules")
+        .args_json(json!({ "rules": court_rules(dao, owner.id()) }))
         .deposit(yocto(1))
         .transact().await?.into_result()?;
     Ok(())
@@ -324,12 +330,20 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
             }))
             .transact()
     };
-    expect_reject(&create(&host, "Too early", start, start + 600_000, 10).await?, "no dispute DAO");
-    let stranger_config = stranger.call(events.id(), "configure_disputes")
-        .args_json(json!({ "dao": stranger.id(), "treasury": stranger.id() }))
+    // Before the owner names a court, a Deposit event takes no bond (the host's list is final).
+    let early: u64 = create(&stranger, "No court yet", start + 300_000, start + 600_000, 10).await?.json()?;
+    let early = event_view(&events, early).await?;
+    assert_eq!((early["dao"].clone(), early["bond_due"].clone()), (Value::Null, json!("0")));
+    let stranger_config = stranger.call(events.id(), "set_rules")
+        .args_json(json!({ "rules": court_rules(stranger.id(), helper.id()) }))
         .deposit(yocto(1))
         .transact().await?;
     expect_reject(&stranger_config, "Only the owner");
+    // A court with no bond would reopen audit E-2: refused.
+    let mut no_bond = court_rules(dao.id(), owner.id());
+    no_bond["bond_per_seat"] = json!(0);
+    let unsafe_rules = owner.call(events.id(), "set_rules").args_json(json!({ "rules": no_bond })).deposit(yocto(1)).transact().await?;
+    expect_reject(&unsafe_rules, "needs a host bond");
     configure(&owner, &events, dao.id()).await?;
 
     let now_ms = now_ms(&worker).await?;
@@ -775,8 +789,8 @@ async fn sandbox_upgrade_and_freeze() -> anyhow::Result<()> {
     assert!(kept, "state did not survive the upgrade");
     assert_eq!(event_view(&events, 0).await?["metadata"]["title"], "Before upgrade", "the event did not survive");
     let config: Value = events.view("get_config").await?.json()?;
-    assert_eq!(config["dao"], stranger.id().as_str());
-    assert_eq!(config["challenge_window_ms"], WINDOW_MS);
+    assert_eq!(config["rules"]["dao"], stranger.id().as_str());
+    assert_eq!(config["oracle_hour_ms"], HOUR_MS);
 
     // Not a contract: the batch fails and the old code keeps working.
     let broken = upgrade(&owner, events.id(), b"not a wasm module".to_vec()).await?;
@@ -789,18 +803,37 @@ async fn sandbox_upgrade_and_freeze() -> anyhow::Result<()> {
     assert_eq!(config["frozen"], true);
     expect_reject(&upgrade(&owner, events.id(), events_wasm.to_vec()).await?, "The code is frozen");
 
-    // v3 is not an in-place upgrade of the v2 escrow: its migrate refuses the
-    // old root and the deploy in the same receipt is rolled back.
+    // The mainnet escrow (v2 code, no events) upgrades in place: one receipt
+    // deploys v3 and runs migrate. With an event the old records would not
+    // decode, so migrate panics and the deploy is rolled back.
     if let Some(v2) = fixture("V2_ESCROW_WASM") {
-        let old = worker.dev_deploy(&v2).await?;
-        old.call("new")
-            .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null, "owner": owner.id() }))
+        let deploy_v2 = || async {
+            let old = worker.dev_deploy(&v2).await?;
+            old.call("new")
+                .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null, "owner": owner.id() }))
+                .transact().await?.into_result()?;
+            anyhow::Ok(old)
+        };
+        let busy = deploy_v2().await?;
+        let now = now_ms(&worker).await?;
+        busy.as_account().call(busy.id(), "create_event")
+            .args_json(json!({ "metadata": { "title": "Old event", "starts_at": now + 60_000, "ends_at": now + 120_000 }, "deposit": "1000000", "capacity": 10 }))
             .transact().await?.into_result()?;
-        expect_reject(&upgrade(&owner, old.id(), events_wasm.to_vec()).await?, "deploy v3 to a new account");
-        let count: u32 = old.view("get_attended_count").args_json(json!({ "account_id": host.id() })).await?.json()?;
+        expect_reject(&upgrade(&owner, busy.id(), events_wasm.to_vec()).await?, "Events exist");
+        let count: u32 = busy.view("get_attended_count").args_json(json!({ "account_id": host.id() })).await?.json()?;
         assert_eq!(count, 0, "the v2 code is still there");
+
+        let empty = deploy_v2().await?;
+        upgrade(&owner, empty.id(), events_wasm.to_vec()).await?.into_result()?;
+        let config: Value = empty.view("get_config").await?.json()?;
+        assert_eq!(config["owner"], owner.id().as_str());
+        assert_eq!(config["rules"]["dao"], Value::Null, "no court until the owner names one");
+        assert_eq!(config["rules"]["bond_per_seat"], 0);
+        configure(&owner, &empty, stranger.id()).await?;
+        let config: Value = empty.view("get_config").await?.json()?;
+        assert_eq!(config["rules"]["bond_per_seat"], 1);
     } else {
-        eprintln!("V2_ESCROW_WASM not set: skipped the v2 -> v3 refusal");
+        eprintln!("V2_ESCROW_WASM not set: skipped the v2 -> v3 in-place upgrade");
     }
     Ok(())
 }

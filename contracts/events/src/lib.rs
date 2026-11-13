@@ -11,18 +11,21 @@
 //! oracle (see "Deposit events" below). The amount a guest pays lives in
 //! `deposit` in both modes.
 //!
-//! Deposit events:
-//! 1. The host (or anyone for them) locks a bond of one deposit per seat
-//!    (`HOST_BOND_PER_SEAT` × deposit × capacity, `host_bond` message). Registration
-//!    opens only after that and closes at `starts_at`, and the host can never take a seat.
+//! Deposit events follow the `Rules` the owner set when they were created
+//! (`set_rules`; defaults: bond 1 deposit per seat, window 12 h, publish 72 h,
+//! court 7 days). Without a court (`rules.dao = None`) there is no bond and no
+//! dispute: the host's list pays out when published. With one:
+//! 1. The host (or anyone for them) locks a bond of `bond_per_seat` deposits per
+//!    seat (`host_bond` message). Registration opens only after that and closes
+//!    at `starts_at`, and the host can never take a seat.
 //! 2. After `ends_at` the host publishes who came (`finalize`, within
-//!    `SUBMIT_DEADLINE_MS`). Nothing is paid yet: the event is `Submitted`.
-//! 3. For `CHALLENGE_WINDOW_MS` any guest may dispute one record by locking a
+//!    `submit_hours`). Nothing is paid yet: the event is `Submitted`.
+//! 3. For `challenge_hours` any guest may dispute one record by locking a
 //!    bond equal to the deposit (`dispute` message): "I came" only for oneself,
 //!    "X did not come" only about another guest. One dispute per record.
 //! 4. The event's DAO (a Sputnik DAO whose council votes on proposals) calls
 //!    `resolve_dispute` itself. A dispute it does not decide within
-//!    `RESOLVE_GRACE_MS` after the window expires: the host's record stands and
+//!    `resolve_hours` after the window expires: the host's record stands and
 //!    the challenger gets the bond back.
 //! 5. Anyone calls `settle` once the window is over and no dispute is waiting.
 //!    Money (all on internal balances): the pool is split by the final list;
@@ -63,7 +66,7 @@
 //! The owner can replace the code (`upgrade`) until `freeze`, which is one-way.
 //! The escrow account keeps no access keys, so after `freeze` nobody can
 //! change the code. The owner also runs both host lists (whitelist, sponsored)
-//! and picks the DAO and treasury for future events (`configure_disputes`).
+//! and sets the `Rules` for future events (`set_rules`).
 //!
 //! Access rule (optional, set at creation): only guests with a history at the
 //! same host's earlier finalized events may register — at least `min_attended`
@@ -124,19 +127,10 @@ pub const MAX_CAPACITY: u32 = 300;
 /// Ticket events: after `ends_at` + this grace period, anyone can `cancel` an unclosed event.
 pub const ABANDON_GRACE_MS: u64 = 30 * DAY_MS;
 
-/// Deposit events: the host bond is this many deposits per seat (bond = deposit × capacity × this),
-/// so a host whose list is proven wrong loses more than lying about every seat could win.
-pub const HOST_BOND_PER_SEAT: u128 = 1;
-/// One hour of the oracle's deadlines. Testnet rehearsal builds
+/// One hour of the oracle's deadlines (`Rules`). Testnet rehearsal builds
 /// (`--features short-windows`, refused outside testnet and sandbox) make it
 /// 10 seconds, so a whole dispute cycle fits in minutes.
-const ORACLE_HOUR_MS: u64 = if cfg!(feature = "short-windows") { 10_000 } else { HOUR_MS };
-/// Disputes are accepted for this long after the host publishes the list.
-pub const CHALLENGE_WINDOW_MS: u64 = 12 * ORACLE_HOUR_MS;
-/// The host must publish the list within this time after `ends_at`.
-pub const SUBMIT_DEADLINE_MS: u64 = 72 * ORACLE_HOUR_MS;
-/// The DAO decides within this time after the window; later, open disputes expire.
-pub const RESOLVE_GRACE_MS: u64 = 7 * 24 * ORACLE_HOUR_MS;
+pub const ORACLE_HOUR_MS: u64 = if cfg!(feature = "short-windows") { 10_000 } else { HOUR_MS };
 /// Share of a lost host bond that goes to the treasury (the rest to the winners).
 /// 5000 keeps a lying host from winning its own bond back through a sock-puppet dispute.
 pub const HOST_TREASURY_BPS: u128 = 5_000;
@@ -215,6 +209,50 @@ pub struct EventMetadata {
     pub ends_at: u64,
 }
 
+/// The owner's settings (`set_rules`). Each event copies them when it is
+/// created, so a change applies to new events only.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Rules {
+    /// The court that decides disputes. `None`: no host bond and no disputes;
+    /// the host's list is final when published (as before v3).
+    pub dao: Option<AccountId>,
+    /// Receives the treasury share of lost bonds.
+    pub treasury: AccountId,
+    /// Host bond in deposits per seat (bond = deposit × capacity × this); 1–10 with a court, 0 without.
+    pub bond_per_seat: u8,
+    /// Deposit events stop taking guests at `starts_at` instead of `ends_at`. Required with a court.
+    pub close_at_start: bool,
+    /// Disputes are accepted for this many hours after the list is published.
+    pub challenge_hours: u16,
+    /// The host publishes the list within this many hours after `ends_at`.
+    pub submit_hours: u16,
+    /// The court decides within this many hours after the window; later, open disputes expire.
+    pub resolve_hours: u16,
+}
+
+impl Rules {
+    /// No court until the owner names one.
+    fn new(treasury: AccountId) -> Self {
+        Rules { dao: None, treasury, bond_per_seat: 0, close_at_start: true, challenge_hours: 12, submit_hours: 72, resolve_hours: 168 }
+    }
+
+    /// Refuses settings that reopen a hole the court closes (audit E-2, E-H1) or overflow.
+    fn check(&self) {
+        let court = self.dao.is_some();
+        require!(court == (self.bond_per_seat > 0), "A court needs a host bond, and a bond needs a court");
+        require!(self.dao.as_ref() != Some(&self.treasury), "The court cannot receive the lost bonds it decides");
+        require!(!court || self.close_at_start, "With a court, registration must close at the start");
+        require!(
+            self.bond_per_seat <= 10
+                && (1..=168).contains(&self.challenge_hours)
+                && (1..=720).contains(&self.submit_hours)
+                && (1..=720).contains(&self.resolve_hours),
+            "Rules out of range: bond 0-10 deposits per seat, window 1-168 h, publish and court 1-720 h"
+        );
+    }
+}
+
 #[near(serializers = [borsh])]
 pub struct Event {
     pub host: AccountId,
@@ -235,10 +273,8 @@ pub struct Event {
     storage_paid: u128,
     /// Who may register; `None` lets everyone in.
     pub access: Option<AccessRule>,
-    /// Deposit: the DAO that decides this event's disputes, fixed at creation.
-    pub dao: Option<AccountId>,
-    /// Deposit: who receives the treasury share of this event's lost bonds, fixed at creation.
-    pub treasury: Option<AccountId>,
+    /// The owner's `Rules` when the event was created (Ticket: no court, no bond).
+    pub rules: Rules,
     /// Deposit: USDC locked by the host; 0 until the `host_bond` message.
     pub host_bond: u128,
     /// Deposit: when the host published the list; 0 before.
@@ -291,8 +327,10 @@ pub struct EventView {
     pub created_at: u64,
     pub closed_at: u64,
     pub access: Option<AccessRule>,
+    /// The court of this event (`rules.dao`); `None`: the host's list is final.
     pub dao: Option<AccountId>,
     pub treasury: Option<AccountId>,
+    pub rules: Rules,
     /// Locked host bond; 0 until paid. Registration opens once it equals `bond_due`.
     pub host_bond: U128,
     /// The bond this event needs: deposit × capacity (one deposit per seat); 0 for Ticket.
@@ -367,12 +405,10 @@ pub struct ConfigView {
     pub whitelist_mode: bool,
     /// On: only sponsored hosts get the free tier.
     pub sponsored_mode: bool,
-    /// The DAO new Deposit events get; `None`: Deposit events cannot be created.
-    pub dao: Option<AccountId>,
-    /// Receives the treasury share of lost bonds.
-    pub treasury: AccountId,
-    /// 43 200 000 (12 h) in a release build; less only in a testnet rehearsal build.
-    pub challenge_window_ms: u64,
+    /// What new events copy.
+    pub rules: Rules,
+    /// 3 600 000 (1 h) in a release build; 10 000 only in a testnet rehearsal build.
+    pub oracle_hour_ms: u64,
 }
 
 /// `msg` accepted by `ft_on_transfer`.
@@ -461,15 +497,36 @@ pub struct Contract {
     sponsored: LookupSet<AccountId>,
     /// Creation times of each host's last `FREE_MAX_EVENTS` free events, oldest first.
     free_log: LookupMap<AccountId, [u64; FREE_MAX_EVENTS]>,
-    /// The DAO new Deposit events get.
-    dao: Option<AccountId>,
-    /// Receives the treasury share of lost bonds.
-    treasury: AccountId,
+    /// The settings new events copy (`set_rules`).
+    rules: Rules,
+}
+
+/// The state root before v3 (the tp7 escrow on mainnet): the same fields
+/// without `rules`. The collections keep their storage prefixes.
+#[near(serializers = [borsh])]
+struct V2State {
+    usdc: AccountId,
+    intents: Option<AccountId>,
+    events: Vector<Event>,
+    guests: LookupMap<(u64, AccountId), GuestRecord>,
+    guest_index: LookupMap<(u64, u32), AccountId>,
+    balances: LookupMap<AccountId, Balance>,
+    reserved_bytes: u64,
+    /// v2's on-chain attendance counter (prefix `AttendedEvents`); dropped, the score lives off-chain.
+    _attended_events: LookupMap<AccountId, u32>,
+    relayer: Option<AccountId>,
+    owner: AccountId,
+    frozen: bool,
+    whitelist_mode: bool,
+    whitelist: LookupSet<AccountId>,
+    sponsored_mode: bool,
+    sponsored: LookupSet<AccountId>,
+    free_log: LookupMap<AccountId, [u64; FREE_MAX_EVENTS]>,
 }
 
 #[near]
 impl Contract {
-    /// Deposit events need a DAO: call `configure_disputes` before the first one.
+    /// Starts without a court (`Rules::new`); the owner names one with `set_rules`.
     #[init]
     #[private]
     pub fn new(usdc: AccountId, intents: Option<AccountId>, relayer: Option<AccountId>, owner: AccountId) -> Self {
@@ -483,7 +540,7 @@ impl Contract {
             balances: LookupMap::new(StorageKey::Balances),
             relayer,
             reserved_bytes: 0,
-            treasury: owner.clone(),
+            rules: Rules::new(owner.clone()),
             owner,
             frozen: false,
             whitelist_mode: false,
@@ -491,7 +548,6 @@ impl Contract {
             sponsored_mode: false,
             sponsored: LookupSet::new(StorageKey::Sponsored),
             free_log: LookupMap::new(StorageKey::FreeLog),
-            dao: None,
         }
     }
 
@@ -518,7 +574,7 @@ impl Contract {
     /// Host only, once `ends_at` has passed, with the guests who came
     /// (`attended`, checked in at the door off-chain). Unknown accounts fail
     /// the call, duplicates count once.
-    /// `Deposit`: publishes the list (within `SUBMIT_DEADLINE_MS`) and opens the
+    /// `Deposit`: publishes the list (within `rules.submit_hours`) and opens the
     /// dispute window; `settle` pays out later. With no guests it closes at once.
     /// `Ticket`: just closes the event; the host was paid at registration.
     #[payable]
@@ -571,7 +627,7 @@ impl Contract {
     /// fails and nothing changes.
     pub fn resolve_dispute(&mut self, event_id: u64, target: AccountId, upheld: bool) {
         let event = self.event(event_id);
-        require!(event.dao.as_ref() == Some(&env::predecessor_account_id()), "Only this event's DAO");
+        require!(event.rules.dao.as_ref() == Some(&env::predecessor_account_id()), "Only this event's DAO");
         require!(event.status == EventStatus::Submitted, "Event is closed");
         require!(env::block_timestamp_ms() < resolve_by(event), "Too late: the dispute has expired");
         let record = self
@@ -633,27 +689,29 @@ impl Contract {
         event.status = EventStatus::Submitted;
         event.submitted_at = env::block_timestamp_ms();
         event.abandoned = true;
-        let challenge_ends = challenge_ends_at(event);
+        let (challenge_ends, court) = (challenge_ends_at(event), event.rules.dao.is_some());
         emit(
             "attendance_submitted",
             json!({ "event_id": event_id, "attended": 0, "guests": n, "challenge_ends_at": challenge_ends, "abandoned": true }),
         );
+        // No court: nobody can prove they came, so everyone is refunded now.
+        if !court {
+            self.settle_money(event_id);
+        }
     }
 
     // --------------------------------------------------------------- owner
 
-    /// The DAO that decides disputes and the treasury that receives its share of
-    /// lost bonds, for events created from now on: each event keeps both, so
-    /// running events (also after `freeze`) cannot be redirected. `dao = None`
-    /// stops new Deposit events. The court cannot be the treasury. Owner only.
+    /// The settings (`Rules`) for events created from now on: each event keeps
+    /// its copy, so running events (also after `freeze`) cannot be changed.
+    /// Owner only.
     #[payable]
-    pub fn configure_disputes(&mut self, dao: Option<AccountId>, treasury: AccountId) {
+    pub fn set_rules(&mut self, rules: Rules) {
         near_sdk::assert_one_yocto();
         self.require_owner(&env::predecessor_account_id());
-        require!(dao.as_ref() != Some(&treasury), "The court cannot receive the lost bonds it decides");
-        self.dao = dao;
-        self.treasury = treasury;
-        emit("disputes_configured", json!({ "dao": self.dao, "treasury": self.treasury }));
+        rules.check();
+        self.rules = rules;
+        emit("rules_set", json!(self.rules));
     }
 
     /// Whitelist mode on: only whitelisted hosts can create events. Owner only.
@@ -714,17 +772,39 @@ impl Contract {
             .as_return()
     }
 
-    /// Run by `upgrade` on the new code. Accepts only a v3 state root, so an
-    /// older escrow (its records do not decode as v3) refuses this code and
-    /// keeps its own: v3 starts on a new account.
+    /// Run by `upgrade` on the new code: keeps a v3 root, or turns the older
+    /// root (tp7, mainnet) into v3 with no court yet. The older `Event` records
+    /// do not decode as v3, so that path needs an escrow without events; any
+    /// panic here rolls the whole upgrade back.
     #[private]
     #[init(ignore_state)]
     pub fn migrate() -> Self {
         // An `upgrade` to a rehearsal build would shrink the deadlines of running events.
         require_rehearsal_network();
         let raw = env::storage_read(b"STATE").unwrap_or_else(|| env::panic_str("No state to migrate"));
-        near_sdk::borsh::from_slice(&raw)
-            .unwrap_or_else(|_| env::panic_str("Unknown state layout: deploy v3 to a new account"))
+        if let Ok(state) = near_sdk::borsh::from_slice::<Self>(&raw) {
+            return state;
+        }
+        let old: V2State = near_sdk::borsh::from_slice(&raw).unwrap_or_else(|_| env::panic_str("Unknown state layout"));
+        require!(old.events.len() == 0, "Events exist: their records need a migration");
+        Self {
+            usdc: old.usdc,
+            intents: old.intents,
+            events: old.events,
+            guests: old.guests,
+            guest_index: old.guest_index,
+            balances: old.balances,
+            reserved_bytes: old.reserved_bytes,
+            relayer: old.relayer,
+            rules: Rules::new(old.owner.clone()),
+            owner: old.owner,
+            frozen: old.frozen,
+            whitelist_mode: old.whitelist_mode,
+            whitelist: old.whitelist,
+            sponsored_mode: old.sponsored_mode,
+            sponsored: old.sponsored,
+            free_log: old.free_log,
+        }
     }
 
     /// Makes the code permanent: `upgrade` stops working for good. One-way.
@@ -893,9 +973,8 @@ impl Contract {
             frozen: self.frozen,
             whitelist_mode: self.whitelist_mode,
             sponsored_mode: self.sponsored_mode,
-            dao: self.dao.clone(),
-            treasury: self.treasury.clone(),
-            challenge_window_ms: CHALLENGE_WINDOW_MS,
+            rules: self.rules.clone(),
+            oracle_hour_ms: ORACLE_HOUR_MS,
         }
     }
 }
@@ -959,16 +1038,15 @@ impl Contract {
         // 300 dismissed bonds × CHALLENGER_TREASURY_BPS in `split_lost` (1.5e6 deposits).
         require!(deposit.0 <= u128::MAX / 1_000_000_000, "Deposit is too large");
         require!(capacity > 0 && capacity <= MAX_CAPACITY, "Capacity out of range");
-        let dao = match mode {
-            EventMode::Deposit => Some(self.dao.clone().unwrap_or_else(|| {
-                env::panic_str("Deposit events are paused: no dispute DAO is configured")
-            })),
-            EventMode::Ticket => None,
-        };
-        require!(dao.as_ref() != Some(&host), "The dispute DAO cannot host a Deposit event it would judge");
+        let mut rules = self.rules.clone();
+        if mode == EventMode::Ticket {
+            // Tickets are paid at registration: nothing for a court to decide.
+            (rules.dao, rules.bond_per_seat) = (None, 0);
+        }
+        require!(rules.dao.as_ref() != Some(&host), "The dispute DAO cannot host a Deposit event it would judge");
         // A host who is the treasury would win back its own lost bond.
-        require!(mode == EventMode::Ticket || self.treasury != host, "The treasury cannot host a Deposit event");
-        let treasury = dao.as_ref().map(|_| self.treasury.clone());
+        require!(rules.dao.is_none() || rules.treasury != host, "The treasury cannot host a Deposit event");
+        let dao = rules.dao.clone();
         // The whole event, full house included, must be paid for up front.
         let reserve = SEAT_BYTES * u64::from(capacity) + EVENT_BALANCES_BYTES;
         let cost = self.event_cost(&host, capacity, Some(metadata.ends_at));
@@ -1010,8 +1088,7 @@ impl Contract {
             closed_at: 0,
             storage_paid: cost,
             access,
-            dao: dao.clone(),
-            treasury,
+            rules,
             host_bond: 0,
             submitted_at: 0,
             open_disputes: 0,
@@ -1068,11 +1145,15 @@ impl Contract {
         let event = self.event_mut(event_id);
         event.status = EventStatus::Submitted;
         event.submitted_at = env::block_timestamp_ms();
-        let challenge_ends = challenge_ends_at(event);
+        let (challenge_ends, court) = (challenge_ends_at(event), event.rules.dao.is_some());
         emit(
             "attendance_submitted",
             json!({ "event_id": event_id, "attended": came, "guests": guest_count, "challenge_ends_at": challenge_ends }),
         );
+        // No court: the host's list is final, so it pays out now.
+        if !court {
+            self.settle_money(event_id);
+        }
     }
 
     fn cancel_by(&mut self, caller: &AccountId, event_id: u64) {
@@ -1097,7 +1178,7 @@ impl Contract {
     /// amount kept (exactly the bond). Panics otherwise, so all of it comes back.
     fn lock_host_bond(&mut self, event_id: u64, amount: u128, payer: &AccountId) -> u128 {
         let event = self.event(event_id);
-        require!(event.mode == EventMode::Deposit, "Only Deposit events take a host bond");
+        require!(bond_due(event) > 0, "This event takes no host bond");
         require!(event.status == EventStatus::Open, "Event is closed");
         require!(env::block_timestamp_ms() < registration_ends(event), "Registration has closed");
         require!(event.host_bond == 0, "The host bond is already paid");
@@ -1197,7 +1278,7 @@ impl Contract {
             }
         }
         self.credit(&host, host_total);
-        let treasury = self.event(event_id).treasury.clone().expect("Deposit events have a treasury");
+        let treasury = self.event(event_id).rules.treasury.clone();
         self.credit(&treasury, treasury_total);
         let share = if a > 0 { share } else { 0 };
         self.event_mut(event_id).payout_per_attendee = share;
@@ -1441,9 +1522,9 @@ impl Contract {
             || (self.intents.is_some() && self.relayer.is_some())
     }
 
-    /// Deposit events open once the host bond is in, and never seat the host.
+    /// Events with a bond open once it is in, and never seat the host.
     fn seats_open(event: &Event, guest: &AccountId) -> bool {
-        (event.mode == EventMode::Ticket || event.host_bond > 0) && *guest != event.host
+        (bond_due(event) == 0 || event.host_bond > 0) && *guest != event.host
     }
 
     fn can_register(&self, event_id: u64, guest: &AccountId) -> bool {
@@ -1532,25 +1613,29 @@ fn require_rehearsal_network() {
     );
 }
 
-/// Deposit events stop taking guests at `starts_at`: after that the host sees who came (Ticket: at `ends_at`).
+fn hours(h: u16) -> u64 {
+    u64::from(h) * ORACLE_HOUR_MS
+}
+
+/// Deposit events stop taking guests at `starts_at` (`close_at_start`): after that the host sees who came.
 fn registration_ends(e: &Event) -> u64 {
-    if e.mode == EventMode::Deposit { e.metadata.starts_at } else { e.metadata.ends_at }
+    if e.mode == EventMode::Deposit && e.rules.close_at_start { e.metadata.starts_at } else { e.metadata.ends_at }
 }
 
 fn bond_due(e: &Event) -> u128 {
-    if e.mode == EventMode::Deposit { e.deposit * u128::from(e.capacity) * HOST_BOND_PER_SEAT } else { 0 }
+    if e.mode == EventMode::Deposit { e.deposit * u128::from(e.capacity) * u128::from(e.rules.bond_per_seat) } else { 0 }
 }
 
 fn challenge_ends_at(e: &Event) -> u64 {
-    e.submitted_at + CHALLENGE_WINDOW_MS
+    e.submitted_at + hours(e.rules.challenge_hours)
 }
 
 fn resolve_by(e: &Event) -> u64 {
-    challenge_ends_at(e) + RESOLVE_GRACE_MS
+    challenge_ends_at(e) + hours(e.rules.resolve_hours)
 }
 
 fn submit_by(e: &Event) -> u64 {
-    e.metadata.ends_at + SUBMIT_DEADLINE_MS
+    e.metadata.ends_at + hours(e.rules.submit_hours)
 }
 
 fn bytes_cost(bytes: u64) -> u128 {
@@ -1594,8 +1679,9 @@ fn view_event(id: u64, e: &Event) -> EventView {
         created_at: e.created_at,
         closed_at: e.closed_at,
         access: e.access.clone(),
-        dao: e.dao.clone(),
-        treasury: e.treasury.clone(),
+        dao: e.rules.dao.clone(),
+        treasury: e.rules.dao.as_ref().map(|_| e.rules.treasury.clone()),
+        rules: e.rules.clone(),
         host_bond: U128(e.host_bond),
         bond_due: U128(bond_due(e)),
         registration_ends_at: registration_ends(e),

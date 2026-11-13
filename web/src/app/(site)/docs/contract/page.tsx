@@ -98,7 +98,7 @@ export default async function ContractDocs() {
             [<Mono key="3b">settle</Mono>, "Anyone, after the dispute window", "Pays out by the final list"],
             [<Mono key="3c">refund</Mono>, "Anyone, 3 days after the end", "Publishes an empty list for a host who published none"],
             [<Mono key="4">cancel</Mono>, "Host · ticket: anyone after 30 days", "Refunds everyone"],
-            [<Mono key="4a">configure_disputes</Mono>, "Owner", "Sets the DAO and treasury for new events"],
+            [<Mono key="4a">set_rules</Mono>, "Owner", "Court, treasury, bond per seat and hours for new events; running events keep theirs"],
             [<Mono key="5">withdraw</Mono>, "Anyone", "Sends out your balance"],
             [<Mono key="6">on_auth</Mono>, "NEAR Intents wallets", "Create, finalize or cancel through an auth_call intent"],
             [<Mono key="7">add_to_whitelist · set_whitelist_mode</Mono>, "Owner", "Only listed hosts create events, when on"],
