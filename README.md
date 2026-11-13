@@ -51,9 +51,9 @@ the local crypto crowd to NEAR Intents.
 - A Rust escrow contract on NEAR holds the deposits. The host records who came
   and the contract splits the pool among them; the host has no way to withdraw
   it directly (see [Optimistic escrow](#optimistic-escrow)).
-- Payments and payouts go through NEAR Intents (`intents.near`): a guest can pay
-  from another chain through 1Click and withdraw to any chain or to an Intents
-  account.
+- Payments and payouts go through NEAR Intents (`intents.near`): a guest tops up
+  their Intents balance from any chain on near.com (the official NEAR app, same
+  wallet) and withdraws to any chain through 1Click or to an Intents account.
 - Nobody needs NEAR for gas. An EVM wallet (MetaMask etc.) registers by signing
   one intent; Google/email accounts (NEAR Auth) sign NEP-366 meta-transactions
   (on mainnet once NEAR Auth issues our client id); our relayer pays the gas in
@@ -192,7 +192,7 @@ Registration. Existing event-card and iframe embeds remain supported. Details:
 ## How it works
 
 ```
-guest ──(any chain via 1Click | USDC from a NEAR wallet | Google login)──► NEAR Intents
+guest ──(any chain via near.com | USDC from a NEAR wallet | Google login)──► NEAR Intents
                                                                               │
 host ──────────── create_event / finalize(attended) ──► escrow contract (NEAR)
                                                                               │
@@ -243,7 +243,7 @@ location, description and cover live on the Nearvent server, not in the escrow.
 Init is private and runs atomically with deploy. Set `relayer` at initialization
 for an escrow accepting EVM guests. Privileged mutators require exactly 1 yoctoNEAR.
 
-Pay from another chain by funding your own NEAR Intents balance through 1Click,
+Pay from another chain by funding your own NEAR Intents balance on near.com,
 then confirm registration. A declined registration returns the unused amount to
 the payment sender through NEP-141. The Intents verifier can recredit the original
 withdrawal owner. **Never use plain `ft_transfer` to send USDC to the escrow.**
