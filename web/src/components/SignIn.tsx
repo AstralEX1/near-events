@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- wallet icons are the extensions' own data URIs and small brand marks */
 
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { useWallet } from "@/lib/wallet";
 import { FASTAUTH_CLIENT_ID, HAS_INTENTS } from "@/lib/config";
 import { evmWallets, type EvmWallet } from "@/lib/intents";
@@ -26,6 +27,8 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<"chain" | "evm">("chain");
+  // Embed checkout is for a real event on another site; demo mode is switched off there (see demoBackend).
+  const embed = usePathname().startsWith("/embed/");
   // Read after mount: extensions announce themselves (EIP-6963) only in the browser.
   const [evm, setEvm] = useState<EvmWallet[]>([]);
   useEffect(() => {
@@ -81,9 +84,11 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
             )}
           </div>
           {/* Demo mode: made-up events and money in this browser, no server and no chain. */}
-          <button className="btn btn-ghost w-full" disabled={off} onClick={run(signInWithDemo, "demo")}>
-            {busy === "demo" ? "Setting up…" : "Try with a demo account"}
-          </button>
+          {!embed && (
+            <button className="btn btn-ghost w-full" disabled={off} onClick={run(signInWithDemo, "demo")}>
+              {busy === "demo" ? "Setting up…" : "Try with a demo account"}
+            </button>
+          )}
         </>
       ) : (
         <>

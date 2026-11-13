@@ -525,4 +525,9 @@ function freeEvents(s: State, q: URLSearchParams, post: boolean, body: Record<st
 }
 
 // Pages read data right after load, so demo mode has to answer before any of them runs.
-if (typeof window !== "undefined" && isOn()) window.fetch = demoFetch;
+// Embed checkout (/embed/…, /p/…) is a real event on someone else's site, and demo ids
+// (1, 2, …) overlap real ones, so it leaves the throwaway demo instead of showing a fake event.
+if (typeof window !== "undefined" && isOn()) {
+  if (location.pathname.startsWith("/embed/")) demoLogout();
+  else window.fetch = demoFetch;
+}
