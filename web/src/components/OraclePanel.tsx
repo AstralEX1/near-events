@@ -268,7 +268,7 @@ export function OraclePanel({ event, guests, hostTeam, onChange }: {
         {due === "settle" && (
           <button className="btn btn-accent" disabled={!!busy} onClick={() => settleNow("settle")}>{busy === "settle" ? "Settling…" : "Settle Payouts"}</button>
         )}
-        <details id="checkins" className="text-sm" open={disputes.length > 0}>
+        <details id="checkins" className="text-sm scroll-mt-24" open={disputes.length > 0}>
           <summary className="cursor-pointer font-medium">Door check-in log{Array.isArray(doorLog) ? ` (${doorLog.length})` : ""}</summary>
           {doorLog === "loading" ? (
             <p className="mt-2 text-muted">Loading the door log…</p>

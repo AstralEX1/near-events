@@ -276,7 +276,7 @@ export function RegistrationCard({
   } else if (accountId === event.host) {
     body = <p className="text-sm">You’re the host. Hosts can’t take a seat at their own event.</p>;
   } else if (needsBond(event)) {
-    body = <p className="text-sm text-muted">Registration opens once the host locks a {formatUsdc(hostBondFor(event))} USDC bond.</p>;
+    body = <p className="text-sm text-muted">Registration opens once the host locks a bond of {formatUsdc(hostBondFor(event))} USDC.</p>;
   } else if (accountId && rule && access?.allowed === false) {
     body = (
       <p className="text-sm">

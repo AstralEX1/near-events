@@ -16,7 +16,8 @@ export function spotsLine(event: EventView): string {
 /** Under each guest after the event: what they made, or that they didn't come. Nothing before. */
 function note(event: EventView, g: GuestView): { text: string; dim: boolean } | null {
   if (event.status === "Cancelled" || event.status === "Refunded") return isTicket(event) ? null : { text: "refunded", dim: false };
-  if (event.status === "Submitted") return g.listed || event.abandoned ? null : { text: "marked absent", dim: true };
+  // Facts only: a dispute may still prove the guest came (its verdict shows in the oracle panel).
+  if (event.status === "Submitted") return g.listed || event.abandoned ? null : { text: "not on the host’s list", dim: true };
   if (event.status !== "Finalized") return null;
   if (isTicket(event)) return g.status === "Attended" ? { text: "came", dim: false } : null;
   // Nobody came (or nobody proved it on an abandoned event): every deposit went back.
