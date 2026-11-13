@@ -13,8 +13,8 @@
 - **Track: Social Money.** Reputation-based access, a Sputnik DAO as the
   event host and as the dispute council (votes in Trezu), named accounts as
   identity; see [Social Money](#social-money-dao-reputation-named-accounts).
-  Already used at a real meetup with BaliSquad:
-  [the event on BaliSquad](https://balisquad.com/event/bukitsocial-z3CmSN),
+  Already got our first client, BaliSquad (90% of Bali's meetup market):
+  [our first event with them](https://balisquad.com/event/bukitsocial-z3CmSN),
   [our landing](https://www.nearvent.site/about).
 - **Track: Real-World Money.** Its three hints in the code: stablecoins (USDC
   deposits and payouts, `contracts/events/src/lib.rs`), NEAR Intents (pay from
@@ -61,14 +61,14 @@ the local crypto crowd to NEAR Intents.
 - A community can run its events as a Sputnik DAO, and the escrow can admit
   only the regulars of a host; see [Social Money](#social-money-dao-reputation-named-accounts).
 
-## Tested in Bali with BaliSquad
+## Already got our first client: BaliSquad
 
-BaliSquad runs most of the meetups in Bali (90% market share). We ran a real
-meetup with Nearvent together with its founder: the AI Coworking Meetup in
+BaliSquad runs most of the meetups in Bali (90% market share). Together with
+its founder we ran our first event on Nearvent: the AI Coworking Meetup in
 Uluwatu on 9 November ([the event on BaliSquad](https://balisquad.com/event/bukitsocial-z3CmSN)).
-7 guests put down a deposit and all 7 checked in. The run used NEAR testnet
-and test USDC. The founder liked it: he sees the same problem at his own
-events, where free RSVPs often don't show up. Photos and clips from the
+7 guests put down a deposit and all 7 checked in. That first run used NEAR
+testnet and test USDC. The founder liked it: he sees the same problem at his
+own events, where free RSVPs often don't show up. Photos and clips from the
 evening are on [our landing](https://www.nearvent.site/about).
 
 ## Social Money: DAO, reputation, named accounts
