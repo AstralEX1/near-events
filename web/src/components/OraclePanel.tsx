@@ -155,7 +155,7 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
   const open = (target: string, attended: boolean) =>
     run(`dispute:${target}`, async () => {
       // "Didn't come?" is one tap in a list: say what it costs first.
-      if (!attended && !(await confirmAction(`Report ${shortAccount(target)} as absent? ${risk}`, `Lock ${deposit}`))) return;
+      if (!attended && !(await confirmAction(`Report ${shortAccount(target)} as absent?\n${risk}`, `Lock ${deposit}`))) return;
       await pay(event.deposit, { action: "dispute", event_id: event.id, target, attended });
       const took = await settled(async () => (await events.disputes(event.id)).some((d) => d.target === target));
       if (!took) throw new Error("The escrow did not take the dispute; your USDC came back.");
