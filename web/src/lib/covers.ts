@@ -14,10 +14,23 @@ const key = (id: string) => `cover:${id}`;
 export const isCoverId = (id: string) => /^[0-9a-f]{64}$/.test(id);
 export const isJpeg = (bytes: Buffer) => bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
 
+/** Covers share the Redis that holds door check-ins and profiles: this budget keeps uploads from filling it. */
+const BUDGET_BYTES = 100_000_000;
+const USED = "covers:bytes";
+export const COVERS_FULL = "Cover storage is full";
+
 export async function saveCover(bytes: Buffer): Promise<string> {
   const id = createHash("sha256").update(bytes).digest("hex");
-  if (usesRedis()) await redis(["SET", key(id), bytes.toString("base64")]);
-  else {
+  if (usesRedis()) {
+    if (await redis<number>(["EXISTS", key(id)])) return id;
+    const data = bytes.toString("base64");
+    // shortcut: covers saved before this counter existed are not in it; fine while they are a few MB.
+    if (await redis<number>(["INCRBY", USED, data.length]) > BUDGET_BYTES) {
+      await redis(["DECRBY", USED, data.length]);
+      throw new Error(COVERS_FULL);
+    }
+    await redis(["SET", key(id), data]);
+  } else {
     await mkdir(DIR, { recursive: true });
     await writeFile(path.join(DIR, `${id}.jpg`), bytes);
   }

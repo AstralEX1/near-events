@@ -22,6 +22,7 @@ export async function POST(req: Request) {
   }
   if (await accountExists(accountId)) return Response.json({ funded: false, exists: true });
   try {
+    // Nothing proves the id belongs to a Google login, so new accounts have their own daily caps (DAILY in lib/ratelimit.ts).
     if (await paidRequestLimited(req, "fund", accountId)) return Response.json({ error: "Funding quota unavailable or exceeded" }, { status: 429 });
     await relayer().transfer({ receiverId: accountId, amount: STARTER_NEAR });
     return Response.json({ funded: true, exists: true });

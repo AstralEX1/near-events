@@ -1,6 +1,6 @@
-import { rateLimited } from "@/lib/ratelimit";
+import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { readStaffToken } from "@/lib/staff";
-import { isJpeg, MAX_COVER_BYTES, saveCover } from "@/lib/covers";
+import { COVERS_FULL, isJpeg, MAX_COVER_BYTES, saveCover } from "@/lib/covers";
 
 // Signed-in hosts upload a cover photo; the response is its public URL.
 export async function POST(req: Request) {
@@ -14,10 +14,13 @@ export async function POST(req: Request) {
   const bytes = Buffer.from(await req.arrayBuffer());
   if (bytes.length > MAX_COVER_BYTES) return Response.json({ error: "Cover photo is too large" }, { status: 413 });
   if (!isJpeg(bytes)) return Response.json({ error: "Upload a JPEG image" }, { status: 400 });
+  // Sign-in is free (any fresh EVM key), so uploads are also capped per address and day.
+  if (await paidRequestLimited(req, "covers", accountId)) return Response.json({ error: "Too many uploads today. Try again tomorrow." }, { status: 429 });
   try {
     const id = await saveCover(bytes);
     return Response.json({ url: new URL(`/api/covers/${id}`, req.url).href });
-  } catch {
-    return Response.json({ error: "Could not save the cover photo" }, { status: 503 });
+  } catch (e) {
+    const full = e instanceof Error && e.message === COVERS_FULL;
+    return Response.json({ error: full ? "Photo storage is full right now. Try again later." : "Could not save the cover photo" }, { status: 503 });
   }
 }
