@@ -116,7 +116,7 @@ fn bond(c: &Contract, id: u64) -> u128 {
 fn bond_if_needed(c: &mut Contract, msg: &str, now_ms: u64) {
     let Ok(TransferMsg::Register { event_id, .. }) = serde_json::from_str::<TransferMsg>(msg) else { return };
     let Some(e) = c.get_event(event_id) else { return };
-    if e.mode == EventMode::Deposit && e.host_bond.0 == 0 && e.status == EventStatus::Open && now_ms < e.registration_ends_at {
+    if e.mode == EventMode::Deposit && e.bond_due.0 > 0 && e.host_bond.0 == 0 && e.status == EventStatus::Open && now_ms < e.registration_ends_at {
         let bond = e.bond_due.0;
         let msg = format!(r#"{{"action":"host_bond","event_id":{event_id}}}"#);
         assert_eq!(raw_pay_at(c, &e.host, bond, &msg, now_ms), 0);
@@ -2367,7 +2367,7 @@ fn without_a_court_the_list_is_final_at_publish() {
 fn set_rules_is_for_the_owner_and_future_events() {
     let (mut c, old) = setup(10);
     let other: AccountId = "new-court.sputnik-dao.testnet".parse().unwrap();
-    let new_rules = Rules { dao: Some(other.clone()), treasury: accounts(1), bond_per_seat: 3, challenge_hours: 24, ..court_rules() };
+    let new_rules = Rules { dao: Some(other.clone()), treasury: accounts(1), bond_per_seat: 1, challenge_hours: 24, ..court_rules() };
     ctx(&owner(), one_yocto());
     c.set_rules(new_rules.clone());
     assert_eq!(c.get_config().rules, new_rules);
@@ -2375,7 +2375,7 @@ fn set_rules_is_for_the_owner_and_future_events() {
     let new = c.create_event(meta(), U128(D), 10, None, None);
     let (o, n) = (c.get_event(old).unwrap(), c.get_event(new).unwrap());
     assert_eq!((o.dao, o.rules.treasury, o.bond_due.0), (Some(dao()), treasury(), 20 * D), "a running event keeps its rules");
-    assert_eq!((n.dao, n.rules.treasury, n.bond_due.0), (Some(other), accounts(1), 30 * D));
+    assert_eq!((n.dao, n.rules.treasury, n.bond_due.0), (Some(other), accounts(1), 10 * D));
     assert_eq!(n.rules.challenge_hours, 24);
     // Tickets never get a court or a bond.
     let t = c.create_event(meta(), U128(D), 10, Some(EventMode::Ticket), None);
@@ -2388,12 +2388,10 @@ fn set_rules_is_for_the_owner_and_future_events() {
 #[test]
 fn set_rules_refuses_unsafe_combinations() {
     let bad = [
-        (Rules { bond_per_seat: 0, ..court_rules() }, "needs a host bond"),
-        (Rules { dao: None, ..court_rules() }, "needs a host bond"),
+        (Rules { dao: None, ..court_rules() }, "A host bond needs a court"),
         (Rules { close_at_start: false, ..court_rules() }, "close at the start"),
         (Rules { treasury: dao(), ..court_rules() }, "court cannot receive"),
-        (Rules { bond_per_seat: 1, ..court_rules() }, "out of range"),
-        (Rules { bond_per_seat: 11, ..court_rules() }, "out of range"),
+        (Rules { bond_per_seat: 3, ..court_rules() }, "out of range"),
         (Rules { challenge_hours: 11, ..court_rules() }, "out of range"),
         (Rules { challenge_hours: 169, ..court_rules() }, "out of range"),
         (Rules { submit_hours: 23, ..court_rules() }, "out of range"),
@@ -2484,6 +2482,55 @@ fn refund_of_an_abandoned_event_publishes_an_empty_list_and_punishes_the_bond() 
         let (mut c, id) = setup_tickets(10);
         after_publish_deadline(&mut c, id);
     }, "Only Deposit events");
+}
+
+/// A court with no bond (Alex, 2026-11-13): registration opens at once, a dispute
+/// still corrects the list, the winner only gets the deposits back, the treasury nothing;
+/// an abandoned event gives every deposit back.
+#[test]
+fn a_court_without_a_bond_still_corrects_the_list() {
+    let start = |rules: Rules| {
+        ctx(&accounts(0), NearToken::from_near(5));
+        near_sdk::mock::with_mocked_blockchain(|b| drop(b.take_storage()));
+        let mut c = Contract::new(usdc(), Some("intents.near".parse().unwrap()), None, owner());
+        ctx(&owner(), one_yocto());
+        c.set_rules(rules);
+        ctx(&accounts(0), NearToken::from_near(5));
+        let id = c.create_event(meta(), U128(10 * USDC), 10, None, None);
+        (c, id)
+    };
+    for bond_per_seat in [0u8, 1] {
+        let (mut c, id) = start(Rules { bond_per_seat, ..court_rules() });
+        assert_eq!(bond(&c, id), u128::from(bond_per_seat) * 10 * D);
+        // At 0 `register` gets no bond first (`bond_if_needed`): the guests are taken at once.
+        for g in [accounts(2), accounts(3), accounts(4)] {
+            register(&mut c, id, &g);
+        }
+        ctx_ended(&accounts(0));
+        c.finalize(id, vec![accounts(2), accounts(3)]);
+        assert_eq!(dispute_at(&mut c, id, &accounts(4), &accounts(4), true, now()), 0);
+        verdict(&mut c, id, &accounts(4), true);
+        settle_after_window(&mut c, id);
+        let h = bond(&c, id);
+        let win = (h / 2).min(MAX_WIN_DEPOSITS * D);
+        // Pool 3D over the 3 who came; the winner also gets its dispute deposit and its share of the bond.
+        assert_eq!([2, 3, 4].map(|i| c.balance_of(accounts(i)).0), [D, D, D + D + win]);
+        assert_eq!((c.balance_of(accounts(0)).0, c.balance_of(treasury()).0), (0, h - win));
+    }
+    // No list from the host: with no bond, everyone just gets the deposit back.
+    let (mut c, id) = start(Rules { bond_per_seat: 0, ..court_rules() });
+    for g in [accounts(2), accounts(3)] {
+        register(&mut c, id, &g);
+    }
+    after_publish_deadline(&mut c, id);
+    settle_after_window(&mut c, id);
+    assert_eq!([2, 3].map(|i| c.balance_of(accounts(i)).0), [D, D]);
+    assert_eq!(c.balance_of(treasury()).0, 0);
+    // A bond-free event takes no bond.
+    rejects(move || {
+        let (mut c, id) = start(Rules { bond_per_seat: 0, ..court_rules() });
+        raw_pay_at(&mut c, &accounts(0), D, &bond_msg(id), 1_000_000);
+    }, "takes no host bond");
 }
 
 /// The audit's exploit: a host and its no-shows walk away refunded by not
@@ -2895,11 +2942,11 @@ fn model_settle(
     disputes: &[(usize, usize, bool, Option<bool>)],
     abandoned: bool,
     capacity: u32,
+    bond_per_seat: u8,
 ) -> std::collections::BTreeMap<String, u128> {
     let mut out = std::collections::BTreeMap::new();
     let mut add = |who: String, x: u128| *out.entry(who).or_insert(0) += x;
-    // 2 deposits per seat (`court_rules`).
-    let h = 2 * d * capacity as u128;
+    let h = u128::from(bond_per_seat) * d * capacity as u128;
     let mut fin = listed.to_vec();
     for &(target, _, claim, v) in disputes {
         if v == Some(true) {
@@ -2970,6 +3017,9 @@ fn random_case(seed: u64) {
     // Storage survives `testing_env!`: start each case on an empty chain.
     near_sdk::mock::with_mocked_blockchain(|b| drop(b.take_storage()));
     let mut c = new_contract(usdc(), Some(intents()), None, owner());
+    // Any allowed bond with the court: 0, 1 or 2 deposits per seat.
+    let bond_per_seat = r.below(3) as u8;
+    c.rules.bond_per_seat = bond_per_seat;
     let host: AccountId = "host.testnet".parse().unwrap();
     ctx(&host, NearToken::from_yoctonear(0));
     let capacity = n as u32 + r.below(4) as u32;
@@ -2977,8 +3027,10 @@ fn random_case(seed: u64) {
     let mut money_in = 0u128;
     // Overpaying the bond: the change goes back.
     let extra = r.below(3) as u128;
-    let h = 2 * d * capacity as u128;
-    money_in += h + extra - raw_pay_at(&mut c, &accounts(5), h + extra, &bond_msg(id), 1_000_000);
+    let h = u128::from(bond_per_seat) * d * capacity as u128;
+    if h > 0 {
+        money_in += h + extra - raw_pay_at(&mut c, &accounts(5), h + extra, &bond_msg(id), 1_000_000);
+    }
     let reg = format!(r#"{{"action":"register","event_id":{id}}}"#);
     for i in 0..n {
         money_in += d - raw_pay_at(&mut c, &name(i), d, &reg, 1_000_000);
@@ -3037,8 +3089,8 @@ fn random_case(seed: u64) {
             got.insert(label.to_string(), b);
         }
     }
-    let want = model_settle(n, d, &listed, &disputes, abandoned, capacity);
-    assert_eq!(got, want, "seed {seed}: n={n} d={d} listed={listed:?} disputes={disputes:?}");
+    let want = model_settle(n, d, &listed, &disputes, abandoned, capacity, bond_per_seat);
+    assert_eq!(got, want, "seed {seed}: n={n} d={d} bond/seat={bond_per_seat} listed={listed:?} disputes={disputes:?}");
     assert_eq!(got.values().sum::<u128>(), money_in, "seed {seed}: money in != money out");
     assert_eq!(c.reserved_bytes, 0, "seed {seed}: reservations left");
 }
@@ -3116,8 +3168,8 @@ fn the_deposit_bound_keeps_every_split_in_u128() {
     // The largest product: 300 dismissed bonds × CHALLENGER_TREASURY_BPS.
     let d = u128::MAX / 1_000_000_000;
     assert!((d * 300).checked_mul(CHALLENGER_TREASURY_BPS).is_some());
-    // The largest bond: 10 deposits per seat (the `Rules` limit) × 300 seats.
-    assert!((d * u128::from(MAX_CAPACITY) * 10).checked_mul(HOST_TREASURY_BPS).is_some());
+    // The largest bond: 2 deposits per seat (the `Rules` limit) × 300 seats.
+    assert!((d * u128::from(MAX_CAPACITY) * 2).checked_mul(HOST_TREASURY_BPS).is_some());
     assert!(d.checked_mul(u128::from(MAX_CAPACITY)).is_some());
     rejects(|| {
         ctx(&accounts(0), NearToken::from_near(1));

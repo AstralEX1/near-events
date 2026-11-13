@@ -261,7 +261,7 @@ function ManageEvent() {
       const currentPool = BigInt(fresh.total_pool);
       // With a court the list waits out the dispute window; without one it pays out now.
       const after = fresh.dao
-        ? `Guests can dispute any record for ${windowText(fresh)}; the council decides. A record they prove wrong costs you your whole bond (${formatUsdc(fresh.host_bond ?? "0")} USDC). Then anyone settles the payouts.`
+        ? `Guests can dispute any record for ${windowText(fresh)}; the council decides.${fresh.host_bond && fresh.host_bond !== "0" ? ` A record they prove wrong costs you your whole bond (${formatUsdc(fresh.host_bond)} USDC).` : ""} Then anyone settles the payouts.`
         : "Payouts go out now.";
       const confirmation = ticket
         ? `Close the event?\n\n${fresh.guest_count} tickets · ${formatUsdc(currentPool)} USDC is already in your balance.\n\nThis cannot be undone.`

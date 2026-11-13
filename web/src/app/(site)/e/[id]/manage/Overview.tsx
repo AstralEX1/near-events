@@ -64,7 +64,7 @@ export function Overview({ event, guests, guestNames, origin, isHost, busy, onGu
         <div className="gc-host-stat"><span>Registered</span><strong>{guests.length}<small className="text-sm text-muted font-normal"> / {event.capacity}</small></strong></div>
         <div className="gc-host-stat"><span>Checked in</span><strong>{event.attended_count}</strong></div>
         <div className="gc-host-stat"><span>{isTicket(event) ? "Ticket sales" : "Deposit pool"}</span><strong>{formatUsdc(event.total_pool)}<small className="block text-xs text-muted font-normal tracking-normal">USDC</small></strong></div>
-        {event.dao && !isTicket(event) && <BondStat event={event} isHost={isHost} />}
+        {hostBondFor(event) !== "0" && <BondStat event={event} isHost={isHost} />}
       </div>
       <div className="-mx-4 px-4 sm:mx-0 sm:px-0 flex sm:grid sm:grid-cols-3 gap-3 overflow-x-auto [scrollbar-width:none]">
         <QuickAction tone="accent" icon={<ShareIcon />} label="Share Event" onClick={() => setSharing(true)} />

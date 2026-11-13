@@ -87,15 +87,15 @@ export const windowHours = (e: Pick<EventView, "rules">) => e.rules?.challenge_h
 /** "1 hour", "12 hours", "3 days" (whole days from 48 h). */
 export const hoursText = (h: number) => (h >= 48 && h % 24 === 0 ? `${h / 24} days` : `${h} hour${h === 1 ? "" : "s"}`);
 export const windowText = (e: Pick<EventView, "rules">) => hoursText(windowHours(e));
-/** "one deposit per seat" / "2 deposits per seat". */
+/** "no bond" / "one deposit per seat" / "2 deposits per seat". */
 export const bondPerSeatText = (e: Pick<EventView, "rules">) => {
-  const n = e.rules?.bond_per_seat ?? 2;
-  return n === 1 ? "one deposit per seat" : `${n} deposits per seat`;
+  const n = e.rules?.bond_per_seat ?? 0;
+  return n === 0 ? "no bond" : n === 1 ? "one deposit per seat" : `${n} deposits per seat`;
 };
 /** Older escrows take guests until the end. */
 export const registrationEndsAt = (e: Pick<EventView, "registration_ends_at" | "metadata">) => e.registration_ends_at ?? e.metadata.ends_at;
-/** Deposit events that still need the host bond before guests can register. */
-export const needsBond = (e: EventView) => !!e.dao && !isTicket(e) && e.status === "Open" && BigInt(e.host_bond ?? "0") === 0n;
+/** Deposit events that still need the host bond before guests can register (as the escrow: a court may ask for none). */
+export const needsBond = (e: EventView) => !isTicket(e) && e.status === "Open" && BigInt(e.bond_due ?? "0") > 0n && BigInt(e.host_bond ?? "0") === 0n;
 /** The escrow takes guests now (seats and the access rule aside). */
 export const registrationOpen = (e: EventView) => e.status === "Open" && Date.now() < registrationEndsAt(e) && !needsBond(e);
 /** Counts as came: the host's list while it waits out the dispute window, the status otherwise (Manage puts door check-ins there). */

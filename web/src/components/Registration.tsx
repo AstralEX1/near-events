@@ -367,7 +367,7 @@ export function RegistrationCard({
             disputeWindow={windowText(event)}
             submit={hoursText(event.rules?.submit_hours ?? 72)}
             resolve={hoursText(event.rules?.resolve_hours ?? 168)}
-            perSeat={bondPerSeatText(event)}
+            perSeat={event.rules?.bond_per_seat ? bondPerSeatText(event) : undefined}
           />
         </div>
       )}

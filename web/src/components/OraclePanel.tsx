@@ -148,10 +148,11 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
   const isHost = !!accountId && hostTeam.includes(accountId);
   const me = guests.find((g) => g.account_id === accountId);
   const bond = hostBondFor(event);
+  const bonded = BigInt(bond) > 0n;
   const deposit = `${formatUsdc(event.deposit)} USDC`;
   const windowOpen = event.status === "Submitted" && now < (event.challenge_ends_at ?? 0);
   const disputeOf = (account: string) => disputes.find((d) => d.target === account);
-  const risk = `This locks ${deposit}. If the council agrees, you get it back plus part of the host bond (and your payout, if you came). If it disagrees, you lose it: half to the treasury, half to the guests who came.${event.resolve_by ? ` If it doesn't decide by ${when(event.resolve_by)}, you get it back.` : ""}`;
+  const risk = `This locks ${deposit}. If the council agrees, you get it back${bonded ? " plus part of the host bond" : ""} (and your payout, if you came). If it disagrees, you lose it: half to the treasury, half to the guests who came.${event.resolve_by ? ` If it doesn't decide by ${when(event.resolve_by)}, you get it back.` : ""}`;
   const open = (target: string, attended: boolean) =>
     run(`dispute:${target}`, async () => {
       // "Didn't come?" is one tap in a list: say what it costs first.
@@ -207,8 +208,8 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
       const text = !event.dao
         ? `The host didn’t publish who came by ${when(event.submit_by!)}. Anyone can now refund every guest.`
         : event.guest_count === 0
-          ? "Nobody registered. Anyone can close the event; the bond goes back to the host."
-          : `The host didn’t publish who came by ${when(event.submit_by!)}, so the bond is lost. Start the refund: guests who came then have ${windowText(event)} to prove it. If nobody does, everyone gets the deposit back plus a share of the bond. If someone does, the guests who prove it split the pool.`;
+          ? `Nobody registered. Anyone can close the event${bonded ? "; the bond goes back to the host" : ""}.`
+          : `The host didn’t publish who came by ${when(event.submit_by!)}${bonded ? ", so the bond is lost" : ""}. Start the refund: guests who came then have ${windowText(event)} to prove it. If nobody does, everyone gets the deposit back${bonded ? " plus a share of the bond" : ""}. If someone does, the guests who prove it split the pool.`;
       const label = !event.dao ? "Refund Everyone" : event.guest_count === 0 ? "Close Event" : "Start Refund";
       return box("Who came", "No list", (
         <>
@@ -242,8 +243,8 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
     ? null
     : event.abandoned
       ? isHost
-        ? "You published no list in time, so your bond is lost. Guests who came can still prove it."
-        : "No list from the host. Guests who prove they came split the pool. If nobody does, everyone gets the deposit back plus a share of the host bond."
+        ? `You published no list in time${bonded ? ", so your bond is lost" : ""}. Guests who came can still prove it.`
+        : `No list from the host. Guests who prove they came split the pool. If nobody does, everyone gets the deposit back${bonded ? " plus a share of the host bond" : ""}.`
       : `${isHost ? "You" : "The host"} marked ${listed} of ${event.guest_count} as came.${isHost && BigInt(event.host_bond ?? "0") > 0n ? ` Your ${formatUsdc(event.host_bond!)} USDC bond comes back unless the council upholds a dispute.` : ""}`;
 
   const absent = me && windowOpen && !me.listed && !disputeOf(me.account_id);
@@ -268,7 +269,7 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
             {event.abandoned ? " If another guest proves it and you don’t, your deposit goes to them." : ""}
           </p>
           <p className="text-xs text-muted leading-relaxed">
-            It locks {deposit}. If the council agrees, you get it back plus part of the host bond and your payout. If it disagrees, you lose it.
+            It locks {deposit}. If the council agrees, you get it back{bonded ? " plus part of the host bond" : ""} and your payout. If it disagrees, you lose it.
             {event.resolve_by ? ` No decision by ${when(event.resolve_by)}: it comes back.` : ""}
           </p>
           <button className="btn btn-accent w-full sm:w-auto" disabled={!!busy} onClick={() => open(me!.account_id, true)}>

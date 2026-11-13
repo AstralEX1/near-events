@@ -339,11 +339,11 @@ async fn sandbox_escrow_cycle() -> anyhow::Result<()> {
         .deposit(yocto(1))
         .transact().await?;
     expect_reject(&stranger_config, "Only the owner");
-    // A court with no bond would reopen audit E-2: refused.
-    let mut no_bond = court_rules(dao.id(), owner.id());
-    no_bond["bond_per_seat"] = json!(0);
-    let unsafe_rules = owner.call(events.id(), "set_rules").args_json(json!({ "rules": no_bond })).deposit(yocto(1)).transact().await?;
-    expect_reject(&unsafe_rules, "needs a host bond");
+    // A bond above 2 deposits per seat is out of range (0-2, Alex 2026-11-13).
+    let mut big_bond = court_rules(dao.id(), owner.id());
+    big_bond["bond_per_seat"] = json!(3);
+    let unsafe_rules = owner.call(events.id(), "set_rules").args_json(json!({ "rules": big_bond })).deposit(yocto(1)).transact().await?;
+    expect_reject(&unsafe_rules, "out of range");
     configure(&owner, &events, dao.id()).await?;
 
     let now_ms = now_ms(&worker).await?;

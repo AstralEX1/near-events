@@ -477,10 +477,11 @@ Who does what: **Alex** signs and funds (real money). Claude has prepared everyt
    - Top up the DAO to about 5 NEAR: each dispute's proposal pair stores about 0.03 NEAR, and the keeper pauses below 0.3 NEAR available.
 6. **Rules (Alex signs):**
    ```bash
-   OWNER=lold.near EVENTS_CONTRACT=escrow.lold.near NETWORK=mainnet node web/scripts/escrow-owner.mjs rules '{"dao":"nearvent-court.sputnik-dao.near","treasury":"<wallet>","bond_per_seat":2,"close_at_start":true,"challenge_hours":12,"submit_hours":72,"resolve_hours":168}'
+   OWNER=lold.near EVENTS_CONTRACT=escrow.lold.near NETWORK=mainnet node web/scripts/escrow-owner.mjs rules '{"dao":"nearvent-court.sputnik-dao.near","treasury":"<wallet>","bond_per_seat":0,"close_at_start":true,"challenge_hours":12,"submit_hours":72,"resolve_hours":168}'
    ```
+   `bond_per_seat` is 0, 1 or 2 deposits per seat (Alex's default 0). Only 2 deters a lying host at every size; see `docs/oracle-upgrade/REPORT-v3.ru.md` §1.
    `set_rules` refuses unsafe values:
-   - bond outside 2–10 with a court;
+   - a bond above 2 deposits per seat, or any bond without a court;
    - window under 12 h, publish under 24 h, court under 72 h;
    - the court as treasury, or the escrow, USDC or Intents as either.
    Then turn whitelist mode back off if that is the plan: `escrow-owner.mjs mode off`.

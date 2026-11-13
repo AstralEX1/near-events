@@ -57,7 +57,7 @@ export default async function ContractDocs() {
           items={[
             { title: "Deposit", text: "Guests who came split the whole pool. Nobody came: full refund." },
             { title: "Ticket", text: "The price goes to the host when a guest registers." },
-            { title: "Host bond", text: "A deposit event opens for registration once the host locks a bond: 2 deposits per seat by default (up to 10). The bond comes back unless the council upholds a dispute or the host publishes no list. Registration closes when the event starts." },
+            { title: "Host bond", text: "If the rules ask for one, a deposit event opens for registration once the host locks a bond of 0–2 deposits per seat (the owner sets it; 0 by default). The bond comes back unless the council upholds a dispute or the host publishes no list. Registration closes when the event starts." },
             { title: "Publish", text: "Within 3 days after the end (by default), the host publishes who came. Nothing is paid yet." },
             { title: "Disputes", text: "For 12 hours (by default) any guest can dispute one record by locking one deposit. A council of 5 decides through a Sputnik DAO vote (3 of 5) within 7 days after the window (by default). A dispute it doesn’t decide in time expires: the list stands and the deposit goes back." },
             { title: "Payout", text: "Then anyone can settle. A host proven wrong loses the bond: part of it, up to 5 deposits each, to the guests whose dispute was upheld; the rest to the treasury. A wrong dispute loses its deposit: half to the treasury, half to the guests who came." },

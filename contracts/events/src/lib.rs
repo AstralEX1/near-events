@@ -13,11 +13,11 @@
 //!
 //! Deposit events follow the `Rules` the owner set when they were created
 //! (`set_rules`; defaults: no court; window 12 h, publish 72 h, court 7 days;
-//! with a court, at least 2 deposits per seat). Without a court (`rules.dao = None`) there
+//! a host bond of 0–2 deposits per seat, only with a court). Without a court (`rules.dao = None`) there
 //! is no bond and no dispute: the host's list pays out when published. With one:
-//! 1. The host (or anyone for them) locks a bond of `bond_per_seat` deposits per
-//!    seat (`host_bond` message). Registration opens only after that and closes
-//!    at `starts_at`, and the host can never take a seat.
+//! 1. If `bond_per_seat` > 0, the host (or anyone for them) locks a bond of that many
+//!    deposits per seat (`host_bond` message); registration opens only after that.
+//!    It closes at `starts_at`, and the host can never take a seat.
 //! 2. After `ends_at` the host publishes who came (`finalize`, within
 //!    `submit_hours`). Nothing is paid yet: the event is `Submitted`.
 //! 3. For `challenge_hours` any guest may dispute one record by locking a
@@ -224,7 +224,7 @@ pub struct Rules {
     pub dao: Option<AccountId>,
     /// Receives the treasury share of lost bonds.
     pub treasury: AccountId,
-    /// Host bond in deposits per seat (bond = deposit × capacity × this); 2–10 with a court, 0 without.
+    /// Host bond in deposits per seat (bond = deposit × capacity × this); 0–2, and 0 without a court.
     pub bond_per_seat: u8,
     /// Deposit events stop taking guests at `starts_at` instead of `ends_at`. Required with a court.
     pub close_at_start: bool,
@@ -245,19 +245,18 @@ impl Rules {
     /// Refuses settings that reopen a hole the court closes (audit E-2, E-H1) or overflow.
     fn check(&self) {
         let court = self.dao.is_some();
-        require!(court == (self.bond_per_seat > 0), "A court needs a host bond, and a bond needs a court");
+        require!(court || self.bond_per_seat == 0, "A host bond needs a court");
         require!(self.dao.as_ref() != Some(&self.treasury), "The court cannot receive the lost bonds it decides");
         require!(!court || self.close_at_start, "With a court, registration must close at the start");
-        // Below 2 deposits per seat a caught host's no-shows win back half the bond by disputing
-        // their own lies ("dilution", audit 2); short hours let a host publish when nobody looks,
-        // abandon an honest late host, or outrun the council's voting period.
+        // Below 2 deposits per seat a false list can pay at low turnout ("dilution", audit 2):
+        // 0 and 1 are the owner's call (Alex, 2026-11-13). Short hours let a host publish when
+        // nobody looks, abandon an honest late host, or outrun the council's voting period.
         require!(
-            self.bond_per_seat <= 10
-                && (!court || self.bond_per_seat >= 2)
+            self.bond_per_seat <= 2
                 && (12..=168).contains(&self.challenge_hours)
                 && (24..=720).contains(&self.submit_hours)
                 && (72..=720).contains(&self.resolve_hours),
-            "Rules out of range: bond 2-10 deposits per seat with a court, window 12-168 h, publish 24-720 h, court 72-720 h"
+            "Rules out of range: bond 0-2 deposits per seat, window 12-168 h, publish 24-720 h, court 72-720 h"
         );
     }
 }
@@ -341,7 +340,7 @@ pub struct EventView {
     pub rules: Rules,
     /// Locked host bond; 0 until paid. Registration opens once it equals `bond_due`.
     pub host_bond: U128,
-    /// The bond this event needs: deposit × capacity × `rules.bond_per_seat`; 0 for Ticket or without a court.
+    /// The bond this event needs: deposit × capacity × `rules.bond_per_seat`; 0 for Ticket, without a court or at 0 per seat.
     pub bond_due: U128,
     /// Registration is accepted until this time (exclusive): `starts_at` for Deposit with
     /// `rules.close_at_start`, else `ends_at`.
@@ -1043,7 +1042,7 @@ impl Contract {
         }
         require!(deposit.0 >= MIN_DEPOSIT, "Deposit must be at least 0.1 USDC");
         // The host bond and every pool sum must fit in u128: the largest is the
-        // bond at 10 deposits × 300 seats × HOST_TREASURY_BPS in `split_lost` (1.5e7 deposits).
+        // bond at 2 deposits × 300 seats × HOST_TREASURY_BPS in `split_lost` (3e6 deposits).
         require!(deposit.0 <= u128::MAX / 1_000_000_000, "Deposit is too large");
         require!(capacity > 0 && capacity <= MAX_CAPACITY, "Capacity out of range");
         let mut rules = self.rules.clone();

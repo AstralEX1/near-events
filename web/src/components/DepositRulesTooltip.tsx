@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * `oracle`: a v3 Deposit event with a court (host bond, published list, disputes); without one the host's list is final.
+ * `oracle`: a v3 Deposit event with a court (published list, disputes); without one the host's list is final.
+ * `perSeat`: the host bond ("2 deposits per seat"); none when the court asks for no bond.
  * Durations come as text from `hoursText` ("12 hours", "3 days").
  */
 type Props = { ticket: boolean; amount: string; oracle?: boolean; disputeWindow?: string; submit?: string; resolve?: string; perSeat?: string };
 
 /** Secondary payment details; the key commitment stays visible beside registration. */
-export function DepositRulesTooltip({ ticket, amount, oracle, disputeWindow = "12 hours", submit = "3 days", resolve = "7 days", perSeat = "2 deposits per seat" }: Props) {
+export function DepositRulesTooltip({ ticket, amount, oracle, disputeWindow = "12 hours", submit = "3 days", resolve = "7 days", perSeat }: Props) {
   return (
     <details className="gc-fold text-sm">
       <summary className="text-accent">{ticket ? "Ticket details" : "Deposit details"}</summary>
@@ -24,9 +25,9 @@ export function DepositRulesTooltip({ ticket, amount, oracle, disputeWindow = "1
               <li>Guests who came split the pool in their Nearvent balances.</li>
             </ol>
             <p>
-              The host locks a bond of {perSeat} first and loses it if the council upholds a dispute. If the host cancels
+              {perSeat ? `The host locks a bond of ${perSeat} first and loses it if the council upholds a dispute. ` : ""}If the host cancels
               before the start, everyone is refunded. If the host publishes no list in time, it counts as empty: guests who
-              came can prove it and split the pool. If nobody proves it, everyone gets the deposit back plus a share of the bond.
+              came can prove it and split the pool. If nobody proves it, everyone gets the deposit back{perSeat ? " plus a share of the bond" : ""}.
             </p>
           </>
         ) : (

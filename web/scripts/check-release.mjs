@@ -101,7 +101,7 @@ if (ESCROW) {
     const voters = policy.roles.filter((x) => x.name !== "council" && x.permissions.some((p) => /^(\*|call):(VoteApprove|VoteReject|VoteRemove|\*)$/.test(p)));
     if (voters.length) throw new Error(`roles besides the council can vote: ${voters.map((x) => x.name).join(", ")}`);
     if (r.dao === RELAYER || r.dao === OWNER) throw new Error("the court is the relayer or the owner");
-    return `court ${r.dao}, council ${council.length}, treasury ${r.treasury}, bond ${r.bond_per_seat} deposit(s) per seat, ${hours}`;
+    return `court ${r.dao}, council ${council.length}, treasury ${r.treasury}, bond ${r.bond_per_seat} deposit(s) per seat${r.bond_per_seat < 2 ? " (below 2 a false list can pay at low turnout)" : ""}, ${hours}`;
   });
   await check("escrow holds USDC storage", async () => !!(await view(USDC, "storage_balance_of", { account_id: ESCROW })));
   await check("escrow responds", async () => `${(await view(ESCROW, "get_recent_events", { limit: 100 })).length} recent events`);
