@@ -12,6 +12,8 @@ import type { Call } from "./wallet";
 
 interface Eip1193 {
   request(args: { method: string; params?: unknown[] }): Promise<unknown>;
+  on?(event: string, listener: (...args: unknown[]) => void): void;
+  removeListener?(event: string, listener: (...args: unknown[]) => void): void;
 }
 
 /** Browser extensions announce themselves (EIP-6963), so a guest with two wallets can pick one. */
@@ -100,6 +102,19 @@ export async function evmAccount(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** Follows account switches in the signed-in EVM wallet (EIP-1193 `accountsChanged`): the new address, or null when the site is disconnected. */
+export function watchEvmAccount(onChange: (address: string | null) => void): () => void {
+  let eth: Eip1193;
+  try {
+    eth = ethereum();
+  } catch {
+    return () => {};
+  }
+  const handler = (accounts: unknown) => onChange((accounts as string[] | undefined)?.[0]?.toLowerCase() ?? null);
+  eth.on?.("accountsChanged", handler);
+  return () => eth.removeListener?.("accountsChanged", handler);
 }
 
 /** Sign-out: forget the picked wallet so the next sign-in can pick another (extensions stay approved). */

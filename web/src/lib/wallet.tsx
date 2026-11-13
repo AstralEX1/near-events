@@ -5,7 +5,7 @@ import type { NearConnector } from "@hot-labs/near-connect";
 import { EVENTS_CONTRACT, NETWORK } from "./config";
 import { STAFF_MESSAGE, evmStaffMessage } from "./staffShared";
 import { useRouter } from "next/navigation";
-import { connectEvm, disconnectEvm, evmAccount, hostFromIntents, personalSign } from "./intents";
+import { connectEvm, disconnectEvm, evmAccount, hostFromIntents, personalSign, watchEvmAccount } from "./intents";
 import { FREE_MAX_CAPACITY, FREE_MAX_DAYS, FREE_MAX_EVENTS } from "./near";
 import { RETURN_KEY, fastAuthEnsure, fastAuthLogin, fastAuthLogout, fastAuthProve, fastAuthRestore, fastAuthSend } from "./fastauth";
 import { demoLogin, demoLogout, demoRestore, demoSend } from "./demoBackend";
@@ -190,6 +190,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Switching account in the wallet switches it here too, as on other dApps. EVM wallets announce it
+  // (accountsChanged); NEAR Connect has no such event, so NEAR wallets are re-read when the tab gets focus.
+  useEffect(() => {
+    if (kind === "evm") {
+      return watchEvmAccount((address) => {
+        if (!address) disconnectEvm();
+        remember(address ? "evm" : null, address);
+      });
+    }
+    if (kind !== "wallet") return;
+    const check = async () => {
+      const wallet = await connector.current?.wallet().catch(() => null);
+      const id = (await wallet?.getAccounts().catch(() => null))?.[0]?.accountId;
+      if (id && id !== accountId) remember("wallet", id);
+    };
+    window.addEventListener("focus", check);
+    return () => window.removeEventListener("focus", check);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, accountId]);
 
   const signIn = useCallback(async () => {
     connecting.current = true;
