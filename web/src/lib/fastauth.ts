@@ -113,7 +113,9 @@ export async function fastAuthRestore(): Promise<string | null> {
 export async function fastAuthLogout(): Promise<void> {
   const b = await base?.catch(() => null);
   session = null;
-  await b?.client.logout({ openUrl: false } as never).catch(() => {});
+  // The provider directly: FastAuthClient.logout passes its args on as one array, so Auth0
+  // never sees openUrl: false and sends the whole page to its logout URL (every NEAR wallet sign-in).
+  await b?.provider.logout({ openUrl: false }).catch(() => {});
 }
 
 /** Re-open the Auth0/MPC session after a reload, or throw a clear error. */
