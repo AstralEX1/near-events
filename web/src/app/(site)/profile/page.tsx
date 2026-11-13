@@ -23,7 +23,7 @@ export default function MyProfile() {
   return (
     <div className="max-w-xl mx-auto space-y-8 pt-4">
       <Editor key={accountId} accountId={accountId} linkRev={linkRev} />
-      {kind !== "demo" && <Wallets key={accountId} accountId={accountId} onChange={() => setLinkRev((n) => n + 1)} />}
+      {kind !== "demo" && <Wallets key={`wallets:${accountId}`} accountId={accountId} onChange={() => setLinkRev((n) => n + 1)} />}
     </div>
   );
 }
