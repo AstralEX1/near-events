@@ -8,10 +8,12 @@ import { ruleText, type AccessCheck } from "@/lib/access";
 import { EVENTS_CONTRACT, NETWORK } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import {
-  confidentialUsdc, confirmRegistration, forgetIntentsSession, intentsUsdcBalance, moveFromConfidential,
+  confidentialBalance, confirmRegistration, forgetIntentsSession, intentsUsdcBalance, moveFromConfidential,
   registerFromIntents, savedIntentsSession, signInToIntents, withdrawIntentsCall,
 } from "@/lib/intents";
-import { INTENTS_SESSION_EXPIRED } from "@/lib/oneclickClient";
+import { INTENTS_SESSION_EXPIRED, USDC_ASSET } from "@/lib/oneclickClient";
+import { pickUsdc } from "@/lib/nearcomShared";
+import type { ConfidentialBalance } from "@/lib/intents";
 import { embedReturnPath } from "@/lib/embed";
 import { guestNamesApi } from "@/lib/guestNamesClient";
 import { shortAccount } from "@/components/ui";
@@ -43,7 +45,7 @@ export default function TopUpAndRegister() {
   const [registered, setRegistered] = useState(false);
   // The NEAR Intents sign-in (a 15-minute 1Click session) and the confidential USDC it shows.
   const [session, setSession] = useState<string | null>(null);
-  const [confidential, setConfidential] = useState<bigint | null>(null);
+  const [confidential, setConfidential] = useState<ConfidentialBalance | null>(null);
   const [signInFailed, setSignInFailed] = useState(false);
   const [stage, setStage] = useState("");
   // The access rule's verdict for this account; registering would refund the payment otherwise.
@@ -73,7 +75,7 @@ export default function TopUpAndRegister() {
     const saved = intentsSignIn ? savedIntentsSession(accountId) : null;
     setSession(saved);
     if (!saved) return setConfidential(null);
-    confidentialUsdc(saved).then(setConfidential).catch((e) => {
+    confidentialBalance(saved).then(setConfidential).catch((e) => {
       if (e instanceof Error && e.message === INTENTS_SESSION_EXPIRED) dropSession();
     });
   }, [accountId, intentsSignIn, dropSession]);
@@ -110,7 +112,7 @@ export default function TopUpAndRegister() {
   const deposit = BigInt(event.deposit);
   // One total: public USDC plus, after the NEAR Intents sign-in, confidential USDC.
   const known = available !== null && (!session || confidential !== null);
-  const total = (available ?? 0n) + (confidential ?? 0n);
+  const total = (available ?? 0n) + (confidential?.usdc ?? 0n);
   const enough = known && total >= deposit;
   // The public balance falls short and the confidential one is unseen yet: the button signs in first.
   const needsSignIn = intentsSignIn && !session && available !== null && available < deposit;
@@ -126,14 +128,16 @@ export default function TopUpAndRegister() {
       const name = requireDisplayName(displayName);
       const have = available ?? 0n;
       let token = session;
+      let kinds = confidential?.kinds ?? [];
       if (needsSignIn) {
         setStage("Sign in with your wallet…");
         try {
           token = await signInToIntents(accountId, nep413);
-          const conf = await confidentialUsdc(token);
+          const conf = await confidentialBalance(token);
           setConfidential(conf);
           setSession(token);
-          if (have + conf < deposit) return; // not enough: the top-up card takes over
+          kinds = conf.kinds;
+          if (have + conf.usdc < deposit) return; // not enough: the top-up card takes over
         } catch (e) {
           setSignInFailed(true);
           throw e;
@@ -141,8 +145,10 @@ export default function TopUpAndRegister() {
       }
       if (token && have < deposit) {
         // The rest is confidential: move it to the public balance the escrow takes it from.
+        const from = pickUsdc(kinds, deposit - have, USDC_ASSET);
+        if (!from) throw new Error("Your USDC is split across networks. On near.com, swap it into one USDC, then try again.");
         setStage("Moving your USDC: confirm in your wallet…");
-        await moveFromConfidential(accountId, token, deposit - have, nep413);
+        await moveFromConfidential(accountId, token, deposit - have, from, nep413);
       }
       setStage("Confirm your registration in your wallet…");
       if (kind === "evm") {
@@ -222,6 +228,9 @@ export default function TopUpAndRegister() {
       {accountId && canRegister && known && !enough && (!needsSignIn || signInFailed) && (
         <div className="card p-5 space-y-4">
           <h2 className="font-semibold">Top up on near.com</h2>
+          {!!confidential?.others.length && (
+            <p className="text-sm">Your NEAR Intents balance also holds {confidential.others.join(", ")}. On near.com, swap enough of it into USDC.</p>
+          )}
           <ol className="list-decimal pl-5 space-y-2 text-sm">
             <li>Open near.com and sign in with the same wallet you use here{kind === "evm" ? " (EVM Wallets)" : " (NEAR Wallets)"}. Your account there is <span className="font-mono">{shortAccount(accountId)}</span>.</li>
             <li>Add at least <b>{price}</b> on the NEAR network: deposit USDC, or swap any token you hold into USDC.</li>

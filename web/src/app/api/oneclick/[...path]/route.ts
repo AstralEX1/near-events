@@ -46,8 +46,8 @@ function quoteAllowed(body: Record<string, unknown>, session: string | undefined
     || (body.swapType === "EXACT_INPUT" && body.originAsset === USDC_ASSET
       && ["ORIGIN_CHAIN", "INTENTS"].includes(String(body.depositType))
       && body.recipientType === "DESTINATION_CHAIN" && body.refundType === "INTENTS")
-    // near.com Confidential USDC into the guest's own public Intents balance.
-    || (!!session && body.swapType === "EXACT_OUTPUT" && body.originAsset === USDC_ASSET && body.destinationAsset === USDC_ASSET
+    // Confidential USDC of any kind into NEAR USDC on the guest's own public Intents balance.
+    || (!!session && body.swapType === "EXACT_OUTPUT" && body.destinationAsset === USDC_ASSET
       && body.depositType === "CONFIDENTIAL_INTENTS" && body.recipientType === "INTENTS"
       && body.refundType === "CONFIDENTIAL_INTENTS" && body.recipient === body.refundTo);
 }

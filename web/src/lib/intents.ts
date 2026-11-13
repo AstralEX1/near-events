@@ -6,8 +6,8 @@
 // relayer submits them to intents.near, paying the gas.
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "./config";
 import { events, view } from "./near";
-import { moveProblem, versionedNonce } from "./nearcomShared";
-import { oneClickCall, USDC_ASSET } from "./oneclickClient";
+import { moveProblem, toUsdc6, versionedNonce } from "./nearcomShared";
+import { oneClickCall, oneClickTokens, USDC_ASSET } from "./oneclickClient";
 import type { Call } from "./wallet";
 
 interface Eip1193 {
@@ -304,19 +304,44 @@ export async function signInToIntents(account: string, nep413?: Nep413Sign): Pro
   return accessToken;
 }
 
-/** USDC on the account's Confidential Intents balance. */
-export async function confidentialUsdc(session: string): Promise<bigint> {
-  const { balances } = await oneClickCall<{ balances: { tokenId: string; available: string }[] }>(
-    `account/balances?tokenIds=${encodeURIComponent(USDC_ASSET)}`, undefined, session);
-  return balances.filter((b) => b.tokenId === USDC_ASSET).reduce((sum, b) => sum + BigInt(b.available), 0n);
+export interface ConfidentialBalance {
+  /** USDC of every kind, in USDC's 6 decimals. */
+  usdc: bigint;
+  /** Each kind held (NEAR, Base, Ethereum, Solana…): near.com shows them all as one "USDC". */
+  kinds: { assetId: string; amount6: bigint }[];
+  /** Other tokens held there, by symbol. */
+  others: string[];
 }
 
-/** One signature: moves `amount` USDC from Confidential to the account's public Intents balance and waits for it. */
-export async function moveFromConfidential(account: string, session: string, amount: bigint, nep413?: Nep413Sign): Promise<void> {
+/** What the account holds on Confidential Intents, USDC of every kind counted together. */
+export async function confidentialBalance(session: string): Promise<ConfidentialBalance> {
+  const [{ balances }, tokens] = await Promise.all([
+    oneClickCall<{ balances: { tokenId: string; available: string }[] }>("account/balances", undefined, session),
+    oneClickTokens(),
+  ]);
+  const byId = new Map(tokens.map((t) => [t.assetId, t]));
+  const kinds: ConfidentialBalance["kinds"] = [];
+  const others: string[] = [];
+  for (const b of balances) {
+    const raw = BigInt(b.available);
+    const token = byId.get(b.tokenId);
+    if (raw <= 0n) continue;
+    if (token?.symbol === "USDC") kinds.push({ assetId: b.tokenId, amount6: toUsdc6(raw, token.decimals) });
+    else others.push(token?.symbol ?? b.tokenId);
+  }
+  return { usdc: kinds.reduce((sum, k) => sum + k.amount6, 0n), kinds, others };
+}
+
+/**
+ * One signature: moves `amount` NEAR USDC from Confidential to the account's public Intents
+ * balance and waits for it. `from` is the USDC kind it is paid with; other than NEAR's own,
+ * 1Click swaps it (stablecoin to stablecoin, 0.5% slippage room, the rest refunded).
+ */
+export async function moveFromConfidential(account: string, session: string, amount: bigint, from: string, nep413?: Nep413Sign): Promise<void> {
   const before = await intentsUsdcBalance(account);
   const { quote } = await oneClickCall<{ quote: { depositAddress: string; amountIn: string } }>("quote", {
-    dry: false, swapType: "EXACT_OUTPUT", slippageTolerance: 0,
-    originAsset: USDC_ASSET, destinationAsset: USDC_ASSET, amount: amount.toString(),
+    dry: false, swapType: "EXACT_OUTPUT", slippageTolerance: from === USDC_ASSET ? 0 : 50,
+    originAsset: from, destinationAsset: USDC_ASSET, amount: amount.toString(),
     depositType: "CONFIDENTIAL_INTENTS", recipient: account, recipientType: "INTENTS",
     refundTo: account, refundType: "CONFIDENTIAL_INTENTS",
     deadline: new Date(Date.now() + 10 * 60_000).toISOString(), referral: "near-events",
@@ -328,7 +353,7 @@ export async function moveFromConfidential(account: string, session: string, amo
   const payload = intent?.payload as string | { message?: string; nonce?: string; recipient?: string } | undefined;
   const wrapper = typeof payload === "object" ? payload : {};
   const message = typeof payload === "string" ? payload : wrapper.message ?? "";
-  const problem = moveProblem(message, { signer: account, depositAddress: quote.depositAddress, amountIn: quote.amountIn, usdc: USDC_CONTRACT })
+  const problem = moveProblem(message, { signer: account, depositAddress: quote.depositAddress, amountIn: quote.amountIn, asset: from })
     ?? (nep413 && (!wrapper.nonce || !wrapper.recipient) ? "no NEP-413 nonce or recipient" : null);
   if (problem) throw new Error(`NEAR Intents asked to sign something unexpected (${problem}), so nothing was signed.`);
   const signedData = await signedForOneClick(account, message, wrapper.nonce ?? "", nep413, wrapper.recipient);
