@@ -5,10 +5,15 @@
 export const ONECLICK_URL =
   process.env.ONECLICK_URL ?? ((process.env.NEXT_PUBLIC_NETWORK ?? "testnet") === "mainnet" ? "https://1click.chaindefuser.com" : "https://www.usetidepool.tech");
 
-export async function oneClick(path: string, init?: RequestInit): Promise<Response> {
+export async function oneClick(path: string, init?: RequestInit, guestSession?: string, partner = true): Promise<Response> {
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
-  if (process.env.ONECLICK_API_KEY) headers.set("Authorization", `Bearer ${process.env.ONECLICK_API_KEY}`);
+  const key = partner ? process.env.ONECLICK_API_KEY : undefined;
+  // With a guest's 1Click session (near.com balance) Authorization carries the session and the key moves to X-API-Key.
+  if (guestSession) {
+    headers.set("Authorization", `Bearer ${guestSession}`);
+    if (key) headers.set("X-API-Key", key);
+  } else if (key) headers.set("Authorization", `Bearer ${key}`);
   return fetch(`${ONECLICK_URL}${path}`, { ...init, headers, signal: AbortSignal.timeout(12_000), cache: "no-store" });
 }
 

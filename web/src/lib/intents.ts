@@ -6,6 +6,8 @@
 // relayer submits them to intents.near, paying the gas.
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "./config";
 import { events, view } from "./near";
+import { moveProblem, versionedNonce } from "./nearcomShared";
+import { oneClickCall, USDC_ASSET } from "./oneclickClient";
 import type { Call } from "./wallet";
 
 interface Eip1193 {
@@ -214,19 +216,73 @@ async function signAndRelay(address: string, intent: Record<string, unknown>, na
     nonce: await nonce(),
     intents: [intent],
   });
-  const sigHex = await personalSign(address, payload);
+  const res = await fetch("/api/intents/execute", {
+    method: "POST",
+    signal: AbortSignal.timeout(60_000),
+    body: JSON.stringify({ standard: "erc191", payload, signature: await erc191Signature(address, payload), name }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? "Intent failed");
+}
+
+/** The wallet's `personal_sign` of `text` in the verifier's form: secp256k1:<base58 r‖s‖v>. */
+async function erc191Signature(address: string, text: string): Promise<string> {
+  const sigHex = await personalSign(address, text);
   const sig = Uint8Array.from(sigHex.slice(2).match(/../g)!.map((h) => parseInt(h, 16)));
   if (sig[64] >= 27) sig[64] -= 27; // The verifier expects v in {0, 1}.
   // Loaded here, not at the top: this file ships on every page and near-api-js is ~480 KB.
   const { baseEncode } = await import("near-api-js");
+  return `secp256k1:${baseEncode(sig)}`;
+}
 
-  const res = await fetch("/api/intents/execute", {
-    method: "POST",
-    signal: AbortSignal.timeout(60_000),
-    body: JSON.stringify({ standard: "erc191", payload, signature: `secp256k1:${baseEncode(sig)}`, name }),
+// near.com keeps most guests' USDC on Confidential Intents, which this page can't read on its
+// own: the guest signs once for a 15-minute 1Click session, then once to move the missing USDC
+// into their public Intents balance, where the usual registration takes it.
+
+/** One signature: a 1Click session that can read and move this account's near.com balance. */
+export async function nearComSession(address: string): Promise<string> {
+  const deadline = new Date(Date.now() + 5 * 60_000);
+  const salt = await view<string>("current_salt", {}, INTENTS_CONTRACT!);
+  // An empty intent proves the wallet owns the account and moves nothing.
+  const payload = JSON.stringify({
+    signer_id: address, verifying_contract: INTENTS_CONTRACT, deadline: deadline.toISOString(),
+    nonce: versionedNonce(salt, deadline), intents: [],
   });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error ?? "Intent failed");
+  const signedData = { standard: "erc191", payload, signature: await erc191Signature(address, payload) };
+  return (await oneClickCall<{ accessToken: string }>("auth/authenticate", { signedData })).accessToken;
+}
+
+/** USDC on the account's near.com (Confidential) balance. */
+export async function nearComUsdc(session: string): Promise<bigint> {
+  const { balances } = await oneClickCall<{ balances: { tokenId: string; available: string }[] }>(
+    `account/balances?tokenIds=${encodeURIComponent(USDC_ASSET)}`, undefined, session);
+  return balances.filter((b) => b.tokenId === USDC_ASSET).reduce((sum, b) => sum + BigInt(b.available), 0n);
+}
+
+/** One signature: moves `amount` USDC from near.com into this account's public Intents balance and waits for it. */
+export async function moveFromNearCom(address: string, session: string, amount: bigint): Promise<void> {
+  const before = await intentsUsdcBalance(address);
+  const { quote } = await oneClickCall<{ quote: { depositAddress: string; amountIn: string } }>("quote", {
+    dry: false, swapType: "EXACT_OUTPUT", slippageTolerance: 0,
+    originAsset: USDC_ASSET, destinationAsset: USDC_ASSET, amount: amount.toString(),
+    depositType: "CONFIDENTIAL_INTENTS", recipient: address, recipientType: "INTENTS",
+    refundTo: address, refundType: "CONFIDENTIAL_INTENTS",
+    deadline: new Date(Date.now() + 10 * 60_000).toISOString(), referral: "near-events",
+  }, session);
+  const { intent } = await oneClickCall<{ intent: { payload?: unknown } }>("generate-intent", {
+    type: "swap_transfer", standard: "erc191", signerId: address, depositAddress: quote.depositAddress,
+  }, session);
+  const payload = typeof intent?.payload === "string" ? intent.payload : "";
+  const problem = moveProblem(payload, { signer: address, depositAddress: quote.depositAddress, amountIn: quote.amountIn, usdc: USDC_CONTRACT });
+  if (problem) throw new Error(`NEAR Intents asked to sign something unexpected (${problem}), so nothing was signed.`);
+  const signedData = { standard: "erc191", payload, signature: await erc191Signature(address, payload) };
+  await oneClickCall("submit-intent", { type: "swap_transfer", signedData }, session);
+  // The public balance is the proof: wait until the USDC lands there.
+  for (let i = 0; i < 40; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    if (await intentsUsdcBalance(address).catch(() => 0n) >= before + amount) return;
+  }
+  throw new Error("Your USDC is still on its way from near.com. Wait a minute, then press Confirm Registration again.");
 }
 
 /** Asks the relayer to move this account's payout into its Intents balance. */

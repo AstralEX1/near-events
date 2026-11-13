@@ -5,9 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, isTicket, needsBond, registrationEndsAt, registrationOpen, type EventView } from "@/lib/near";
 import { ruleText, type AccessCheck } from "@/lib/access";
-import { EVENTS_CONTRACT } from "@/lib/config";
+import { EVENTS_CONTRACT, NETWORK } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
-import { confirmRegistration, intentsUsdcBalance, registerFromIntents, withdrawIntentsCall } from "@/lib/intents";
+import { confirmRegistration, intentsUsdcBalance, moveFromNearCom, nearComSession, nearComUsdc, registerFromIntents, withdrawIntentsCall } from "@/lib/intents";
 import { embedReturnPath } from "@/lib/embed";
 import { guestNamesApi } from "@/lib/guestNamesClient";
 import { shortAccount } from "@/components/ui";
@@ -35,6 +35,9 @@ export default function TopUpAndRegister() {
   const [loadError, setLoadError] = useState("");
   const [available, setAvailable] = useState<bigint | null>(null);
   const [registered, setRegistered] = useState(false);
+  // USDC on near.com's Confidential balance, read after one signature (EVM wallets on mainnet).
+  const [nearCom, setNearCom] = useState<{ session: string; usdc: bigint } | null>(null);
+  const [stage, setStage] = useState("");
   // The access rule's verdict for this account; registering would refund the payment otherwise.
   const [access, setAccess] = useState<AccessCheck | null>(null);
 
@@ -53,6 +56,7 @@ export default function TopUpAndRegister() {
   useEffect(() => {
     setRegistered(false);
     setAvailable(null);
+    setNearCom(null);
     setAccess(null);
     if (!accountId) return;
     let active = true;
@@ -76,7 +80,27 @@ export default function TopUpAndRegister() {
   // A Deposit event takes guests only after the host bond (escrow v3): no payment into a refused seat.
   const canRegister = event.status === "Open" && event.guest_count < event.capacity && Date.now() < registrationEndsAt(event) && !registered && !notAllowed && !needsBond(event);
   const price = `${formatUsdc(event.deposit)} USDC`;
-  const enough = available !== null && available >= BigInt(event.deposit);
+  const deposit = BigInt(event.deposit);
+  const enough = available !== null && available >= deposit;
+  // Not enough in NEAR Intents, but near.com covers the rest: we move it, then register.
+  const fromNearCom = !enough && available !== null && !!nearCom && available + nearCom.usdc >= deposit;
+  const canCheckNearCom = kind === "evm" && NETWORK === "mainnet";
+
+  const checkNearCom = async () => {
+    if (!accountId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setStage("Sign in your wallet…");
+      const session = await nearComSession(accountId);
+      setNearCom({ session, usdc: await nearComUsdc(session) });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStage("");
+      setBusy(false);
+    }
+  };
 
   const finishRegistration = async () => {
     if (!accountId || !canRegister) return;
@@ -84,6 +108,12 @@ export default function TopUpAndRegister() {
     setError(null);
     try {
       const name = requireDisplayName(displayName);
+      if (fromNearCom && nearCom && available !== null) {
+        setStage("Moving USDC from near.com: sign in your wallet…");
+        await moveFromNearCom(accountId, nearCom.session, deposit - available);
+        setNearCom(null);
+        setStage("Confirm in your wallet…");
+      }
       if (kind === "evm") {
         await registerFromIntents(accountId, event.id, event.deposit, name);
       } else {
@@ -102,9 +132,13 @@ export default function TopUpAndRegister() {
       const returnPath = embedReturnPath(new URLSearchParams(window.location.search).get("returnTo"), event.id);
       if (returnPath) router.replace(returnPath);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      // The 15-minute near.com session ran out: show the Check near.com Balance button again.
+      if (message.includes("near.com check has expired")) setNearCom(null);
     } finally {
       refreshBalance();
+      setStage("");
       setBusy(false);
     }
   };
@@ -123,11 +157,11 @@ export default function TopUpAndRegister() {
       ) : (
         <div className="card p-4 space-y-3">
           <p>
-            {available === null ? "Checking your balance…" : `${formatUsdc(available)} USDC in NEAR Intents.`}{" "}
+            {available === null ? "Checking your balance…" : `${formatUsdc(available)} USDC in NEAR Intents${nearCom ? `, ${formatUsdc(nearCom.usdc)} USDC on near.com` : ""}.`}{" "}
             <Link href="/me" className="underline">View or withdraw funds</Link>
           </p>
           {registered && <p className="text-good">Your place is confirmed.</p>}
-          {canRegister && enough && (
+          {canRegister && (enough || fromNearCom) && (
             <>
               <label className="block space-y-1">
                 <span className="text-sm font-medium">Your name</span>
@@ -141,7 +175,8 @@ export default function TopUpAndRegister() {
                   disabled={busy}
                 />
               </label>
-              <button className="btn btn-primary" disabled={busy} onClick={finishRegistration}>{busy ? "Confirm in your wallet…" : "Confirm Registration"}</button>
+              <button className="btn btn-primary" disabled={busy} onClick={finishRegistration}>{busy ? stage || "Confirm in your wallet…" : "Confirm Registration"}</button>
+              {fromNearCom && <p className="text-sm text-muted">We move the missing {formatUsdc(deposit - available!)} USDC from near.com to NEAR Intents first: one more signature.</p>}
             </>
           )}
           {!canRegister && !registered && (
@@ -153,8 +188,16 @@ export default function TopUpAndRegister() {
           {error && <p className="text-sm text-warn break-words">{error}</p>}
         </div>
       )}
-      {accountId && canRegister && available !== null && !enough && (
+      {accountId && canRegister && available !== null && !enough && !fromNearCom && (
         <div className="card p-5 space-y-4">
+          {canCheckNearCom && (nearCom ? (
+            <p className="text-sm">Your near.com balance has {formatUsdc(nearCom.usdc)} USDC: not enough for this event yet.</p>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm">Already have USDC on near.com? One signature shows your near.com balance, and you pay from it here.</p>
+              <button type="button" className="btn btn-primary" disabled={busy} onClick={checkNearCom}>{busy ? stage || "Checking…" : "Check near.com Balance"}</button>
+            </div>
+          ))}
           <h2 className="font-semibold">Top up on near.com</h2>
           <ol className="list-decimal pl-5 space-y-2 text-sm">
             <li>Open near.com and sign in with the same wallet you use here{kind === "evm" ? " (EVM Wallets)" : " (NEAR Wallets)"}. Your account there is <span className="font-mono">{shortAccount(accountId)}</span>.</li>
