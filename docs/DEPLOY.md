@@ -1,10 +1,10 @@
 # Web app hosting and escrow release
 
 Current status (2026-11-13): Vercel Production (`www.nearvent.site`) runs on
-mainnet with the escrow `escrow.lold.near` (deployed 2026-11-11, tp7 code, 0 events;
-see "Mainnet release"). The next escrow release is the v3 in-place upgrade at the end
-of this file. Preview deployments, the app default, `.env.example` and the local
-`.env.local` stay on testnet `escrow-tp7.tp7-nv1110.testnet` (see "TP7 testnet
+mainnet with the escrow `escrow.lold.near`, deployed 2026-11-11 with the tp7 code
+(see "Mainnet release") and upgraded in place to v3 with no court on 2026-11-13
+(the last section of this file); 0 events so far. Preview deployments, the app
+default, `.env.example` and the local `.env.local` stay on testnet `escrow-tp7.tp7-nv1110.testnet` (see "TP7 testnet
 deploy"); TP6/TP5/TP4 events remain on chain outside the app flow. Testnet USDC is
 `usdc.tidepool-sandbox.testnet`, verifier `verifier.tidepool-sandbox.testnet`.
 Upstash stores off-chain details keyed by contract id. Hosted secret values are
@@ -444,59 +444,38 @@ cancelled leftovers of those runs.
 
 Release branch `claude/release-v3`: regulars, V3, the UI pass and the README; every step is a local rollback commit (list in `docs/oracle-upgrade/REPORT-v3.ru.md`). Design, for AI agents: `docs/oracle-upgrade/SPEC-v3-as-built.md`; audits and decisions in Russian: `docs/oracle-upgrade/AUDIT-v3.ru.md`.
 
-**Target: upgrade `escrow.lold.near` in place** (Alex, 2026-11-13).
-- Read-only facts: 0 events, no access keys, owner `lold.near`, relayer `event_relayer.near`, 5.258 NEAR, 306 795 B.
-- `migrate` turns the tp7 root into v3 with no court (`Rules::new`) and refuses a root that has events.
-- `upgrade` deploys the code and runs `migrate` in one receipt, so a panic rolls everything back.
-- After the upgrade, spare NEAR is about 1.67 NEAR, enough for about 5 free 50-seat events at once (0.31 NEAR each).
-- Rehearsed exactly on testnet; see "Testnet rehearsal" below.
+**Done: `escrow.lold.near` upgraded in place on 2026-11-13 (signed by Alex).**
+- Transaction [`22AN62wuxS1ngiEULEBbFMQw1qjziAK5BMWDgiYdndGx`](https://nearblocks.io/txns/22AN62wuxS1ngiEULEBbFMQw1qjziAK5BMWDgiYdndGx): `upgrade` + `migrate` in one receipt, 34.5 Tgas, every receipt successful.
+- WASM: the CI `escrow-wasm` artifact of `a565ab9` (run 43379434997), 366 047 B, SHA-256 `e77705f825f2bd27bba04f3be947506f7d86b6ae81884de3a66dc94540de175f`, NEAR code hash `GaYShHFfXF7LDLw4QCQFP4qcDVqogvDimimREQHu2qga`.
+- After it: storage 366 385 B, 5.2576 NEAR, about 1.59 NEAR spare for the free tier (about 5 open free 50-seat events at 0.31 NEAR each), no access keys, no events.
+- Rules (`get_config`): `dao` null, treasury `lold.near`, `bond_per_seat` 0, `close_at_start` true, window 12 h, publish 72 h, court 168 h; `oracle_hour_ms` 3 600 000. Whitelist and sponsored modes are both off; Alex may turn the sponsored mode on next.
+- `check-release.mjs` on mainnet: all green except the relayer balance (0.449 NEAR, keep at least 5).
+- www runs the v3 site since `a565ab9`; `/events` and `/u/<account>` showed no console errors after the upgrade. `/docs/contract` caches the code hash for an hour (`revalidate`), so it showed the old `7nrLLgzc…` until that cache expired.
+- Before it: tp7 code `7nrLLgzc…`, 0 events, 306 795 B. `migrate` turned the tp7 root into v3 with no court (`Rules::new`); it refuses a root that has events, and a panic would have rolled the whole upgrade back. Rehearsed on testnet first; see "Testnet rehearsal" below.
+- Source: the contract on `main` is byte-for-byte `a565ab9`. Rebuild it with `cargo near build reproducible-wasm --manifest-path contracts/events/Cargo.toml` on that commit to compare. Never deploy a `--features short-windows` WASM: `new` and `migrate` refuse it outside `.testnet` / `.test.near`.
 
-**Launch without a court.** After the upgrade `get_config` shows `rules.dao = null`, which is the default:
+**Running without a court**, the default:
 - the host's list is final and pays out when published, as before v3;
 - there is no host bond and there are no disputes;
 - Deposit registration closes at the start;
 - the host publishes within 72 h after the end; after that anyone calls `refund` and every guest gets the deposit back at once.
 
-The court, its rules and the keeper schedule ("Later, optional" below) can come any time after the launch; they apply to events created from then on.
+The court, its rules and the keeper schedule ("Later, optional" below) can come any time; they apply to events created from then on.
 
 Who does what: **Alex** signs and funds (real money). Everything else is prepared.
 
-Before the upgrade:
-1. **Stop new events (Alex signs, audit 2 F1).** One event on the old code makes `migrate` refuse, and the in-place upgrade is then impossible. www already runs the v3 site against this escrow, so do this first:
-   ```bash
-   OWNER=lold.near EVENTS_CONTRACT=escrow.lold.near NETWORK=mainnet node web/scripts/escrow-owner.mjs mode on
-   ```
-   The step 5 command (without `WASM=`) must then print "whitelist on" and "0 recent events".
-2. **Reproducible WASM.** Take the `escrow-wasm` artifact of the CI run of the release commit on `main` (`cargo near build reproducible-wasm`, no features). Record its SHA-256 and the NEAR code hash here.
-   - The local non-reproducible release build is 357 900 B.
-   - Never deploy a `--features short-windows` WASM: `new` and `migrate` refuse it outside `.testnet` / `.test.near`.
-3. **Web first.** The v3 site works with the v2 escrow (the new view fields fall back to the old behaviour) and with v3, so the site needs no switch. On www since `a565ab9` (pushed 2026-11-13); re-check `/events` and an event page before step 4.
+For a later in-place upgrade (v3 → v3 keeps running events; rehearsed on `v3rh`), the order is: CI WASM of the release commit, `OWNER=lold.near EVENTS_CONTRACT=escrow.lold.near NETWORK=mainnet node web/scripts/escrow-owner.mjs upgrade <wasm>`, then `check-release.mjs` (step 7) with `WASM=<wasm>`.
 
-The upgrade:
+Left now:
 
-4. **Upgrade (Alex signs; about 51 Tgas, migrate about 1.5 Tgas):**
-   ```bash
-   OWNER=lold.near EVENTS_CONTRACT=escrow.lold.near NETWORK=mainnet node web/scripts/escrow-owner.mjs upgrade <ci near_events.wasm>
-   ```
-5. **Check (read-only):**
-   ```bash
-   cd web && NETWORK=mainnet EVENTS_CONTRACT=escrow.lold.near RELAYER_ACCOUNT=event_relayer.near OWNER=lold.near WASM=<ci near_events.wasm> node scripts/check-release.mjs
-   ```
-   - The code hash equals the CI WASM.
-   - "escrow v3 rules" prints "no court yet …, window 12 h, publish 72 h, court 168 h". A rehearsal build fails here (`oracle_hour_ms` is not 3 600 000).
-   - Owner, relayer and intents are unchanged.
-6. **Open event creation again (Alex signs).** The free tier stays open to every host (DECISIONS.md 2026-11-11):
-   ```bash
-   OWNER=lold.near EVENTS_CONTRACT=escrow.lold.near NETWORK=mainnet node web/scripts/escrow-owner.mjs mode off
-   ```
-7. **Funding (Alex).**
-   - `event_relayer.near` has 0.45 NEAR; top it up to at least 5 NEAR (the only red line in `check-release.mjs` on 2026-11-13). It pays gas for EVM and Google relays, payouts to Intents and the refund button.
-   - The escrow: optional, a plain transfer raises the free-tier pool above 1.67 NEAR.
-8. **Keeper: optional without a court.** Without `CRON_SECRET`, `/api/keeper/tick` answers 503 and nothing runs on a schedule. A late list is still refunded: the event page shows a refund button (it calls `/api/keeper/event`, which the relayer pays, or the guest's own wallet). With the schedule from step 11, the keeper sends that `refund` by itself.
+1. **Funding (Alex).**
+   - `event_relayer.near` has 0.45 NEAR; top it up to at least 5 NEAR (the only red line in `check-release.mjs` after the upgrade). It pays gas for EVM and Google relays, payouts to Intents and the refund button.
+   - The escrow: optional, a plain transfer raises the free-tier pool above 1.59 NEAR.
+2. **Keeper: optional without a court.** Without `CRON_SECRET`, `/api/keeper/tick` answers 503 and nothing runs on a schedule. A late list is still refunded: the event page shows a refund button (it calls `/api/keeper/event`, which the relayer pays, or the guest's own wallet). With the schedule from step 5, the keeper sends that `refund` by itself.
 
 Later, optional: a court
 
-9. **Court DAO (Alex signs and funds; 5 council members who are not Alex):**
+3. **Court DAO (Alex signs and funds; 5 council members who are not Alex):**
    - Put the 5 accounts into `docs/oracle-upgrade/evidence/dao-init-args.example.json` (bot `event_relayer.near` stays), then:
      ```bash
      ARGS=$(node -e 'console.log(Buffer.from(JSON.stringify(require("./docs/oracle-upgrade/evidence/dao-init-args.example.json"))).toString("base64"))')
@@ -504,7 +483,7 @@ Later, optional: a court
      ```
    - Then one council member proposes `{"FactoryInfoUpdate":{"factory_info":{"factory_id":"sputnik-dao.near","auto_update":false}}}`, and 3 members approve it with `act_proposal` (as `smoke-v3-testnet.mjs dao` does).
    - Top up the DAO to about 5 NEAR: each dispute's proposal pair stores about 0.03 NEAR, and the keeper pauses below 0.3 NEAR available.
-10. **Rules (Alex signs):**
+4. **Rules (Alex signs):**
     ```bash
     OWNER=lold.near EVENTS_CONTRACT=escrow.lold.near NETWORK=mainnet node web/scripts/escrow-owner.mjs rules '{"dao":"nearvent-court.sputnik-dao.near","treasury":"<wallet>","bond_per_seat":0,"close_at_start":true,"challenge_hours":12,"submit_hours":72,"resolve_hours":168}'
     ```
@@ -513,16 +492,20 @@ Later, optional: a court
     - a bond above 2 deposits per seat, or any bond without a court;
     - window under 12 h, publish under 24 h, court under 72 h;
     - the court as treasury, the owner or the relayer as the court, or the escrow, USDC or Intents as either.
-11. **Keeper schedule (Alex: Vercel and Upstash; needed with a court, it opens the DAO proposals):**
+5. **Keeper schedule (Alex: Vercel and Upstash; needed with a court, it opens the DAO proposals):**
     - `CRON_SECRET` (random, at least 32 characters) on Vercel Production.
     - An Upstash QStash schedule every 10 minutes: `POST https://www.nearvent.site/api/keeper/tick` with header `Upstash-Forward-Authorization: Bearer <CRON_SECRET>` (or Vercel Cron).
-12. **Council: call an event off (`void_event`, when needed).** A council member proposes, 3 of 5 approve; every deposit and every dispute deposit go back (and the host bond, if any). Allowed after the host publishes the list and before the court deadline (`resolve_by` in `get_event`), not for an event whose host published nothing. The keeper never proposes this. With `ID` the event id:
+6. **Council: call an event off (`void_event`, when needed).** A council member proposes, 3 of 5 approve; every deposit and every dispute deposit go back (and the host bond, if any). Allowed after the host publishes the list and before the court deadline (`resolve_by` in `get_event`), not for an event whose host published nothing. The keeper never proposes this. With `ID` the event id:
     ```bash
     ARGS=$(printf '{"event_id":%s}' "$ID" | base64)
     near contract call-function as-transaction nearvent-court.sputnik-dao.near add_proposal json-args "{\"proposal\":{\"description\":\"Void Nearvent event $ID: <reason>\",\"kind\":{\"FunctionCall\":{\"receiver_id\":\"escrow.lold.near\",\"actions\":[{\"method_name\":\"void_event\",\"args\":\"$ARGS\",\"deposit\":\"0\",\"gas\":\"200000000000000\"}]}}}}" prepaid-gas '100 Tgas' attached-deposit '<proposal_bond from get_policy> yoctoNEAR' sign-as <member>.near network-config mainnet sign-with-keychain send
     ```
     Then three members approve it in the Sputnik UI or with `act_proposal` `{"id":<id>,"action":"VoteApprove","proposal":<kind from get_proposal>}` (300 Tgas). 200 Tgas should cover the worst case: a void is a cancel (76.5 Tgas at 300 guests) plus one pass over the disputes, lighter than a full settle (149 Tgas). Not measured; if the proposal fails for gas, nothing moves: propose again with 280 Tgas. The site then shows "Cancelled by the council".
-13. **Check again** with the step 5 command: "escrow v3 rules" now also checks the court: council of 5, `auto_update` off, the vote policy (3 of 5, only the council votes).
+7. **Check (read-only), after any of the steps above:**
+    ```bash
+    cd web && NETWORK=mainnet EVENTS_CONTRACT=escrow.lold.near RELAYER_ACCOUNT=event_relayer.near OWNER=lold.near node scripts/check-release.mjs
+    ```
+    Without a court "escrow v3 rules" prints "no court yet …". With one it also checks the court: council of 5, `auto_update` off, the vote policy (3 of 5, only the council votes).
 
 Testnet rehearsal (`evidence/v3-upgrade-rehearsal.log`):
 - `v3rh.yusak-nv1109.testnet` got the mainnet code `7nrLLgzc…` from `deploy-escrow.mjs` with 5.26 NEAR (spare 2.19, as on mainnet).
