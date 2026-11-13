@@ -2,22 +2,116 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useWallet } from "@/lib/wallet";
+import { savedAccounts, savedStaffToken, useWallet } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
 import { ProfileCard } from "@/components/ProfileCard";
-import { getProfiles, saveProfile, uploadAvatar } from "@/lib/profilesClient";
+import { shortAccount } from "@/components/ui";
+import { getProfiles, getWallets, linkWallet, saveProfile, unlinkWallet, uploadAvatar } from "@/lib/profilesClient";
 import { useReputation } from "@/lib/reputation";
 import { EMPTY_PROFILE, cleanProfile, type LinkKind, type Profile } from "@/lib/profilesShared";
 
 export default function MyProfile() {
-  const { accountId } = useWallet();
+  const { accountId, kind } = useWallet();
+  // Linking or unlinking a wallet can change which profile this wallet shows: reload the editor.
+  const [linkRev, setLinkRev] = useState(0);
   if (!accountId) return (
     <div className="gc-checkout space-y-6 mt-6">
       <h1 className="gc-page-title">My profile</h1>
       <SignInOptions />
     </div>
   );
-  return <Editor key={accountId} accountId={accountId} />;
+  return (
+    <div className="max-w-xl mx-auto space-y-8 pt-4">
+      <Editor key={`${accountId}:${linkRev}`} accountId={accountId} />
+      {kind !== "demo" && <Wallets key={accountId} accountId={accountId} onChange={() => setLinkRev((n) => n + 1)} />}
+    </div>
+  );
+}
+
+const walletKind = (a: string) => (/^0x[0-9a-f]{40}$/i.test(a) ? "EVM" : /^[0-9a-f]{64}$/i.test(a) ? "Google" : "NEAR");
+
+/** Wallets that share this profile. A wallet signed in earlier on this device (its sign-in token is still here) can be linked with one click. */
+function Wallets({ accountId, onChange }: { accountId: string; onChange: () => void }) {
+  const { staffToken } = useWallet();
+  const [wallets, setWallets] = useState<string[]>([accountId]);
+  const [others, setOthers] = useState<string[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setOthers(savedAccounts().filter((a) => a !== accountId));
+    // Only with a token already here: opening the page never asks the wallet to sign.
+    const token = savedStaffToken(accountId);
+    if (token) getWallets(token).then(setWallets).catch(() => {});
+  }, [accountId]);
+
+  const run = (label: string, fn: (token: string) => Promise<void>) => async () => {
+    setBusy(label);
+    setError("");
+    try {
+      await fn(await staffToken());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const change = (label: string, fn: (token: string) => Promise<string[]>) => run(label, async (token) => {
+    setWallets(await fn(token));
+    onChange();
+  });
+  const linkable = others.filter((a) => !wallets.includes(a));
+
+  return (
+    <section className="card p-6 space-y-4">
+      <div className="space-y-1">
+        <h2 className="font-semibold">Wallets</h2>
+        <p className="text-sm text-muted">Link your EVM and NEAR wallets: signing in with any of them opens this profile.</p>
+      </div>
+      <ul className="divide-y divide-border">
+        {wallets.map((a, i) => (
+          <li key={a} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+            <span className="min-w-0 truncate">
+              <span className="text-muted">{walletKind(a)} · </span>{shortAccount(a)}
+              {a === accountId && <span className="text-muted"> · signed in</span>}
+            </span>
+            {i > 0 && (
+              <button type="button" className="shrink-0 text-muted hover:text-text disabled:opacity-50" disabled={busy !== null}
+                onClick={change(a, (token) => unlinkWallet(token, a))}>
+                {busy === a ? "Unlinking…" : "Unlink"}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {linkable.map((a) => (
+        <div key={a} className="flex items-center justify-between gap-3 rounded-xl bg-[var(--accent-soft)] px-3 py-2 text-sm">
+          <span className="min-w-0 truncate">{walletKind(a)} · {shortAccount(a)} <span className="text-muted">signed in here before</span></span>
+          <button type="button" className="btn btn-primary shrink-0 px-4 py-1.5 text-sm" disabled={busy !== null}
+            onClick={change(a, async (token) => {
+              const other = savedStaffToken(a);
+              if (!other) throw new Error("Sign in with that wallet again to link it.");
+              return linkWallet(token, other);
+            })}>
+            {busy === a ? "Linking…" : "Link"}
+          </button>
+        </div>
+      ))}
+      {adding ? (
+        <div className="space-y-3">
+          <p className="text-sm text-muted">Sign in with the other wallet, then press Link here.</p>
+          <SignInOptions />
+        </div>
+      ) : (
+        // The token of this wallet stays on the device, so the next wallet can link to it.
+        <button type="button" className="btn btn-ghost text-sm" disabled={busy !== null} onClick={run("add", async () => setAdding(true))}>
+          {busy === "add" ? "Signing…" : "Link Another Wallet"}
+        </button>
+      )}
+      {error && <p className="text-sm text-warn break-words" role="status">{error}</p>}
+    </section>
+  );
 }
 
 const LINKS: [LinkKind, string, string][] = [
@@ -79,7 +173,7 @@ function Editor({ accountId }: { accountId: string }) {
 
   const field = "lu-field w-full px-3 py-2 text-sm";
   return (
-    <div className="max-w-xl mx-auto space-y-8 pt-4">
+    <>
       <div className="flex items-center justify-between gap-4">
         <h1 className="gc-page-title">My profile</h1>
         <Link href={`/u/${encodeURIComponent(accountId)}`} className="text-sm text-accent font-medium shrink-0">Public page ↗</Link>
@@ -122,6 +216,6 @@ function Editor({ accountId }: { accountId: string }) {
           {status && <p className="text-sm" role="status">{status}</p>}
         </div>
       </form>
-    </div>
+    </>
   );
 }

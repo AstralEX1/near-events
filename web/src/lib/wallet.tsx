@@ -78,6 +78,16 @@ export function savedStaffToken(accountId: string): string | null {
   return null;
 }
 
+/** Accounts signed in on this device with a token still valid (sign-out drops it): the wallets that can be linked here. */
+export function savedAccounts(): string[] {
+  try {
+    const prefix = tokenKey("");
+    return Object.keys(localStorage).filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length)).filter(savedStaffToken);
+  } catch {
+    return [];
+  }
+}
+
 async function exchangeProof(proof: object, accountId: string): Promise<string> {
   const res = await fetch("/api/checkin/session", { method: "POST", body: JSON.stringify(proof) });
   const json = await res.json();

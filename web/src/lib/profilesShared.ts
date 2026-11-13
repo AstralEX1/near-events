@@ -94,3 +94,21 @@ export function displayName(p: Profile | null | undefined): string | null {
   if (!p) return null;
   return `${p.first_name} ${p.last_name}`.trim() || (p.username ? `@${p.username}` : null);
 }
+
+/** Most wallets one profile can have. */
+export const MAX_WALLETS = 10;
+
+/**
+ * Linking wallet `b` into wallet `a`'s profile (`a` is the one signed in now). Each side is its
+ * group: the profile's own wallet first, then the wallets linked to it. The group with linked
+ * wallets keeps its profile; between two single wallets, `a` keeps it unless only `b` has one.
+ * The other wallet's own profile is hidden while linked, not deleted.
+ */
+export function linkPlan(a: { wallets: string[]; hasProfile: boolean }, b: { wallets: string[]; hasProfile: boolean }):
+  { primary: string; join: string } | { error: string } {
+  if (a.wallets[0] === b.wallets[0]) return { error: "These wallets are already linked" };
+  if (a.wallets.length > 1 && b.wallets.length > 1) return { error: "Both wallets already have linked wallets. Unlink one of them first." };
+  if (a.wallets.length + b.wallets.length > MAX_WALLETS) return { error: `A profile can have up to ${MAX_WALLETS} wallets` };
+  const keepB = b.wallets.length > 1 || (a.wallets.length === 1 && !a.hasProfile && b.hasProfile);
+  return keepB ? { primary: b.wallets[0], join: a.wallets[0] } : { primary: a.wallets[0], join: b.wallets[0] };
+}

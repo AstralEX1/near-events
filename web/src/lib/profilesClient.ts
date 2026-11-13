@@ -41,3 +41,23 @@ export async function uploadAvatar(file: File, token: string): Promise<string> {
   // Demo mode keeps the photo in the browser as a data: URL.
   return json.url.startsWith("data:") ? json.url : new URL(json.url).pathname;
 }
+
+async function linkCall(method: string, token: string, body?: object): Promise<string[]> {
+  const r = await fetch("/api/profiles/link", {
+    method,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: body && JSON.stringify(body),
+    cache: "no-store",
+  });
+  const json = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(json.error ?? "Could not load your wallets");
+  // The header shows the shared profile's photo at once.
+  if (method !== "GET") window.dispatchEvent(new Event(PROFILE_SAVED));
+  return json.wallets as string[];
+}
+
+/** The signed-in wallet's profile wallets: the one the profile lives under first, then the linked ones. */
+export const getWallets = (token: string) => linkCall("GET", token);
+/** Links the wallet of `otherToken` (signed in earlier on this device) with the signed-in one. */
+export const linkWallet = (token: string, otherToken: string) => linkCall("POST", token, { other: otherToken });
+export const unlinkWallet = (token: string, account: string) => linkCall("DELETE", token, { account });
