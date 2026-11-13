@@ -18,7 +18,7 @@ const STATE = process.env.STATE ?? "v3-testnet-state.json";
 const LOG = process.env.LOG ?? "v3-testnet.jsonl";
 const D = 1_000_000n; // 1 test USDC
 const n = (s) => `${s}.testnet`;
-const OWNER = n("atia-nv1109");
+const OWNER = process.env.OWNER_ACCOUNT ?? n("atia-nv1109");
 const COUNCIL = ["steve-nv1109", "chawki-nv1109", "jacqueline-nv1109", "tp6guest1-nv1110", "tp6host-nv1110"].map(n);
 const BOT = n("relayer-nearevents-11022103");
 const [HOST_A, HOST_B] = [n("yusak-nv1109"), n("alexandre-nv1109")];
@@ -248,20 +248,24 @@ steps["abandon-check"] = async () => {
 };
 
 // Site demo (one dispute cycle to watch on the local site, ESCROW=oracle-v3b…):
-//   demo → demo-bond → demo-checkin → demo-publish → demo-dispute → keeper → demo-votes → keeper → demo-check
+//   demo → demo-bond → demo-checkin → demo-late → demo-publish → demo-dispute → keeper → demo-votes → keeper → demo-check
 // Host carissan publishes stan and g2 but leaves off hebert, who came and was checked in; hebert proves it.
 const DEMO_HOST = n("carissan-nv1109");
 const SITE = process.env.SITE ?? "http://localhost:3000";
 const DEMO_PEOPLE = [STAN, HEBERT, G2, DEMO_HOST, OWNER];
 steps.demo = async () => {
-  if ((await usdcOf(DEMO_HOST)) < 5n * D) {
+  const capacity = Number(process.env.DEMO_CAPACITY ?? 4);
+  // The bond is one deposit per seat (Rules default).
+  const bond = BigInt(capacity) * D;
+  if ((await usdcOf(DEMO_HOST)) < bond) {
     const reg = await view(USDC, "storage_balance_of", { account_id: DEMO_HOST });
     if (!reg) await tx("USDC storage for the demo host", BOT, USDC, "storage_deposit", { account_id: DEMO_HOST, registration_only: true }, { deposit: 1_250_000_000_000_000_000_000n });
-    await tx("top up the demo host's USDC for the bond", BOT, USDC, "ft_transfer", { receiver_id: DEMO_HOST, amount: (6n * D).toString() }, { deposit: 1n });
+    await tx("top up the demo host's USDC for the bond", BOT, USDC, "ft_transfer", { receiver_id: DEMO_HOST, amount: bond.toString() }, { deposit: 1n });
   }
   const now = Date.now();
   const minutes = Number(process.env.DEMO_MINUTES ?? 10);
-  const out = await tx("create the demo event", DEMO_HOST, ESCROW, "create_event", { metadata: { title: "Nearvent V3 demo: dispute cycle", starts_at: now + 90_000, ends_at: now + minutes * 60_000 }, deposit: D.toString(), capacity: 10 });
+  const startIn = Number(process.env.DEMO_START_MINUTES ?? 1.5) * 60_000;
+  const out = await tx("create the demo event", DEMO_HOST, ESCROW, "create_event", { metadata: { title: "Nearvent V3 demo: dispute cycle", starts_at: now + startIn, ends_at: now + minutes * 60_000 }, deposit: D.toString(), capacity });
   state.demo = JSON.parse(Buffer.from(out.status.SuccessValue, "base64").toString());
   state.demoBefore = Object.fromEntries(await Promise.all(DEMO_PEOPLE.map(async (a) => [a, (await escrowOf(a)).toString()])));
   // Other events that may still pay these people would blur the balance deltas below.
@@ -275,10 +279,11 @@ steps["demo-bond"] = async () => {
   const before = await usdcOf(HEBERT);
   await pay("register before the bond (refused)", HEBERT, D, { action: "register", event_id: state.demo });
   assert.equal(await usdcOf(HEBERT), before, "the refused registration's USDC came back");
-  await pay(`host bond for ${state.demo}`, DEMO_HOST, 5n * D, { action: "host_bond", event_id: state.demo });
+  const bond = (await event(state.demo)).bond_due;
+  await pay(`host bond for ${state.demo} (${Number(bond) / 1e6} USDC, one deposit per seat)`, DEMO_HOST, BigInt(bond), { action: "host_bond", event_id: state.demo });
   for (const g of [STAN, HEBERT, G2]) await pay(`register ${g} for ${state.demo}`, g, D, { action: "register", event_id: state.demo });
   const e = await event(state.demo);
-  assert.deepEqual([e.host_bond, e.guest_count], [(5n * D).toString(), 3]);
+  assert.deepEqual([e.host_bond, e.guest_count], [bond, 3]);
 };
 /** Door check-in on the local site with the host's staff token (NEP-413 proof; the token stays in this process). */
 steps["demo-checkin"] = async () => {
@@ -296,6 +301,15 @@ steps["demo-checkin"] = async () => {
     console.log(`check in ${g}`, r.status, r.ok ? "" : (await r.json()).error);
   }
   console.log("checked in", (await (await fetch(`${SITE}/api/checkin?e=${state.demo}`)).json()).checkedIn);
+};
+/** After the start a Deposit event takes no new guest (audit E-H1): alexandre's USDC comes back. */
+steps["demo-late"] = async () => {
+  const e = await event(state.demo);
+  while (Date.now() < e.metadata.starts_at + 3_000) await sleep(3_000);
+  const before = await usdcOf(HOST_B);
+  await pay("register after the start (refused)", HOST_B, D, { action: "register", event_id: state.demo });
+  assert.equal(await usdcOf(HOST_B), before, "a late registration was kept");
+  assert.equal(await view(ESCROW, "get_guest_status", { event_id: state.demo, account_id: HOST_B }), null);
 };
 steps["demo-publish"] = async () => {
   const e = await event(state.demo);
@@ -319,7 +333,8 @@ steps["demo-votes"] = async () => {
 async function escrowBalancesAddUp() {
   const open = (await view(ESCROW, "get_events", { from_index: 0, limit: 100 })).filter((x) => ["Open", "Submitted"].includes(x.status) && (x.guest_count > 0 || x.host_bond !== "0"));
   assert.deepEqual(open.map((x) => x.id), [], "events still hold money");
-  const everyone = [STAN, HEBERT, G2, DEMO_HOST, OWNER, HOST_A, HOST_B];
+  // A Set: the owner may also be one of the hosts.
+  const everyone = [...new Set([STAN, HEBERT, G2, DEMO_HOST, OWNER, HOST_A, HOST_B])];
   const owed = (await Promise.all(everyone.map(escrowOf))).reduce((a, b) => a + b, 0n);
   const held = await usdcOf(ESCROW);
   console.log("escrow holds", (Number(held) / 1e6).toFixed(6), "USDC; balances owed", (Number(owed) / 1e6).toFixed(6));
@@ -331,8 +346,9 @@ steps["demo-check"] = async () => {
   if (state.demoOthers?.length) {
     console.log(`events ${state.demoOthers} were open at the start too: their payouts mix into the deltas, checking escrow-wide only`);
   } else {
-    // Pool 3 over 3 attendees; hebert also gets his dispute bond back and the winner's half of the 5 USDC bond.
-    const gain = { [STAN]: D, [HEBERT]: D + D + 2_500_000n, [G2]: D, [DEMO_HOST]: 0n, [OWNER]: 2_500_000n };
+    // Pool 3 over 3 attendees; hebert also gets his dispute bond back and the winner's half of the host bond.
+    const half = BigInt(e.host_bond) / 2n;
+    const gain = { [STAN]: D, [HEBERT]: D + D + half, [G2]: D, [DEMO_HOST]: 0n, [OWNER]: BigInt(e.host_bond) - half };
     for (const [who, want] of Object.entries(gain)) {
       const got = (await escrowOf(who)) - BigInt(state.demoBefore[who]);
       console.log(`${who.padEnd(34)} +${(Number(got) / 1e6).toFixed(6)} USDC (expected +${(Number(want) / 1e6).toFixed(6)})`);
