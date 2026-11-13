@@ -22,7 +22,7 @@ function Tile({ icon, name, ...props }: { icon: ReactNode; name: string } & Butt
 }
 
 /** The ways in, near.com-style: pick the chain first (NEAR or EVM through NEAR Intents), then the wallet. Google/email stays on top when NEAR Auth is set up. */
-export function SignInOptions({ onDone }: { onDone?: () => void }) {
+export function SignInOptions({ onDone, demo = true }: { onDone?: () => void; demo?: boolean }) {
   const { ready, signIn, signInWithEmail, signInWithEvm, signInWithDemo } = useWallet();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +84,7 @@ export function SignInOptions({ onDone }: { onDone?: () => void }) {
             )}
           </div>
           {/* Demo mode: made-up events and money in this browser, no server and no chain. */}
-          {!embed && (
+          {!embed && demo && (
             <button className="btn btn-ghost w-full" disabled={off} onClick={run(signInWithDemo, "demo")}>
               {busy === "demo" ? "Setting up…" : "Try with a demo account"}
             </button>

@@ -101,7 +101,7 @@ function Wallets({ accountId, onChange }: { accountId: string; onChange: () => v
       {adding ? (
         <div className="space-y-3">
           <p className="text-sm text-muted">Sign in with the other wallet, then press Link here.</p>
-          <SignInOptions />
+          <SignInOptions demo={false} />
         </div>
       ) : (
         // The token of this wallet stays on the device, so the next wallet can link to it.
