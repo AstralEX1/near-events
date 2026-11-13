@@ -323,7 +323,7 @@ export async function moveFromConfidential(account: string, session: string, amo
     await new Promise((resolve) => setTimeout(resolve, 3000));
     if (await intentsUsdcBalance(account).catch(() => 0n) >= before + amount) return;
   }
-  throw new Error("Your USDC is still on its way to your NEAR Intents balance. Wait a minute, then press Confirm Registration again.");
+  throw new Error("Your USDC is still on its way to your NEAR Intents balance. Wait a minute, then press the button again.");
 }
 
 /** Asks the relayer to move this account's payout into its Intents balance. */

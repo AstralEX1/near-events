@@ -108,43 +108,43 @@ export default function TopUpAndRegister() {
   const canRegister = event.status === "Open" && event.guest_count < event.capacity && Date.now() < registrationEndsAt(event) && !registered && !notAllowed && !needsBond(event);
   const price = `${formatUsdc(event.deposit)} USDC`;
   const deposit = BigInt(event.deposit);
-  // One total: public USDC plus, after the sign-in, confidential USDC.
+  // One total: public USDC plus, after the NEAR Intents sign-in, confidential USDC.
   const known = available !== null && (!session || confidential !== null);
   const total = (available ?? 0n) + (confidential ?? 0n);
   const enough = known && total >= deposit;
-  // The public balance alone falls short and we can't see the confidential one yet: ask before sending them to top up.
-  const askSignIn = intentsSignIn && !session && available !== null && available < deposit;
+  // The public balance falls short and the confidential one is unseen yet: the button signs in first.
+  const needsSignIn = intentsSignIn && !session && available !== null && available < deposit;
+  const action = `${isTicket(event) ? "Pay" : "Deposit"} with NEAR Intents`;
 
-  const signInWithIntents = async () => {
-    if (!accountId) return;
-    setBusy(true);
-    setError(null);
-    try {
-      setStage("Sign in your wallet…");
-      const token = await signInToIntents(accountId, nep413);
-      setConfidential(await confidentialUsdc(token));
-      setSession(token);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setSignInFailed(true);
-    } finally {
-      setStage("");
-      setBusy(false);
-    }
-  };
-
-  const finishRegistration = async () => {
+  // One button: sign in to NEAR Intents if needed (this also reads the balance), move confidential
+  // USDC to the public balance if needed, then register. Short of money: the top-up card shows.
+  const depositWithIntents = async () => {
     if (!accountId || !canRegister) return;
     setBusy(true);
     setError(null);
     try {
       const name = requireDisplayName(displayName);
-      if (session && available !== null && available < deposit) {
-        // The rest is confidential: move it to the public balance the escrow takes it from.
-        setStage("Confirm in your wallet (1 of 2)…");
-        await moveFromConfidential(accountId, session, deposit - available, nep413);
-        setStage("Confirm in your wallet (2 of 2)…");
+      const have = available ?? 0n;
+      let token = session;
+      if (needsSignIn) {
+        setStage("Sign in with your wallet…");
+        try {
+          token = await signInToIntents(accountId, nep413);
+          const conf = await confidentialUsdc(token);
+          setConfidential(conf);
+          setSession(token);
+          if (have + conf < deposit) return; // not enough: the top-up card takes over
+        } catch (e) {
+          setSignInFailed(true);
+          throw e;
+        }
       }
+      if (token && have < deposit) {
+        // The rest is confidential: move it to the public balance the escrow takes it from.
+        setStage("Moving your USDC: confirm in your wallet…");
+        await moveFromConfidential(accountId, token, deposit - have, nep413);
+      }
+      setStage("Confirm your registration in your wallet…");
       if (kind === "evm") {
         await registerFromIntents(accountId, event.id, event.deposit, name);
       } else {
@@ -185,21 +185,14 @@ export default function TopUpAndRegister() {
         <button className="btn btn-primary w-full" onClick={() => void signIn()}>Sign In First</button>
       ) : (
         <div className="card p-4 space-y-3">
-          {askSignIn ? (
-            <div className="space-y-2">
-              <button type="button" className="btn btn-primary w-full" disabled={busy} onClick={signInWithIntents}>
-                {busy ? stage || "Sign in your wallet…" : "Sign In with NEAR Intents"}
-              </button>
-              <p className="text-sm text-muted text-center">One signature shows your whole balance, confidential included. No gas.</p>
-            </div>
-          ) : (
+          {!needsSignIn && (
             <p>
               {known ? `${formatUsdc(total)} USDC in NEAR Intents.` : "Checking your balance…"}{" "}
               <Link href="/me" className="underline">View or withdraw funds</Link>
             </p>
           )}
           {registered && <p className="text-good">Your place is confirmed.</p>}
-          {canRegister && enough && (
+          {canRegister && (enough || needsSignIn) && (
             <>
               <label className="block space-y-1">
                 <span className="text-sm font-medium">Your name</span>
@@ -213,7 +206,8 @@ export default function TopUpAndRegister() {
                   disabled={busy}
                 />
               </label>
-              <button className="btn btn-primary" disabled={busy} onClick={finishRegistration}>{busy ? stage || "Confirm in your wallet…" : "Confirm Registration"}</button>
+              <button className="btn btn-primary w-full" disabled={busy} onClick={depositWithIntents}>{busy ? stage || "Confirm in your wallet…" : action}</button>
+              {needsSignIn && <p className="text-sm text-muted text-center">One signature checks your NEAR Intents balance, confidential included.</p>}
             </>
           )}
           {!canRegister && !registered && (
@@ -225,13 +219,13 @@ export default function TopUpAndRegister() {
           {error && <p className="text-sm text-warn break-words">{error}</p>}
         </div>
       )}
-      {accountId && canRegister && known && !enough && (!askSignIn || signInFailed) && (
+      {accountId && canRegister && known && !enough && (!needsSignIn || signInFailed) && (
         <div className="card p-5 space-y-4">
           <h2 className="font-semibold">Top up on near.com</h2>
           <ol className="list-decimal pl-5 space-y-2 text-sm">
             <li>Open near.com and sign in with the same wallet you use here{kind === "evm" ? " (EVM Wallets)" : " (NEAR Wallets)"}. Your account there is <span className="font-mono">{shortAccount(accountId)}</span>.</li>
             <li>Add at least <b>{price}</b> on the NEAR network: deposit USDC, or swap any token you hold into USDC.</li>
-            <li>Come back to this tab. Your balance updates, then press Confirm Registration.</li>
+            <li>Come back to this tab. Your balance updates, then press {action}.</li>
           </ol>
           <div className="flex flex-wrap gap-2">
             <a href="https://near.com/login" target="_blank" rel="noopener noreferrer" className="btn btn-accent">Open near.com ↗</a>
