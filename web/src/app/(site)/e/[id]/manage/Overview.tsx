@@ -60,12 +60,6 @@ export function Overview({ event, guests, guestNames, origin, isHost, busy, onGu
 
   return (
     <div className="space-y-8">
-      <div className="gc-host-stats" aria-label="Event overview">
-        <div className="gc-host-stat"><span>Registered</span><strong>{guests.length}<small className="text-sm text-muted font-normal"> / {event.capacity}</small></strong></div>
-        <div className="gc-host-stat"><span>Checked in</span><strong>{event.attended_count}</strong></div>
-        <div className="gc-host-stat"><span>{isTicket(event) ? "Ticket sales" : "Deposit pool"}</span><strong>{formatUsdc(event.total_pool)}<small className="block text-xs text-muted font-normal tracking-normal">USDC</small></strong></div>
-        {hostBondFor(event) !== "0" && <BondStat event={event} isHost={isHost} />}
-      </div>
       <div className="-mx-4 px-4 sm:mx-0 sm:px-0 flex sm:grid sm:grid-cols-3 gap-3 overflow-x-auto [scrollbar-width:none]">
         <QuickAction tone="accent" icon={<ShareIcon />} label="Share Event" onClick={() => setSharing(true)} />
         {open ? (
@@ -295,6 +289,8 @@ function GuestsSection({ event, guests, guestNames, isHost, onGuests, onShare }:
   const ticket = isTicket(event);
   const each = attended > 0 ? pool / BigInt(attended) : 0n;
   const open = event.status === "Open";
+  // A court may run with no bond (0 by default): the bond card only when there is one.
+  const bondCard = !!event.dao && !ticket && hostBondFor(event) !== "0";
 
   return (
     <section className="space-y-5">
@@ -316,7 +312,7 @@ function GuestsSection({ event, guests, guestNames, isHost, onGuests, onShare }:
           <div className="absolute inset-y-0 left-0 bg-good/40 rounded-full" style={{ width: pct(going) }} />
           <div className="absolute inset-y-0 left-0 bg-good rounded-full" style={{ width: pct(attended) }} />
         </div>
-        {going > 0 && (
+        {(going > 0 || bondCard) && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <Stat label={open ? (ticket ? "Ticket sales" : "Deposit pool") : "Total pool"} value={`${formatUsdc(pool)} USDC`} />
           {ticket ? (
@@ -333,7 +329,8 @@ function GuestsSection({ event, guests, guestNames, isHost, onGuests, onShare }:
               }
             />
           )}
-          <Stat label="Checked in" value={`${attended} / ${going}`} className="col-span-2 sm:col-span-1" />
+          {/* "N checked in" is already in the line above; with a bond the third card is the host bond instead. */}
+          {bondCard ? <BondStat event={event} isHost={isHost} /> : <Stat label="Checked in" value={`${attended} / ${going}`} className="col-span-2 sm:col-span-1" />}
         </div>
         )}
       </div>
@@ -411,12 +408,11 @@ function BondStat({ event, isHost }: { event: EventView; isHost: boolean }) {
         ? ["locked", "text-muted"]
         : ["returned", "text-good"];
   return (
-    <div className="gc-host-stat">
-      <span>{isHost ? "Your bond" : "Host bond"}</span>
-      <strong>
-        {formatUsdc(locked ? event.host_bond! : hostBondFor(event))}
-        <small className={`block text-xs font-normal tracking-normal ${tone}`}>USDC · {note}</small>
-      </strong>
+    <div className="card p-3 sm:p-4 min-w-0 col-span-2 sm:col-span-1">
+      <div className="text-xs text-muted">{isHost ? "Your bond" : "Host bond"}</div>
+      <div className="font-semibold tracking-tight mt-1 truncate">
+        {formatUsdc(locked ? event.host_bond! : hostBondFor(event))} USDC <span className={`text-xs font-medium tracking-normal ${tone}`}>· {note}</span>
+      </div>
     </div>
   );
 }
