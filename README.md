@@ -132,9 +132,11 @@ The escrow holds the deposits; the host only says who came.
   turns on a Sputnik DAO court (`set_rules`). After the host publishes who
   came, guests have 12 hours to dispute one record by locking one deposit. Our
   keeper bot opens a proposal; when 3 of the 5 council members approve, it calls
-  `resolve_dispute`. Then anyone calls `settle`. Nobody votes unless someone
-  disputes, and a host bond can be required too (0 by default). We expect most
-  events never to need it.
+  `resolve_dispute`. Then anyone calls `settle`. If a published list is broken
+  as a whole, the council can instead call the event off (`void_event`):
+  everyone gets their deposit back. Nobody votes unless someone disputes, and a
+  host bond can be required too (0 by default). We expect most events never to
+  need it.
 - **Deadlines.** Registration for deposit events closes at the start. The host
   publishes who came within 72 hours after the end; if not, anyone can call
   `refund`, and everyone gets the deposit back unless guests prove they came.
@@ -219,6 +221,7 @@ the escrow, USDC, and USDC leaving NEAR Intents.
 | `refund(event_id)` | anyone, when no list came within 72 h | publishes an empty list in the host's place; guests who came can still prove it |
 | `settle(event_id)` | anyone | oracle on: pays out once the dispute window is over and the council has decided |
 | `resolve_dispute(event_id, target, upheld)` | the event's court DAO, through an approved proposal | decides one dispute |
+| `void_event(event_id)` | the event's court DAO, through an approved proposal, after the list is published | calls the event off: every deposit, dispute deposit and host bond goes back; nothing to the treasury |
 | `cancel(event_id)` | Deposit: the host while open (once a bond is locked, only before the start). Ticket: the host while open, anyone 30 days after the end (+1 yocto) | refund every deposit and bond (Ticket: refunds nothing) |
 | `withdraw(amount, receiver_id, to_intents)` | guest (+1 yocto) | to a NEAR account (e.g. a 1Click deposit address) or into NEAR Intents |
 | `payout_to_intents(account_id, amount?)` | owner or configured relayer | moves that account's balance into *its own* Intents balance; how EVM-wallet guests get paid |
