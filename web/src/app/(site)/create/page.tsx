@@ -4,7 +4,7 @@ import { SlAmount, SlCopy } from "@/components/SlUi";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { events, formatNear, FREE_MAX_CAPACITY, FREE_MAX_DAYS, FREE_MAX_EVENTS, MAX_CAPACITY, toUnits, type EventMode, type EventView } from "@/lib/near";
+import { bondPerSeatText, events, formatNear, formatUsdc, FREE_MAX_CAPACITY, FREE_MAX_DAYS, FREE_MAX_EVENTS, hoursText, hostBondFor, MAX_CAPACITY, needsBond, toUnits, type EventMode, type EventView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { Cover } from "@/components/ui";
@@ -21,6 +21,7 @@ import { ApprovalToggle } from "@/components/ApprovalToggle";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 import { cohostsProblem, splitCohosts } from "@/lib/cohostsShared";
 import { StartStep } from "@/components/StartStep";
+import { buildRule, rulePastEvents, ruleProblem, type AccessChoice } from "@/lib/access";
 
 
 const SLOTS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
@@ -71,6 +72,12 @@ function CreateEvent() {
   const [isPublic, setIsPublic] = useState(true);
   // Free events only: guests request a spot and the host approves each one.
   const [approval, setApproval] = useState(false);
+  // Who may register (escrow access rule): judged by the host's own finalized events.
+  const [accessChoice, setAccessChoice] = useState<AccessChoice>("everyone");
+  const [minVisits, setMinVisits] = useState("1");
+  const [skipNoShows, setSkipNoShows] = useState(false);
+  const [regularsHours, setRegularsHours] = useState("24"); // the default event (tomorrow) ends after 24 hours
+  const [pastEvents, setPastEvents] = useState<number[]>([]);
   const [when, setWhen] = useState<When | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importUrl, setImportUrl] = useState("");
@@ -174,11 +181,17 @@ function CreateEvent() {
     void importEvent(importOnArrival, true);
   }, [importOnArrival]);
 
-  // Integrate flow ends in the event's Integration tab, once its details are saved.
+  // Integrate flow ends in the event's Integration tab, once its details are saved
+  // (and, with a court, after the success screen has said that the bond comes first).
   const saved = Boolean(created) && savesDone && !savingDetails && !savingVisual && !detailsSaveError && !visualSaveError;
   useEffect(() => {
-    if (integrate && saved && created) router.replace(integrationUrl(created.id));
+    if (integrate && saved && created && !needsBond(created)) router.replace(integrationUrl(created.id));
   }, [integrate, saved, created, router]);
+  // The owner's rules for new events: whether a court and a host bond apply (null until read, or on an older escrow).
+  const [rules, setRules] = useState<EventView["rules"] | null>(null);
+  useEffect(() => {
+    events.config().then((c) => setRules(c.rules ?? null)).catch(() => {});
+  }, []);
 
   const free = form.mode === "Free";
   const maxSeats = free ? MAX_FREE_CAPACITY : MAX_CAPACITY;
@@ -186,8 +199,17 @@ function CreateEvent() {
   const seats = Number(form.capacity);
   const seatsOk = Number.isInteger(seats) && seats >= 1 && seats <= maxSeats;
   const doorTeamProblem = free ? null : cohostsProblem(form.cohosts);
+  const accessRule = (now: number) => free ? null : buildRule(accessChoice, {
+    pastEvents, minAttended: Number(minVisits), skipNoShows, openToAllAt: now + Number(regularsHours) * 3_600_000,
+  });
+  const accessProblem = when
+    ? ruleProblem(accessRule(Date.now()), form.mode === "Deposit" && (rules?.close_at_start ?? true) ? when.start : when.end)
+    : null;
   // Past events can only be added as Free: a deposit or ticket for something already over makes no sense.
-  const missing = !free && when && when.end < Date.now() ? "Pick Free to add a past event" : !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? `Set the capacity: 1 to ${maxSeats}` : doorTeamProblem ?? undefined;
+  // Deposit events stop taking guests (and the host bond) at the start, so the start must be ahead.
+  const lateStart = form.mode === "Deposit" && (rules?.close_at_start ?? true) && !!when && when.end >= Date.now() && when.start < Date.now() + 5 * 60_000
+    ? "Deposit events close registration at the start. Pick a start time in the future." : null;
+  const missing = !free && when && when.end < Date.now() ? "Pick Free to add a past event" : lateStart ? lateStart : !amountOk ? "Set the amount: at least 0.1 USDC" : !seatsOk ? `Set the capacity: 1 to ${maxSeats}` : doorTeamProblem ?? accessProblem ?? undefined;
   // yoctoNEAR the host pays for storage beyond the free tier; "0" when free.
   const [storageCost, setStorageCost] = useState("0");
   const endsAt = when?.end;
@@ -202,6 +224,14 @@ function CreateEvent() {
       clearTimeout(timer);
     };
   }, [free, accountId, seats, seatsOk, endsAt]);
+  useEffect(() => {
+    if (!accountId) return setPastEvents([]);
+    let live = true;
+    events.all().then((all) => live && setPastEvents(rulePastEvents(all, accountId))).catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [accountId]);
   const costNote = storageCost !== "0" && (
     <p className="text-sm text-muted">
       {kind === "evm" ? "EVM wallets can create free-tier events only." : `Created at your expense: ~${formatNear(storageCost)} NEAR (storage).`} Free events are up to {FREE_MAX_CAPACITY} seats, {FREE_MAX_EVENTS} per 30 days, ending within {FREE_MAX_DAYS} days.
@@ -264,6 +294,7 @@ function CreateEvent() {
             deposit: toUnits(form.deposit),
             capacity,
             mode: form.mode as EventMode,
+            access: accessRule(Date.now()),
           },
           deposit,
         },
@@ -379,7 +410,7 @@ function CreateEvent() {
     );
   }
   if (importOnArrival && !imported && importing) return <p className="max-w-2xl mx-auto text-sm text-muted" role="status">Importing…</p>;
-  if (created && integrate && !detailsSaveError && !visualSaveError) return <p className="max-w-2xl mx-auto text-sm text-muted" role="status">Opening integration…</p>;
+  if (created && integrate && !needsBond(created) && !detailsSaveError && !visualSaveError) return <p className="max-w-2xl mx-auto text-sm text-muted" role="status">Opening integration…</p>;
   if (created) return <Created event={created} visual={createdVisual} coverUrl={createdDetails?.cover_url} detailsSaveError={detailsSaveError} savingDetails={savingDetails} onRetry={retryDetailsSave} visualSaveError={visualSaveError} savingVisual={savingVisual} onRetryVisual={retryVisualSave} />;
 
   const summaryReady = integrate && !!imported && !editing && !missing && !!when && when.end > when.start && !!form.title.trim() && !locationProblem(form.location);
@@ -511,7 +542,7 @@ function CreateEvent() {
                 help={
                   form.mode === "Ticket"
                     ? "Each guest pays this for a ticket. It goes to your balance as soon as they register. Tickets are not refunded if you cancel."
-                    : "Each guest puts this down. People who come get it back plus a share of the no-shows."
+                    : depositHint(rules ?? null, amountOk && seatsOk ? BigInt(toUnits(form.deposit)) * BigInt(seats) : null)
                 }
               >
                 <SlAmount value={form.deposit} onChange={set("deposit")} label={form.mode === "Ticket" ? "Ticket price" : "Deposit"} />
@@ -526,6 +557,16 @@ function CreateEvent() {
               >
                 <input className="input" type="number" min="1" max={maxSeats} required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
               </OptionRow>
+              {/* With a court the host locks a bond before registration opens: show the amount up front, not only in the Deposit help. */}
+              {form.mode === "Deposit" && !!rules?.bond_per_seat && (
+                <div className="lu-row" tabIndex={0} data-tooltip={`Locked before registration opens. It comes back after the event unless the council upholds a dispute or you publish no list within ${hoursText(rules.submit_hours)}.`}>
+                  <Icon d="M5 11h14v10H5zM8 11V7a4 4 0 018 0v4" className="text-muted" />
+                  <span className="flex-1">Your bond</span>
+                  <span className="font-medium text-muted tabular-nums">
+                    {amountOk && seatsOk ? `${formatUsdc(BigInt(toUnits(form.deposit)) * BigInt(seats) * BigInt(rules.bond_per_seat))} USDC` : bondPerSeatText({ rules })}
+                  </span>
+                </div>
+              )}
               {free && <ApprovalToggle checked={approval} onChange={setApproval} />}
               {/* Door check-in is for paid events; free events only keep an RSVP list. */}
               {!free && <OptionRow
@@ -538,10 +579,19 @@ function CreateEvent() {
               >
                 <input className="input" value={form.cohosts} onChange={(e) => set("cohosts")(e.target.value)} placeholder="alice.near, bob.near" />
               </OptionRow>}
+              {!free && <AccessOption
+                choice={accessChoice} onChoice={setAccessChoice}
+                pastCount={pastEvents.length}
+                minVisits={minVisits} onMinVisits={setMinVisits}
+                skipNoShows={skipNoShows} onSkipNoShows={setSkipNoShows}
+                hours={regularsHours} onHours={setRegularsHours}
+                problem={accessProblem}
+              />}
             </div>
           </div>
 
           {costNote}
+          {lateStart && <p className="text-sm text-muted">{lateStart}</p>}
           {when && when.end < Date.now() && (
             <p className="text-sm text-muted">
               {free ? "This date is in the past. The event goes to Past, and guests can add themselves as attended." : "Paid events need a future date. Pick Free to add a past event."}
@@ -806,6 +856,72 @@ function TzBox({ tz, at, onChange }: { tz: string; at: number; onChange: (tz: st
   );
 }
 
+const ACCESS_LABELS: Record<AccessChoice, string> = {
+  everyone: "Everyone",
+  "regulars-first": "Regulars first",
+  "regulars-only": "Regulars only",
+};
+
+/** Who can register: everyone, or regulars of the host's own finalized events (first for a while, or only). */
+function AccessOption({ choice, onChoice, pastCount, minVisits, onMinVisits, skipNoShows, onSkipNoShows, hours, onHours, problem }: {
+  choice: AccessChoice;
+  onChoice: (c: AccessChoice) => void;
+  pastCount: number;
+  minVisits: string;
+  onMinVisits: (v: string) => void;
+  skipNoShows: boolean;
+  onSkipNoShows: (v: boolean) => void;
+  hours: string;
+  onHours: (v: string) => void;
+  problem: string | null;
+}) {
+  return (
+    <OptionRow
+      icon="M12 12a4 4 0 100-8 4 4 0 000 8zM4 21v-1a6 6 0 0112 0v1M19 8v6M16 11h6"
+      label="Who can register"
+      value={ACCESS_LABELS[choice]}
+      attention={!!problem}
+      title="Who can register"
+      help={pastCount === 0
+        ? "Regulars are people who came to your earlier events. This opens after one of your events is finalized."
+        : `Regulars are people who came to your last ${pastCount} finalized event${pastCount === 1 ? "" : "s"}. The escrow checks it and refunds anyone else.`}
+    >
+      <div className="space-y-3">
+        <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Who can register">
+          {(Object.keys(ACCESS_LABELS) as AccessChoice[]).map((c) => (
+            <label key={c} className={`flex items-center gap-2 text-sm ${c !== "everyone" && pastCount === 0 ? "opacity-50" : ""}`}>
+              <input type="radio" name="access" checked={choice === c} disabled={c !== "everyone" && pastCount === 0} onChange={() => onChoice(c)} />
+              {ACCESS_LABELS[c]}
+            </label>
+          ))}
+        </div>
+        {choice !== "everyone" && (
+          <>
+            <label className="flex items-center gap-2 text-sm">
+              Came to at least
+              <input className="input w-16" type="number" min={1} max={pastCount} value={minVisits} onChange={(e) => onMinVisits(e.target.value)} />
+              of your last {pastCount}
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={skipNoShows} onChange={(e) => onSkipNoShows(e.target.checked)} />
+              Keep out people who registered and didn’t come
+            </label>
+            {choice === "regulars-first" && (
+              <label className="flex items-center gap-2 text-sm">
+                Open to everyone after
+                <select className="input w-24" value={hours} onChange={(e) => onHours(e.target.value)}>
+                  {["24", "48", "72"].map((h) => <option key={h} value={h}>{h} hours</option>)}
+                </select>
+              </label>
+            )}
+            {problem && <p className="text-sm text-warn">{problem}</p>}
+          </>
+        )}
+      </div>
+    </OptionRow>
+  );
+}
+
 function OptionRow({ icon, label, value, title, help, attention, children }: { icon: string; label: string; value: string; title: string; help: string; attention?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
@@ -830,6 +946,16 @@ function OptionRow({ icon, label, value, title, help, attention, children }: { i
       )}
     </>
   );
+}
+
+/** The Deposit help text under the amount; `pool` is deposit × seats in USDC units. */
+function depositHint(rules: EventView["rules"] | null, pool: bigint | null): string {
+  const base = "Each guest puts this down. People who come get it back plus a share of the no-shows.";
+  if (!rules) return base;
+  if (!rules.dao) return `${base} Your list of who came is final. Registration closes when the event ${rules.close_at_start ? "starts" : "ends"}.`;
+  if (!rules.bond_per_seat) return `${base} Guests can dispute your list of who came; a council decides. Registration closes when the event starts.`;
+  const bond = pool === null ? "deposit × seats" : `${formatUsdc(pool * BigInt(rules.bond_per_seat))} USDC`;
+  return `${base} Before registration opens, you lock a bond of ${bondPerSeatText({ rules })} (${bond}). It comes back after the event unless the council upholds a dispute or you publish no list within ${hoursText(rules.submit_hours)}. Registration closes when the event starts.`;
 }
 
 /** After creating: share the event page, quick checkout, or simple site button. */
@@ -880,6 +1006,13 @@ function Created({ event, visual, coverUrl, detailsSaveError, savingDetails, onR
       )}
       {savingVisual && <p className="text-sm text-muted">Saving the event look off-chain…</p>}
 
+      {needsBond(event) && (
+        <div className="card p-4 space-y-2 border-accent/50">
+          <p className="text-sm">Registration opens once you lock the {formatUsdc(hostBondFor(event))} USDC host bond. Lock it on the event page before the event starts.</p>
+          <Link href={`/e/${event.id}`} className="btn btn-accent !py-2 text-sm">Lock Host Bond</Link>
+        </div>
+      )}
+
       <div className="space-y-3">
         <Way title="Event page" value={page} />
         <Way title="Quick checkout link" value={checkout} />
@@ -887,13 +1020,13 @@ function Created({ event, visual, coverUrl, detailsSaveError, savingDetails, onR
 
       <div className="flex flex-wrap gap-3">
         <Link href={`/e/${event.id}`} className="btn btn-primary">
-          Open event page
+          Open Event Page
         </Link>
         <Link href={integrationUrl(event.id)} className="btn btn-ghost">
-          Add to your site
+          Add to Your Site
         </Link>
         <Link href={`/e/${event.id}/manage`} className="btn btn-ghost">
-          Manage guests &amp; check-in
+          Manage Guests &amp; Check-In
         </Link>
       </div>
     </div>

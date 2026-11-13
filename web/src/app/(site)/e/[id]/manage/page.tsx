@@ -4,20 +4,24 @@ import { SlCopy, confirmAction } from "@/components/SlUi";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
-import { events, formatUsdc, isTicket, type EventView, type GuestView } from "@/lib/near";
+import { cameOf, events, formatUsdc, isTicket, needsBond, registrationOpen, windowText, type EventView, type GuestView } from "@/lib/near";
 import { EVENTS_CONTRACT } from "@/lib/config";
 import { checkIns } from "@/lib/checkinsClient";
 import { useWallet } from "@/lib/wallet";
 import { Avatar, StatusPill, shortAccount } from "@/components/ui";
 import { QrScanner } from "@/components/Qr";
 import { IntegrationGuide } from "@/components/IntegrationGuide";
-import { Overview } from "./Overview";
+import { Overview, cancelText } from "./Overview";
+import { guestStatus } from "@/lib/eventLines";
 import { PublicDetailsEditor } from "./PublicDetailsEditor";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 import { guestNamesApi, type GuestNames } from "@/lib/guestNamesClient";
 import { attendedCounts } from "@/lib/reputation";
+import { OraclePanel } from "@/components/OraclePanel";
 import { hostedStats, type Reputation } from "@/lib/reputationShared";
 import { ReputationBadges } from "@/components/ReputationBadges";
+import { daoPolicy, hostAccounts, isDaoAccount } from "@/lib/daoHost";
+import { functionCallProposal } from "@/lib/daoShared";
 
 type Tab = "overview" | "event" | "guests" | "registration" | "integration";
 const TABS: { id: Tab; label: string }[] = [
@@ -49,6 +53,9 @@ function ManageEvent() {
   const [guests, setGuests] = useState<GuestView[]>([]);
   const [guestNames, setGuestNames] = useState<GuestNames>({});
   const [doorTeam, setDoorTeam] = useState<string[]>([]);
+  // The host, or the council when a DAO hosts.
+  const [hostTeam, setHostTeam] = useState<string[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -71,12 +78,14 @@ function ManageEvent() {
   const load = useCallback(async () => {
     const e = await events.get(id);
     if (!e) throw new Error("Event not found.");
-    const [g, team, names] = await Promise.all([
+    const [g, team, names, hosts] = await Promise.all([
       events.guests(id),
       cohostsApi.get(id).catch(() => null),
       guestNamesApi.list(id).catch(() => ({})),
+      hostAccounts(e.host).catch(() => [e.host]),
     ]);
     if (team) setDoorTeam(team);
+    setHostTeam(hosts);
     setGuestNames(names);
     // Door check-ins live on our server until finalize puts them on-chain.
     if (e.status === "Open") {
@@ -105,7 +114,7 @@ function ManageEvent() {
     if (tab !== "guests" || !guestIds) return;
     let live = true;
     const ids = guestIds.split(",");
-    Promise.all([attendedCounts(ids), events.list()])
+    Promise.all([attendedCounts(ids), events.all()])
       .then(([counts, all]) => live && setReps(Object.fromEntries(Object.entries(counts).map(([a, n]) => [a, { attended: n, ...hostedStats(all, a) }]))))
       .catch(() => {});
     return () => {
@@ -131,7 +140,9 @@ function ManageEvent() {
 
   if (!event) return <p className="text-muted px-1" role="status">{error ?? "Loading…"}</p>;
 
-  const isHost = accountId === event.host;
+  const isHost = !!accountId && hostTeam.includes(accountId);
+  // A DAO host acts through proposals its council votes on.
+  const daoHost = isDaoAccount(event.host);
   const isStaff = isHost || (!!accountId && doorTeam.includes(accountId));
   if (!isStaff) {
     return (
@@ -145,10 +156,29 @@ function ManageEvent() {
   }
 
   const run = async (methodName: string, args: object, confirmText?: string) => {
-    if (confirmText && !(await confirmAction(confirmText, methodName === "cancel" ? "Cancel event" : "Close event"))) return;
+    if (confirmText && !(await confirmAction(confirmText, methodName === "cancel" ? "Cancel Event" : isTicket(event) ? "Close Event" : "Publish List"))) return;
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
+      if (daoHost) {
+        // The approving vote runs the call, so it carries the call's gas: ~0.7 Tgas per guest (300 guests: 196 Tgas).
+        const tgas = Math.min(250, 50 + Math.ceil(event.guest_count * 0.7));
+        const bond = BigInt((await daoPolicy(event.host)).proposal_bond ?? "0");
+        await send([{
+          receiverId: event.host,
+          methodName: "add_proposal",
+          args: functionCallProposal({
+            description: `Nearvent: ${methodName === "cancel" ? "cancel event" : isTicket(event) ? "close event" : "publish the list for event"} #${id} "${event.metadata.title}"`
+              + ("attended" in args ? ` with ${(args as { attended: string[] }).attended.length} of ${event.guest_count} guests checked in` : ""),
+            receiverId: EVENTS_CONTRACT, method: methodName, args, deposit: "1", gas: `${tgas}000000000000`,
+          }),
+          gas: 100_000_000_000_000n,
+          deposit: bond,
+        }]);
+        setNotice(`Proposal created in ${event.host}. It runs once the council approves it (vote with at least ${tgas + 50} Tgas).`);
+        return;
+      }
       await send([{ receiverId: EVENTS_CONTRACT, methodName, args, gas: 300_000_000_000_000n, deposit: 1n }]);
       await load();
     } catch (e) {
@@ -220,16 +250,24 @@ function ManageEvent() {
     try {
       const fresh = await events.get(id);
       if (!fresh || fresh.status !== "Open") throw new Error("This event is closed or unavailable.");
-      if (Date.now() < fresh.metadata.ends_at) throw new Error("You can close the event once it ends. To refund everyone now, cancel it.");
+      if (Date.now() < fresh.metadata.ends_at) {
+        // Same rule as the escrow's cancel: a bonded Deposit event only before it starts.
+        const canCancel = !fresh.dao || fresh.host_bond === "0" || Date.now() < fresh.metadata.starts_at;
+        throw new Error(ticket ? "You can close the event once it ends." : `You can publish the list once the event ends.${canCancel ? " To refund everyone now, cancel the event." : ""}`);
+      }
       const [currentGuests, marks] = await Promise.all([events.guests(id), checkIns.list(id)]);
-      if (currentGuests.length !== fresh.guest_count) throw new Error("Guest list changed. Try closing the event again.");
+      if (currentGuests.length !== fresh.guest_count) throw new Error("The guest list changed. Try again.");
       const attended = currentGuests.filter((g) => marks[g.account_id]).map((g) => g.account_id);
       const currentPool = BigInt(fresh.total_pool);
+      // With a court the list waits out the dispute window; without one it pays out now.
+      const after = fresh.dao
+        ? `Guests can dispute any record for ${windowText(fresh)}; the council decides.${fresh.host_bond && fresh.host_bond !== "0" ? ` A record they prove wrong costs you your whole bond (${formatUsdc(fresh.host_bond)} USDC).` : ""} Then anyone settles the payouts.`
+        : "Payouts go out now.";
       const confirmation = ticket
         ? `Close the event?\n\n${fresh.guest_count} tickets · ${formatUsdc(currentPool)} USDC is already in your balance.\n\nThis cannot be undone.`
         : attended.length === 0
-          ? "Nobody was checked in, so every deposit goes back to its guest. Close the event?"
-          : `Close the event and pay out?\n\n${attended.length} of ${fresh.guest_count} came.\nPool: ${formatUsdc(currentPool)} USDC.\nEach attendee gets ${formatUsdc(currentPool / BigInt(attended.length))} USDC.\n\nThis cannot be undone.`;
+          ? `Publish the list with nobody checked in?\n\nIf nobody came, every deposit goes back to its guest. ${after}\n\nThis cannot be undone.`
+          : `Publish who came?\n\n${attended.length} of ${fresh.guest_count} checked in.\nPool: ${formatUsdc(currentPool)} USDC, ${formatUsdc(currentPool / BigInt(attended.length))} USDC each${fresh.dao ? " if nobody disputes" : ""}.\n\n${after}\n\nThis cannot be undone.`;
       await run("finalize", { event_id: id, attended }, confirmation);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -238,7 +276,8 @@ function ManageEvent() {
     }
   };
   const paid = guests.length;
-  const checkedIn = guests.filter((g) => g.status === "Attended").length;
+  // Door marks while Open (see load), the list after it.
+  const checkedIn = event.attended_count;
   const pageUrl = `${origin}/e/${id}`;
   const payUrl = `${origin}/p/${id}`;
 
@@ -256,7 +295,7 @@ function ManageEvent() {
           </p>
           <div className="flex items-center gap-2.5 mt-1 min-w-0">
             <h1 className="gc-page-title break-words">{event.metadata.title}</h1>
-            {event.status !== "Open" && <StatusPill status={event.status} />}
+            {event.status !== "Open" && <StatusPill event={event} />}
           </div>
         </div>
         <Link href={`/e/${id}`} className="btn btn-ghost !py-2 text-sm shrink-0" target="_blank">
@@ -279,9 +318,11 @@ function ManageEvent() {
       </nav>
 
       {error && <p className="text-sm text-warn break-words card p-3">{error}</p>}
+      {notice && <p className="text-sm break-words card p-3">{notice}</p>}
 
       {tab === "overview" && (
         <>
+          <OraclePanel event={event} guests={guests} hostTeam={hostTeam} onChange={load} manage />
           <Overview
             event={event}
             guests={guests}
@@ -300,7 +341,7 @@ function ManageEvent() {
               run(
                 "cancel",
                 { event_id: id },
-                `Cancel this event?\n\nEveryone gets their money back: ${event.guest_count} ${ticket ? "ticket" : "deposit"}${event.guest_count === 1 ? "" : "s"} (${formatUsdc(event.total_pool)} USDC) return to the guests' Nearvent balances.\n\nThis cannot be undone.`,
+                `Cancel this event?\n\n${cancelText(event)}`,
               )
             }
             doorTeam={doorTeam}
@@ -311,6 +352,7 @@ function ManageEvent() {
 
       {tab === "guests" && (
         <GuestsTab
+          event={event}
           ticket={ticket}
           open={open}
           isHost={isHost}
@@ -365,6 +407,7 @@ function ManageEvent() {
 }
 
 function GuestsTab({
+  event,
   open,
   isHost,
   busy,
@@ -391,6 +434,7 @@ function GuestsTab({
   onFinalize,
   ended,
 }: {
+  event: EventView;
   open: boolean;
   isHost: boolean;
   busy: boolean;
@@ -418,6 +462,8 @@ function GuestsTab({
   /** Finalize opens once the event has ended. */
   ended: boolean;
 }) {
+  // Past the deadline the escrow refuses the list; only the refund on the event page works.
+  const late = !ticket && !!event.submit_by && Date.now() > event.submit_by;
   return (
     <div className="space-y-8">
       <section className="space-y-4">
@@ -427,7 +473,7 @@ function GuestsTab({
             {paid} Going
             <span className="text-lg font-medium text-muted ml-2">· {checkedIn} in</span>
           </div>
-          {!ticket && checkedIn > 0 && <p className="text-sm text-muted mt-1">~{formatUsdc(share)} USDC each if you close now</p>}
+          {open && !ticket && checkedIn > 0 && <p className="text-sm text-muted mt-1">~{formatUsdc(share)} USDC each {event.dao ? "if nobody disputes" : "if you publish now"}</p>}
         </div>
 
         <div className="grid sm:grid-cols-3 gap-3">
@@ -448,7 +494,7 @@ function GuestsTab({
           <div className="flex items-center justify-between gap-2">
             <h3 className="font-medium">Scan guest codes</h3>
             <button type="button" className="text-sm text-muted hover:text-text" onClick={onScanClose}>
-              Close camera
+              Close Camera
             </button>
           </div>
           <QrScanner onScan={onScan} onClose={onScanClose} />
@@ -489,13 +535,13 @@ function GuestsTab({
             <h3 className="font-semibold">No Guests Yet</h3>
             <p className="text-sm text-muted max-w-sm mx-auto">Share the event or payment link so people can leave a deposit.</p>
             <button type="button" className="btn btn-ghost !py-2 text-sm mt-2" onClick={onInvite}>
-              Get share links
+              Get Share Links
             </button>
           </div>
         ) : (
           <ul className="card divide-y divide-border">
             {filtered.map((g) => {
-              const attended = g.status === "Attended";
+              const attended = cameOf(event, g);
               const queued = selected.has(g.account_id);
               const name = guestNames[g.account_id];
               return (
@@ -512,7 +558,7 @@ function GuestsTab({
                     </div>
                     <div className="text-xs text-muted">
                       {name ? `${shortAccount(g.account_id)} · ` : ""}
-                      {attended ? "Checked in" : "Paid · going"}
+                      {guestStatus(event, g, isHost).label}
                     </div>
                   </div>
                   {attended ? (
@@ -534,7 +580,7 @@ function GuestsTab({
                           disabled={busy}
                           onClick={() => onCheckInOne(g.account_id)}
                         >
-                          Check in
+                          Check In
                         </button>
                       </div>
                     )
@@ -546,16 +592,11 @@ function GuestsTab({
         )}
       </section>
 
-      {open && isHost && paid > 0 && (
+      {/* Shown only when it works: before the end the Overview says when it opens; past the deadline only the refund is left. */}
+      {open && isHost && paid > 0 && ended && !late && (
         <div className="pt-2 border-t border-border">
-          <button
-            type="button"
-            className="btn btn-primary w-full sm:w-auto"
-            disabled={busy || !ended}
-            data-tooltip={ended ? undefined : "Available once the event ends"}
-            onClick={onFinalize}
-          >
-            {ticket ? "Close event & get paid" : "Close event & pay out"}
+          <button type="button" className="btn btn-accent w-full sm:w-auto" disabled={busy} onClick={onFinalize}>
+            {ticket ? "Close Event & Get Paid" : "Publish Who Came"}
           </button>
         </div>
       )}
@@ -584,8 +625,8 @@ function RegistrationTab({
         <StatusCard
           icon="🎟️"
           label="Registration"
-          value={open ? "Open" : event.status === "Finalized" ? "Closed" : "Cancelled"}
-          good={open}
+          value={open ? (needsBond(event) ? "Waiting for bond" : registrationOpen(event) ? "Open" : "Closed") : event.status === "Finalized" ? "Closed" : event.status === "Submitted" ? "List published" : event.status}
+          good={registrationOpen(event)}
         />
         <StatusCard icon="↑" label="Capacity" value={`${event.guest_count} / ${event.capacity}`} />
         <StatusCard icon="◎" label={isTicket(event) ? "Ticket" : "Deposit"} value={`${formatUsdc(event.deposit)} USDC`} />

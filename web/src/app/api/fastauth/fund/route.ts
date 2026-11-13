@@ -1,3 +1,4 @@
+import { FASTAUTH_CLIENT_ID } from "@/lib/config";
 import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { NETWORK } from "@/lib/config";
 import { accountExists, relayer } from "@/lib/relayer";
@@ -12,6 +13,8 @@ const STARTER_NEAR = NETWORK === "mainnet"
   : 500_000_000_000_000_000_000_000n; // 0.5 NEAR
 
 export async function POST(req: Request) {
+  // Google/email sign-in is off (no NEAR Auth client): nobody may spend the relayer's NEAR here.
+  if (!FASTAUTH_CLIENT_ID) return Response.json({ error: "Google and email sign-in are not enabled" }, { status: 503 });
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
   const { accountId } = await req.json();
   if (typeof accountId !== "string" || !/^[0-9a-f]{64}$/.test(accountId)) {

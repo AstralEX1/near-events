@@ -25,7 +25,7 @@ const USDC = "usdc.tidepool-sandbox.testnet";
 const VERIFIER = "verifier.tidepool-sandbox.testnet";
 const TGAS = 1_000_000_000_000n;
 const BYTE = 10n ** 19n; // yoctoNEAR per byte of storage
-const SEAT_BYTES = 560n;
+const SEAT_BYTES = 630n; // STORAGE_BYTES_PER_GUEST + BALANCE_BYTES + ATTENDED_BYTES
 const DEPOSIT = "100000"; // 0.1 USDC
 const provider = new JsonRpcProvider({ url: "https://test.rpc.fastnear.com" });
 const secret = (id) => JSON.parse(readFileSync(`${homedir()}/.near-credentials/testnet/${id}.json`, "utf8")).private_key;

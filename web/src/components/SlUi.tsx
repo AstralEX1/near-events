@@ -323,7 +323,7 @@ export function ConfirmHost() {
           const style = document.createElement("style");
           style.textContent = CONFIRM_STYLE;
           root.append(style);
-          root.querySelector('[data-close][autofocus]')!.textContent = "Go back";
+          root.querySelector('[data-close][autofocus]')!.textContent = "Go Back";
           // The library's own launcher stays mounted but out of reach; confirmAction opens the dialog.
           const launch = root.querySelector(".overlay-launch") as HTMLElement;
           launch.setAttribute("aria-hidden", "true");

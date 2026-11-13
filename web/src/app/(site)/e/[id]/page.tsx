@@ -4,7 +4,7 @@ import { SlShare } from "@/components/SlUi";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { events, formatUsdc, isTicket, type EventView, type GuestView } from "@/lib/near";
+import { events, formatUsdc, isTicket, needsBond, registrationEndsAt, registrationOpen, type EventView, type GuestView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
 import { Avatar, Cover, DateBadge, EventSkeleton, StatusPill, formatWhen, shortAccount } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
@@ -18,6 +18,9 @@ import { guestNamesApi, type GuestNames } from "@/lib/guestNamesClient";
 import { useEventVisual } from "@/lib/event-visual-client";
 import { EventPageBackground } from "@/components/EventVisual";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
+import { hostAccounts, isDaoAccount } from "@/lib/daoHost";
+import { hostedStats } from "@/lib/reputationShared";
+import { OraclePanel } from "@/components/OraclePanel";
 
 /**
  * The hosted event page, laid out like Luma so hosts and guests feel at home.
@@ -33,6 +36,9 @@ export default function EventPage() {
   const [details, setDetails] = useState<EventDetails | null>(null);
   const [detailsUnavailable, setDetailsUnavailable] = useState(false);
   const [doorTeam, setDoorTeam] = useState<string[]>([]);
+  // The host, or the council when a DAO hosts.
+  const [hostTeam, setHostTeam] = useState<string[]>([]);
+  const [hostRecord, setHostRecord] = useState<{ hosted: number; guestsCame: number; abandoned: number } | null>(null);
   const [names, setNames] = useState<GuestNames>({});
   const visual = useEventVisual(id, event?.metadata.title ?? "");
 
@@ -56,6 +62,11 @@ export default function EventPage() {
     setEvent(e);
     setGuests(g);
     if (e) {
+      setHostTeam([e.host]);
+      void hostAccounts(e.host).then(setHostTeam).catch(() => {});
+      void events.all()
+        .then((all) => setHostRecord({ ...hostedStats(all, e.host), abandoned: all.filter((x) => x.host === e.host && x.abandoned).length }))
+        .catch(() => {});
       void team.then(setDoorTeam);
       void guestNames.then(setNames);
       void publicDetails.then((d) => {
@@ -74,7 +85,7 @@ export default function EventPage() {
   if (event === null) return <p>Event not found.</p>;
 
   const me = guests.find((g) => g.account_id === accountId);
-  const isStaff = !!accountId && (accountId === event.host || doorTeam.includes(accountId));
+  const isStaff = !!accountId && (hostTeam.includes(accountId) || doorTeam.includes(accountId));
 
   const going = guests.map((g) => g.account_id);
   const ticket = isTicket(event);
@@ -95,9 +106,21 @@ export default function EventPage() {
                 <Link key={a} href={`/u/${encodeURIComponent(a)}`} className="flex items-center gap-2 text-sm hover:text-accent">
                   <Avatar account={a} size={24} />
                   <span className="truncate font-medium">{shortAccount(a)}</span>
+                  {i === 0 && isDaoAccount(a) && <span className="text-xs text-muted">DAO</span>}
                   {i > 0 && <span className="text-xs text-muted">door</span>}
                 </Link>
               ))}
+              {hostRecord && (
+                <p className="text-xs text-muted">
+                  {hostRecord.hosted === 0 && hostRecord.abandoned === 0
+                    ? "First event on Nearvent"
+                    : [
+                        hostRecord.hosted > 0 && `Held ${hostRecord.hosted} event${hostRecord.hosted === 1 ? "" : "s"} · ${hostRecord.guestsCame} guest${hostRecord.guestsCame === 1 ? "" : "s"} came`,
+                        // An event without the host's list is not "held", but it is not a first event either.
+                        hostRecord.abandoned > 0 && `No list published for ${hostRecord.abandoned} event${hostRecord.abandoned === 1 ? "" : "s"}`,
+                      ].filter(Boolean).join(" · ")}
+                </p>
+              )}
             </div>
           </Section>
           <GoingList accounts={going} names={names} total={event.guest_count} verb={open ? "Going" : "Went"} />
@@ -106,7 +129,7 @@ export default function EventPage() {
         <section className="space-y-6 min-w-0">
           <div className="flex items-start gap-2">
             <div className="min-w-0">
-              {!open && <StatusPill status={event.status} />}
+              {!open && <StatusPill event={event} />}
               <h1 className="gc-event-title mt-1" data-long={event.metadata.title.length > 36 || undefined}>{event.metadata.title}</h1>
             </div>
             <div className="ml-auto shrink-0 flex items-center gap-1.5">
@@ -142,7 +165,7 @@ export default function EventPage() {
           ) : open ? (
             <RegisterBox
               head="Registration"
-              aside={Date.now() >= event.metadata.ends_at ? "Closed" : spots ? `${spots} spot${spots === 1 ? "" : "s"} left` : "Full"}
+              aside={needsBond(event) ? "Not open yet" : Date.now() >= registrationEndsAt(event) ? "Closed" : spots ? `${spots} spot${spots === 1 ? "" : "s"} left` : "Full"}
               icon={ticket ? ICONS.ticket : ICONS.wallet}
               title={ticket ? "Ticket" : "Attendance deposit"}
               desc={ticket ? "Goes to the host, no refunds" : "Show up, get it back + a no-show share"}
@@ -151,10 +174,12 @@ export default function EventPage() {
               <RegistrationCard event={event} myStatus={null} onChange={load} explain={false} />
             </RegisterBox>
           ) : (
-            <RegisterBox head={event.status === "Cancelled" ? "Cancelled" : "Event ended"}>
+            <RegisterBox head={event.status === "Cancelled" ? "Cancelled" : event.status === "Refunded" ? "Closed" : "Event ended"}>
               <RegistrationCard event={event} myStatus={null} onChange={load} explain={false} />
             </RegisterBox>
           )}
+
+          <OraclePanel event={event} guests={guests} hostTeam={hostTeam} onChange={load} />
 
           {details?.description && (
             <Section label="About event"><PublicText value={details.description} /></Section>
@@ -169,7 +194,7 @@ export default function EventPage() {
           {!open && <GuestGrid event={event} guests={guests} me={accountId} />}
         </section>
       </div>
-    {open && !me && spots > 0 && <div className="gc-mobile-register"><span><b>{price}</b><small className="block text-muted">{ticket ? "Ticket" : "Attendance deposit"}</small></span><a href="#registration" className="btn btn-accent">{ticket ? "Get ticket" : "Register"}</a></div>}
+    {registrationOpen(event) && !me && spots > 0 && <div className="gc-mobile-register"><span><b>{price}</b><small className="block text-muted">{ticket ? "Ticket" : "Attendance deposit"}</small></span><a href="#registration" className="btn btn-accent">{ticket ? "Get Ticket" : "Register"}</a></div>}
     </>
   );
 }

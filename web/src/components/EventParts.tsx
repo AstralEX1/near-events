@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { formatUsdc, isTicket, type EventView, type GuestView } from "@/lib/near";
+import { formatUsdc, isTicket, voidedByCouncil, type EventView, type GuestView } from "@/lib/near";
 import { Avatar, shortAccount } from "./ui";
 import { AccountQr } from "./Qr";
 
@@ -13,61 +13,15 @@ export function spotsLine(event: EventView): string {
   return `${event.guest_count} going · ${left > 0 ? `${left} spot${left === 1 ? "" : "s"} left` : "full"}`;
 }
 
-/** The rules, right by the button, so nobody is surprised later. */
-export function RulesBox({ event }: { event: EventView }) {
-  const d = formatUsdc(event.deposit);
-  if (isTicket(event)) {
-    return (
-      <div className="rounded-2xl bg-accent-soft text-sm p-4 space-y-3 leading-relaxed">
-        <div>
-          <div className="font-semibold text-accent">How it works</div>
-          <ul className="list-disc pl-5 mt-1 space-y-0.5">
-            <li>A ticket costs {d} USDC.</li>
-            <li>The money goes to the host as soon as you register. Tickets are not refunded.</li>
-            <li>The host checks you in at the door with your QR pass.</li>
-          </ul>
-        </div>
-        <div>
-          <div className="font-semibold text-accent">Good to know</div>
-          <ul className="list-disc pl-5 mt-1 space-y-0.5">
-            <li>If the host cancels, refunds go to your Nearvent balance. If the event stays open for 30 days, a refund can be requested.</li>
-            <li>No platform fee.</li>
-          </ul>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="rounded-2xl bg-accent-soft text-sm p-4 space-y-3 leading-relaxed">
-      <div>
-        <div className="font-semibold text-accent">How it works</div>
-        <ul className="list-disc pl-5 mt-1 space-y-0.5">
-          <li>Everyone puts down the same {d} USDC.</li>
-          <li>
-            The host checks you in at the door. Deposits of people who don’t come are <b>split equally among those who
-            came</b>.
-          </li>
-          <li>After the host closes the event, your deposit and share are credited to your Nearvent balance. You can then withdraw.</li>
-        </ul>
-      </div>
-      <div>
-        <div className="font-semibold text-accent">Good to know</div>
-        <ul className="list-disc pl-5 mt-1 space-y-0.5">
-          <li>You can’t cancel once you’re registered.</li>
-          <li>Only a check-in by the host or their door team counts.</li>
-          <li>If the host cancels, refunds go to your Nearvent balance. If the event stays open for 30 days, a refund can be requested.</li>
-          <li>The money is held by a NEAR smart contract, not the organizer. No platform fee.</li>
-        </ul>
-      </div>
-    </div>
-  );
-}
-
 /** Under each guest after the event: what they made, or that they didn't come. Nothing before. */
 function note(event: EventView, g: GuestView): { text: string; dim: boolean } | null {
-  if (event.status === "Cancelled") return isTicket(event) ? null : { text: "refunded", dim: false };
+  if (event.status === "Cancelled" || event.status === "Refunded") return isTicket(event) ? null : { text: "refunded", dim: false };
+  // Facts only: a dispute may still prove the guest came (its verdict shows in the oracle panel).
+  if (event.status === "Submitted") return g.listed || event.abandoned ? null : { text: "not on the host’s list", dim: true };
   if (event.status !== "Finalized") return null;
   if (isTicket(event)) return g.status === "Attended" ? { text: "came", dim: false } : null;
+  // Nobody came (or nobody proved it on an abandoned event): every deposit went back.
+  if (event.attended_count === 0) return { text: "refunded", dim: false };
   if (g.status !== "Attended") return { text: "no-show", dim: true };
   const profit = BigInt(event.payout_per_attendee) - BigInt(event.deposit);
   return { text: profit > 0n ? `+${formatUsdc(profit)}` : "came", dim: false };
@@ -83,7 +37,13 @@ export function GuestGrid({ event, guests, me }: { event: EventView; guests: Gue
   }, [guests, query, me]);
 
   const line =
-    event.status === "Finalized" ? `${event.attended_count} of ${event.guest_count} showed up` : spotsLine(event);
+    voidedByCouncil(event)
+      ? "Cancelled by the council · everyone got their deposit back"
+      : event.status !== "Finalized"
+        ? spotsLine(event)
+        : event.attended_count === 0 && !isTicket(event)
+          ? "Nobody showed up · deposits returned"
+          : `${event.attended_count} of ${event.guest_count} showed up`;
 
   return (
     <div className="space-y-4 pt-3 border-t border-border">

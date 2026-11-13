@@ -15,6 +15,7 @@ import { verifyMessage } from "near-api-js/nep413";
 import { EVENTS_CONTRACT, RPC_URL } from "./config";
 import { events } from "./near";
 import { getCohosts } from "./cohosts";
+import { hostAccounts } from "./daoHost";
 import { STAFF_MESSAGE, STAFF_PROOF_METHOD, evmStaffMessage } from "./staffShared";
 import { erc191Signer } from "./erc191";
 
@@ -43,11 +44,11 @@ export function readStaffToken(token: string | null | undefined): string | null 
   return Buffer.from(acc, "base64url").toString();
 }
 
-/** Is `accountId` the host or on the door team of this event? Returns the event when yes. */
+/** Is `accountId` the host (a council member when a DAO hosts) or on the door team of this event? Returns the event when yes. */
 export async function staffEvent(eventId: number, accountId: string) {
   const e = await events.get(eventId);
   if (!e) return null;
-  if (e.host !== accountId && !(await getCohosts(eventId)).includes(accountId)) return null;
+  if (!(await hostAccounts(e.host)).includes(accountId) && !(await getCohosts(eventId)).includes(accountId)) return null;
   return e;
 }
 

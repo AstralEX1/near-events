@@ -218,6 +218,8 @@ async function onButton(q: { id: string; data?: string; message?: Msg }) {
     const g = guests[Number(arg)];
     if (!g) return say(chat, "That guest isn’t on the list any more.");
     if (g.status === "Attended") return say(chat, `${esc(short(g.account_id))} is already checked in.`);
+    // The door log freezes once the list is published, as in /api/checkin.
+    if (e.status !== "Open") return say(chat, "The list is published, so check-ins are closed.");
     await setCheckIn(id, g.account_id, true, "telegram");
     await say(chat, `✅ ${esc(short(g.account_id))} checked in.`);
     return checkInKeyboard(chat, { ...e, attended_count: e.attended_count + 1 }, guests.map((x) => (x === g ? { ...x, status: "Attended" } : x)), 0);

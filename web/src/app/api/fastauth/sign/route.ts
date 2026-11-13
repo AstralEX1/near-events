@@ -1,3 +1,4 @@
+import { FASTAUTH_CLIENT_ID } from "@/lib/config";
 import { createHash, createPublicKey, verify, type JsonWebKey } from "node:crypto";
 import { NETWORK } from "@/lib/config";
 import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
@@ -51,6 +52,8 @@ async function matchesFastAuthToken(token: string, guard: string, transaction: n
 // network to sign the user's transaction. The relayer only pays gas; it cannot
 // change what the user approved, because the JWT commits to the transaction.
 export async function POST(req: Request) {
+  // Google/email sign-in is off (no NEAR Auth client): nobody may spend the relayer's NEAR here.
+  if (!FASTAUTH_CLIENT_ID) return Response.json({ error: "Google and email sign-in are not enabled" }, { status: 503 });
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
   const request = await req.json().catch(() => null);
   if (!request || typeof request.guard_id !== "string" || !request.verify_payload

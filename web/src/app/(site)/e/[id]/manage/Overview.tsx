@@ -3,13 +3,23 @@
 import { SlCopy } from "@/components/SlUi";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { formatUsdc, isTicket, priceLabel, type EventView, type GuestView } from "@/lib/near";
+import { formatUsdc, hostBondFor, isTicket, priceLabel, registrationEndsAt, voidedByCouncil, windowText, type EventView, type GuestView } from "@/lib/near";
 import { Avatar, Cover, DateBadge, shortAccount } from "@/components/ui";
 import { cohostsProblem, splitCohosts } from "@/lib/cohostsShared";
 import type { GuestNames } from "@/lib/guestNamesClient";
+import { guestStatus } from "@/lib/eventLines";
 
 /** How many of the newest guests the Overview shows before "All Guests". */
 const RECENT_GUESTS = 5;
+
+const when = (ms: number) =>
+  new Date(ms).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+/** Time only when it is today. */
+const soon = (ms: number) =>
+  new Date(ms).toDateString() === new Date().toDateString()
+    ? new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    : when(ms);
+
 
 type Props = {
   event: EventView;
@@ -41,18 +51,15 @@ export function Overview({ event, guests, guestNames, origin, isHost, busy, onGu
   const payUrl = origin ? `${origin}/p/${id}` : "";
   const integrationHref = `/e/${id}/manage?tab=integration`;
   const over = open && Date.now() >= event.metadata.ends_at;
+  // A bonded Deposit event can only be cancelled before it starts (escrow v3).
+  const canCancel = open && isHost && (isTicket(event) || !event.dao || event.host_bond === "0" || Date.now() < event.metadata.starts_at);
 
   const closeCard = (
-    <CloseEvent event={event} isHost={isHost} busy={busy} over={over} onFinalize={onFinalize} />
+    <CloseEvent event={event} isHost={isHost} busy={busy} over={over} canCancel={canCancel} onFinalize={onFinalize} />
   );
 
   return (
     <div className="space-y-8">
-      <div className="gc-host-stats" aria-label="Event overview">
-        <div className="gc-host-stat"><span>Registered</span><strong>{guests.length}<small className="text-sm text-muted font-normal"> / {event.capacity}</small></strong></div>
-        <div className="gc-host-stat"><span>Checked in</span><strong>{guests.filter((g) => g.status === "Attended").length}</strong></div>
-        <div className="gc-host-stat"><span>{isTicket(event) ? "Ticket sales" : "Deposit pool"}</span><strong>{formatUsdc(event.total_pool)}<small className="block text-xs text-muted font-normal tracking-normal">USDC</small></strong></div>
-      </div>
       <div className="-mx-4 px-4 sm:mx-0 sm:px-0 flex sm:grid sm:grid-cols-3 gap-3 overflow-x-auto [scrollbar-width:none]">
         <QuickAction tone="accent" icon={<ShareIcon />} label="Share Event" onClick={() => setSharing(true)} />
         {open ? (
@@ -77,11 +84,11 @@ export function Overview({ event, guests, guestNames, origin, isHost, busy, onGu
         </div>
       </section>
 
-      <GuestsSection event={event} guests={guests} guestNames={guestNames} onGuests={onGuests} onShare={() => setSharing(true)} />
+      <GuestsSection event={event} guests={guests} guestNames={guestNames} isHost={isHost} onGuests={onGuests} onShare={() => setSharing(true)} />
 
       {!over && closeCard}
 
-      {open && isHost && <CancelEvent event={event} busy={busy} onCancel={onCancel} />}
+      {canCancel && <CancelEvent event={event} busy={busy} onCancel={onCancel} />}
 
       <Divider />
       <HostsSection event={event} isHost={isHost} doorTeam={doorTeam} onSave={onSaveDoorTeam} onGuests={onGuests} />
@@ -271,7 +278,7 @@ function timeAgo(ms: number): string {
   return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function GuestsSection({ event, guests, guestNames, onGuests, onShare }: { event: EventView; guests: GuestView[]; guestNames: GuestNames; onGuests: () => void; onShare: () => void }) {
+function GuestsSection({ event, guests, guestNames, isHost, onGuests, onShare }: { event: EventView; guests: GuestView[]; guestNames: GuestNames; isHost: boolean; onGuests: () => void; onShare: () => void }) {
   const going = event.guest_count;
   const attended = event.attended_count;
   const capacity = Math.max(event.capacity, 1);
@@ -282,6 +289,8 @@ function GuestsSection({ event, guests, guestNames, onGuests, onShare }: { event
   const ticket = isTicket(event);
   const each = attended > 0 ? pool / BigInt(attended) : 0n;
   const open = event.status === "Open";
+  // A court may run with no bond (0 by default): the bond card only when there is one.
+  const bondCard = !!event.dao && !ticket && hostBondFor(event) !== "0";
 
   return (
     <section className="space-y-5">
@@ -293,7 +302,7 @@ function GuestsSection({ event, guests, guestNames, onGuests, onShare }: { event
             <span className="text-xl font-semibold">{going}</span> Going
             {attended > 0 && <span className="text-muted font-normal"> · {attended} checked in</span>}
           </div>
-          <div className="text-sm text-muted">{open ? `${left} of ${event.capacity} spots left` : `${event.capacity} spots`}</div>
+          <div className="text-sm text-muted">{open && Date.now() < registrationEndsAt(event) ? `${left} of ${event.capacity} spots left` : `${event.capacity} spots`}</div>
         </div>
         <div
           className="relative h-2 rounded-full bg-border overflow-hidden"
@@ -303,16 +312,16 @@ function GuestsSection({ event, guests, guestNames, onGuests, onShare }: { event
           <div className="absolute inset-y-0 left-0 bg-good/40 rounded-full" style={{ width: pct(going) }} />
           <div className="absolute inset-y-0 left-0 bg-good rounded-full" style={{ width: pct(attended) }} />
         </div>
-        {going > 0 && (
+        {(going > 0 || bondCard) && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <Stat label={open ? (ticket ? "Ticket sales" : "Deposit pool") : "Total pool"} value={`${formatUsdc(pool)} USDC`} />
           {ticket ? (
             <Stat label="Paid to you" value={`${formatUsdc(pool)} USDC`} />
           ) : (
             <Stat
-              label={open ? "Each if closed now" : "Each attendee got"}
+              label={open ? "Each if published now" : event.status === "Submitted" ? "Each if the list stands" : "Each attendee got"}
               value={
-                open && attended > 0
+                (open || event.status === "Submitted") && attended > 0
                   ? `${formatUsdc(each)} USDC`
                   : event.status === "Finalized" && attended > 0
                     ? `${formatUsdc(event.payout_per_attendee)} USDC`
@@ -320,7 +329,8 @@ function GuestsSection({ event, guests, guestNames, onGuests, onShare }: { event
               }
             />
           )}
-          <Stat label="Checked in" value={`${attended} / ${going}`} className="col-span-2 sm:col-span-1" />
+          {/* "N checked in" is already in the line above; with a bond the third card is the host bond instead. */}
+          {bondCard ? <BondStat event={event} isHost={isHost} /> : <Stat label="Checked in" value={`${attended} / ${going}`} className="col-span-2 sm:col-span-1" />}
         </div>
         )}
       </div>
@@ -351,9 +361,7 @@ function GuestsSection({ event, guests, guestNames, onGuests, onShare }: { event
                     )}
                   </span>
                   <span className="text-right shrink-0">
-                    <span className={`block text-xs font-medium px-2 py-0.5 rounded-full ${g.status === "Attended" ? "bg-good text-bg" : "bg-good/15 text-good"}`}>
-                      {g.status === "Attended" ? "Checked in" : "Going"}
-                    </span>
+                    <GuestPill event={event} guest={g} isHost={isHost} />
                     <span className="block text-xs text-muted mt-0.5">{timeAgo(g.registered_at)}</span>
                   </span>
                 </button>
@@ -381,6 +389,34 @@ function GuestsSection({ event, guests, guestNames, onGuests, onShare }: { event
   );
 }
 
+function GuestPill({ event, guest, isHost }: { event: EventView; guest: GuestView; isHost: boolean }) {
+  const { label, tone } = guestStatus(event, guest, isHost);
+  return tone === "solid"
+    ? <span className="gc-chip !bg-good !text-bg">{label}</span>
+    : <span className="gc-chip" data-tone={tone}>{label}</span>;
+}
+
+/** The host bond (court events): how much, and whether it is locked, back with the host, or lost. */
+function BondStat({ event, isHost }: { event: EventView; isHost: boolean }) {
+  const locked = BigInt(event.host_bond ?? "0") > 0n;
+  const lost = (event.upheld_disputes ?? 0) > 0 || !!event.abandoned;
+  const [note, tone] = !locked
+    ? ["not locked", "text-warn"]
+    : (event.status === "Submitted" || event.status === "Finalized") && lost
+      ? ["lost", "text-warn"]
+      : event.status === "Open" || event.status === "Submitted"
+        ? ["locked", "text-muted"]
+        : ["returned", "text-good"];
+  return (
+    <div className="card p-3 sm:p-4 min-w-0 col-span-2 sm:col-span-1">
+      <div className="text-xs text-muted">{isHost ? "Your bond" : "Host bond"}</div>
+      <div className="font-semibold tracking-tight mt-1 truncate">
+        {formatUsdc(locked ? event.host_bond! : hostBondFor(event))} USDC <span className={`text-xs font-medium tracking-normal ${tone}`}>· {note}</span>
+      </div>
+    </div>
+  );
+}
+
 function Stat({ label, value, className = "" }: { label: string; value: string; className?: string }) {
   return (
     <div className={`card p-3 sm:p-4 min-w-0 ${className}`}>
@@ -397,18 +433,39 @@ function CloseEvent({
   isHost,
   busy,
   over,
+  canCancel,
   onFinalize,
 }: {
   event: EventView;
   isHost: boolean;
   busy: boolean;
   over: boolean;
+  canCancel: boolean;
   onFinalize: () => void;
 }) {
   const ticket = isTicket(event);
   const pool = BigInt(event.total_pool);
   const { attended_count: attended, guest_count: going } = event;
+  const court = !!event.dao;
+  const bonded = BigInt(event.host_bond ?? "0") > 0n;
+  const submitBy = when(event.submit_by ?? event.metadata.ends_at);
+  // v3: past the publish deadline only `refund` works (shown on the event page).
+  const late = !ticket && !!event.submit_by && Date.now() > event.submit_by;
 
+  if (event.status === "Open" && late) {
+    return (
+      <section className="card p-4 space-y-1">
+        <h2 className="font-semibold text-warn">{court && going === 0 ? "Nobody registered" : "Too late to publish the list"}</h2>
+        <p className="text-sm text-muted">
+          {!court
+            ? `The deadline was ${submitBy}. Anyone can now refund every guest.`
+            : going === 0
+              ? `Anyone can close the event now.${bonded ? " Your bond goes back to your balance." : ""}`
+              : `The deadline was ${submitBy}. Anyone can now start the refund on the event page. Your bond is lost; guests who came can still prove it.`}
+        </p>
+      </section>
+    );
+  }
   if (event.status === "Finalized") {
     return (
       <section className="card p-4 space-y-1">
@@ -423,44 +480,57 @@ function CloseEvent({
       </section>
     );
   }
+  // The "Who came" panel at the top of Overview covers the published list, disputes and the bond.
+  if (event.status === "Submitted") return null;
+  if (event.status === "Refunded") {
+    return (
+      <section className="card p-4 space-y-1">
+        <h2 className="font-semibold">Closed</h2>
+        <p className="text-sm text-muted">Nobody registered and no list was published, so the event closed. Your bond went back to your balance.</p>
+      </section>
+    );
+  }
   if (event.status === "Cancelled") {
     return (
       <section className="card p-4 space-y-1">
-        <h2 className="font-semibold text-warn">Cancelled</h2>
-        <p className="text-sm text-muted">{ticket ? "Ticket money stays with the host." : "Every deposit was refunded. Guests can withdraw it from their balance."}</p>
+        <h2 className="font-semibold text-warn">{voidedByCouncil(event) ? "Cancelled by the council" : "Cancelled"}</h2>
+        <p className="text-sm text-muted">{ticket ? "Ticket money stays with the host." : `Every deposit was refunded${voidedByCouncil(event) ? ", dispute deposits too" : ""}. Guests can withdraw it from their balance.`}</p>
       </section>
     );
   }
 
+  const each = attended > 0 ? formatUsdc(pool / BigInt(attended)) : "0";
+  const started = Date.now() >= event.metadata.starts_at;
   const summary = ticket
-    ? `${formatUsdc(pool)} USDC from ${going} ${going === 1 ? "ticket" : "tickets"} is already in your balance. Close the event when it is over.`
-    : attended > 0
-      ? `${attended} of ${going} checked in. Closing splits ${formatUsdc(pool)} USDC: ${formatUsdc(pool / BigInt(attended))} USDC each.`
-      : going > 0
-        ? "Nobody is checked in yet. Closing with nobody checked in sends every deposit back to its guest."
-        : "No deposits yet. Check guests in at the door, then close the event to split the pool.";
+    ? `${formatUsdc(pool)} USDC from ${going} ${going === 1 ? "ticket" : "tickets"} is already in your balance.${over ? "" : " Close the event after it ends."}`
+    : !over
+      ? `${attended > 0 ? `${attended} of ${going} checked in so far. ` : ""}After the event, publish who came by ${submitBy}.${court ? ` Guests then have ${windowText(event)} to dispute it.` : " The list is final."}${court && bonded && started && !canCancel ? " The event has started, so it can’t be cancelled." : ""}`
+      : attended > 0
+        ? court
+          ? `${attended} of ${going} checked in. Publish by ${submitBy}. If nobody disputes it within ${windowText(event)}, ${formatUsdc(pool)} USDC is split: ${each} USDC each.`
+          : `${attended} of ${going} checked in. Publish by ${submitBy} to pay out ${formatUsdc(pool)} USDC now: ${each} USDC each. The list is final.`
+        : going > 0
+          ? "Nobody is checked in. If you publish an empty list, every deposit goes back to its guest."
+          : `Nobody registered. Publish the empty list to close the event${bonded ? " and get your bond back" : ""}.`;
 
   return (
     <section className={`card p-4 space-y-3 ${over ? "ring-2 ring-accent" : ""}`}>
       <div>
-        <h2 className="font-semibold">{over ? "The event is over. Close it to pay out." : ticket ? "Get paid" : "Pay out"}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <h2 className="font-semibold">{over ? (ticket ? "The event is over. Close it to get paid." : "The event is over. Publish who came.") : ticket ? "Get paid" : "Publish who came"}</h2>
+          {/* Before the end there is nothing to press: say when it opens instead of showing a disabled button. */}
+          {!over && isHost && <span className="gc-chip">Opens {soon(event.metadata.ends_at)}</span>}
+        </div>
         <p className="text-sm text-muted mt-0.5">{summary}</p>
       </div>
       {isHost ? (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <button
-            type="button"
-            className={`btn ${over ? "btn-accent" : "btn-primary"} !py-2 text-sm`}
-            disabled={busy || !over}
-            data-tooltip={over ? undefined : "Available once the event ends"}
-            onClick={onFinalize}
-          >
-            {ticket ? "Close event & get paid" : "Close event & pay out"}
+        over && (
+          <button type="button" className="btn btn-accent w-full sm:w-auto" disabled={busy} onClick={onFinalize}>
+            {ticket ? "Close Event & Get Paid" : "Publish Who Came"}
           </button>
-          {!over && <span className="text-xs text-muted">Opens when the event ends. To refund everyone now, cancel it below.</span>}
-        </div>
+        )
       ) : (
-        <p className="text-sm text-muted">Only the host ({shortAccount(event.host)}) can close the event. You can check guests in.</p>
+        <p className="text-sm text-muted">Only the host ({shortAccount(event.host)}) can {ticket ? "close the event" : "publish who came"}. You can check guests in.</p>
       )}
     </section>
   );
@@ -468,26 +538,32 @@ function CloseEvent({
 
 /* ---------- Cancel ---------- */
 
-/** Host only, while open. The contract refunds every guest in the same call. */
+/** Host only, while open. Deposits and the host bond come back in the same call; tickets are not refunded. */
 function CancelEvent({ event, busy, onCancel }: { event: EventView; busy: boolean; onCancel: () => void }) {
-  const ticket = isTicket(event);
   return (
     <section className="card p-4 space-y-3 border-warn/40">
       <div>
         <h2 className="font-semibold">Cancel event</h2>
-        <p className="text-sm text-muted mt-0.5">
-          Everyone gets their money back.{" "}
-          {event.guest_count > 0
-            ? `${event.guest_count} ${ticket ? (event.guest_count === 1 ? "ticket" : "tickets") : (event.guest_count === 1 ? "deposit" : "deposits")} (${formatUsdc(event.total_pool)} USDC) go back to the guests' Nearvent balances, ready to withdraw.`
-            : "Nobody has paid yet."}{" "}
-          This cannot be undone.
-        </p>
+        <p className="text-sm text-muted mt-0.5">{cancelText(event)}</p>
       </div>
       <button type="button" className="btn btn-ghost !py-2 text-sm text-warn border-warn/50 hover:bg-warn/10" disabled={busy} onClick={onCancel}>
-        Cancel event &amp; refund everyone
+        {isTicket(event) || event.guest_count === 0 ? "Cancel Event" : "Cancel Event & Refund"}
       </button>
     </section>
   );
+}
+
+/** What cancelling does to the money; also the confirm text in Manage. */
+export function cancelText(event: EventView): string {
+  const n = event.guest_count;
+  const pool = formatUsdc(event.total_pool);
+  if (isTicket(event)) {
+    return `${n > 0 ? `Guests are not refunded: the ${pool} USDC from tickets stays in your balance.` : "Nobody has bought a ticket yet."} This cannot be undone.`;
+  }
+  const bond = BigInt(event.host_bond ?? "0") > 0n;
+  return `${n > 0
+    ? `Every guest gets the deposit back: ${n} ${n === 1 ? "deposit" : "deposits"} (${pool} USDC) go to their Nearvent balances${bond ? ", and your bond comes back to you" : ""}.`
+    : `Nobody has paid yet.${bond ? " Your bond comes back to you." : ""}`} This cannot be undone.`;
 }
 
 /* ---------- Hosts ---------- */
@@ -525,11 +601,11 @@ function HostsSection({ event, isHost, doorTeam, onSave, onGuests }: {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Hosts</h2>
-          <p className="text-sm text-muted mt-0.5">The door team can check guests in; only the host can close or cancel.</p>
+          <p className="text-sm text-muted mt-0.5">The door team can check guests in. Only the host can publish the list or cancel.</p>
         </div>
         {isHost && open && !editing && (
           <button type="button" className="btn btn-ghost !py-1.5 text-sm shrink-0" onClick={() => { setText(doorTeam.join(", ")); setError(null); setEditing(true); }}>
-            Edit door team
+            Edit Door Team
           </button>
         )}
       </div>

@@ -156,6 +156,17 @@ button:not(:disabled), summary { cursor: pointer; }
 .gc-reg-icon[data-tone="good"] { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
 @media (max-width: 420px) { .gc-reg-icon { display: none; } }
 .gc-reg-price { flex-shrink: 0; font-size: 1.25rem; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+/* A folded list (host's list, door log): the whole row is the tap target, a chevron instead of the browser triangle. */
+.gc-fold > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 500; list-style: none; user-select: none; -webkit-user-select: none; }
+.gc-fold > summary::-webkit-details-marker { display: none; }
+.gc-fold > summary::after { content: ""; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: translateY(-2px) rotate(45deg); transition: transform 160ms var(--ease-out); }
+.gc-fold[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+.gc-reg-body .gc-fold { border-top: 1px solid var(--border); }
+/* Status chips: color plus a word, never color alone. Text is mixed toward ink so 12px stays above 4.5:1 on the tint. */
+.gc-chip { display: inline-flex; align-items: center; flex-shrink: 0; white-space: nowrap; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; line-height: 18px; background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--muted); }
+.gc-chip[data-tone="good"] { background: color-mix(in srgb, var(--good) 15%, transparent); color: color-mix(in srgb, var(--good) 80%, var(--text)); }
+.gc-chip[data-tone="warn"] { background: color-mix(in srgb, var(--warn) 15%, transparent); color: color-mix(in srgb, var(--warn) 80%, var(--text)); }
+.gc-chip[data-tone="accent"] { background: var(--accent-soft); color: color-mix(in srgb, var(--accent) 82%, var(--text)); }
 .gc-mobile-register { display: none; }
 .gc-pass { display: flex; flex-wrap: wrap; gap: 24px; align-items: center; padding-block: 8px; }
 .gc-pass-code { padding: 16px; background: #fff; border-radius: 18px; flex-shrink: 0; }

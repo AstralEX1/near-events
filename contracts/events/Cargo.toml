@@ -13,6 +13,10 @@ crate-type = ["cdylib", "rlib"]
 near-sdk = { workspace = true }
 near-contract-standards = { workspace = true }
 
+[features]
+# Testnet rehearsal only: oracle deadlines in minutes instead of days (see `ORACLE_HOUR_MS`).
+short-windows = []
+
 [dev-dependencies]
 near-sdk = { workspace = true, features = ["unit-testing"] }
 

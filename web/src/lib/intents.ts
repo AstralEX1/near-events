@@ -150,6 +150,28 @@ export async function registerFromIntents(address: string, eventId: number, depo
   }, name);
 }
 
+/** Locks a Deposit event's host bond from the wallet's Intents balance (anyone may pay it; it belongs to the host). */
+export async function bondFromIntents(address: string, eventId: number, amount: string): Promise<void> {
+  await signAndRelay(address, {
+    intent: "ft_withdraw",
+    token: USDC_CONTRACT,
+    receiver_id: EVENTS_CONTRACT,
+    amount,
+    msg: JSON.stringify({ action: "host_bond", event_id: eventId }),
+  });
+}
+
+/** Opens a dispute about `target`'s record, paying the bond (one deposit) from the wallet's Intents balance. */
+export async function disputeFromIntents(address: string, eventId: number, target: string, attended: boolean, bond: string): Promise<void> {
+  await signAndRelay(address, {
+    intent: "ft_withdraw",
+    token: USDC_CONTRACT,
+    receiver_id: EVENTS_CONTRACT,
+    amount: bond,
+    msg: JSON.stringify({ action: "dispute", event_id: eventId, target, attended, guest: address }),
+  });
+}
+
 export function withdrawIntentsCall(receiverId: string, amount: string, msg?: string): Call {
   if (!INTENTS_CONTRACT) throw new Error("NEAR Intents is not configured.");
   return {

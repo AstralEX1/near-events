@@ -73,6 +73,38 @@ if (ESCROW) {
     if (wrong.length) throw new Error(wrong.join("; "));
     return `owner ${c.owner}, relayer ${c.relayer}, frozen ${c.frozen}, whitelist ${c.whitelist_mode ? "on" : "off"}`;
   });
+  // Escrow v3: a release build, and with a court a DAO the factory cannot rewrite.
+  await check("escrow v3 rules", async () => {
+    const c = await view(ESCROW, "get_config");
+    if (!c.rules) return "v2 escrow (no disputes)";
+    if (mainnet && c.oracle_hour_ms !== 3_600_000) throw new Error(`oracle hour ${c.oracle_hour_ms} ms: a testnet rehearsal build`);
+    const r = c.rules;
+    const hours = `window ${r.challenge_hours} h, publish ${r.submit_hours} h, court ${r.resolve_hours} h`;
+    if (!r.dao) return `no court yet: host lists are final at publish, no bond; ${hours}`;
+    const info = await view(r.dao, "get_factory_info");
+    if (info.auto_update) throw new Error(`${r.dao} still lets ${info.factory_id} replace its code (FactoryInfoUpdate auto_update=false)`);
+    const policy = await view(r.dao, "get_policy");
+    const council = policy.roles.find((x) => x.name === "council")?.kind?.Group ?? [];
+    if (mainnet && council.length !== 5) throw new Error(`council has ${council.length} members, expected 5`);
+    // 3 of the council must vote; nobody else may approve (the bot only proposes). Re-run this: the
+    // council could change the policy or turn auto_update back on with 3 votes.
+    const vote = policy.default_vote_policy ?? {};
+    if (vote.weight_kind !== "RoleWeight" || Number(vote.quorum) < 3 || !(Number(vote.threshold) >= 3 || Array.isArray(vote.threshold))) {
+      throw new Error(`default vote policy ${JSON.stringify(vote)}: expected RoleWeight with quorum and threshold of at least 3`);
+    }
+    // Sputnik reads a role's own vote_policy[label] before the default: one override could let one member decide.
+    const councilRole = policy.roles.find((x) => x.name === "council");
+    for (const [label, v] of Object.entries(councilRole?.vote_policy ?? {})) {
+      if (v.weight_kind !== "RoleWeight" || Number(v.quorum) < 3) throw new Error(`council vote policy override for ${label}: ${JSON.stringify(v)}`);
+    }
+    // Only the council votes: another role rejecting an honest proposal would also block it (the keeper never re-proposes a rejected one).
+    const voters = policy.roles.filter((x) => x.name !== "council" && x.permissions.some((p) => /^(\*|call):(VoteApprove|VoteReject|VoteRemove|\*)$/.test(p)));
+    if (voters.length) throw new Error(`roles besides the council can vote: ${voters.map((x) => x.name).join(", ")}`);
+    // A void (`void_event`) is proposed by hand by a council member.
+    if (!councilRole?.permissions.some((p) => /^(\*|call):(AddProposal|\*)$/.test(p))) throw new Error("the council cannot propose a FunctionCall (needed for void_event)");
+    if (r.dao === RELAYER || r.dao === OWNER) throw new Error("the court is the relayer or the owner");
+    return `court ${r.dao}, council ${council.length}, treasury ${r.treasury}, bond ${r.bond_per_seat} deposit(s) per seat${r.bond_per_seat < 2 ? " (below 2 a false list can pay at low turnout)" : ""}, ${hours}`;
+  });
   await check("escrow holds USDC storage", async () => !!(await view(USDC, "storage_balance_of", { account_id: ESCROW })));
   await check("escrow responds", async () => `${(await view(ESCROW, "get_recent_events", { limit: 100 })).length} recent events`);
 } else {

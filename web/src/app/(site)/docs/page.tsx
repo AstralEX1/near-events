@@ -36,7 +36,8 @@ export default function DocsHome() {
             Guests show their QR. The host or door team marks them in.
           </Shot>
           <Shot n={4} title="Get paid" images={[{ src: "/docs/payout.png", w: 1304, h: 1030, alt: "Payout ready to withdraw" }]}>
-            The host closes the event. Everyone who came gets their deposit back plus a share of the no-shows.
+            The host publishes who came. After the dispute window (12 hours by default), everyone who came gets their
+            deposit back plus a share of the no-shows.
           </Shot>
         </div>
       </Section>
@@ -83,10 +84,11 @@ export default function DocsHome() {
         <Faq
           items={[
             ["Who holds the money?", "A smart contract. Not Nearvent, not the host."],
-            ["Can the host keep the deposits?", "No. The host only says who came."],
+            ["Can the host keep the deposits?", "No. The host only says who came, and guests can dispute it."],
             ["Nobody showed up?", "Everyone gets their deposit back."],
-            ["The host never closes the event?", "30 days after it ends, anyone can refund everyone."],
-            ["I came but wasn’t checked in.", "Ask the host before they close the event."],
+            ["The host never publishes who came?", "3 days after the end (by default), anyone can start the refund. The list then counts as empty, and guests who came have 12 hours to prove it. If nobody does, everyone gets the deposit back. If someone does, the guests who proved it split the pool."],
+            ["I came but was marked absent.", "Open a dispute on the event page within 12 hours (by default) after the host publishes the list. It locks one deposit, and a council of 5 decides. If it agrees, you get your share and your deposit back. If it disagrees, you lose the deposit."],
+            ["Can the council cancel an event?", "Yes, after the host publishes the list and before the council’s deadline. Every guest gets their deposit back, and so does everyone who opened a dispute. Nothing is paid out."],
             ["Fees?", "None from Nearvent."],
           ]}
         />

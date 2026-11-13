@@ -1,4 +1,4 @@
-import { events, formatUsdc } from "@/lib/near";
+import { events, formatUsdc, registrationOpen } from "@/lib/near";
 
 // Public event summary for /embed.js buttons on other sites. Read-only, so any origin may call it.
 const CORS = { "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=15" };
@@ -21,6 +21,8 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/embed/[id]">) {
       going: e.guest_count,
       capacity: e.capacity,
       full: e.guest_count >= e.capacity,
+      // Closed before the bond or after the start (Deposit) / the end (Ticket).
+      open: registrationOpen(e),
     },
     { headers: CORS },
   );

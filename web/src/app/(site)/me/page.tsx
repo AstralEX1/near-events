@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { events, formatUsdc, usdc, type EventView } from "@/lib/near";
+import { hostAccounts, isDaoAccount } from "@/lib/daoHost";
 import { HAS_INTENTS } from "@/lib/config";
 import { CashOut } from "@/components/CashOut";
 import { savedStaffToken, useWallet } from "@/lib/wallet";
@@ -63,7 +64,12 @@ function MyEvents({ accountId }: { accountId: string }) {
             return {};
           }),
         ]);
-        const hosts = (e: EventView) => e.host === accountId || !!teams[e.id]?.includes(accountId);
+        // Council members of a DAO host manage its events too.
+        const daoHosts = [...new Set(all.map((e) => e.host).filter(isDaoAccount))];
+        const councils: Record<string, string[]> = Object.fromEntries(
+          await Promise.all(daoHosts.map(async (h) => [h, await hostAccounts(h).catch(() => [])] as const)),
+        );
+        const hosts = (e: EventView) => e.host === accountId || !!councils[e.host]?.includes(accountId) || !!teams[e.id]?.includes(accountId);
         setMine([
           ...all.flatMap((e, i) => statuses[i] || hosts(e)
             ? [{ item: hosts(e) ? { ...fromChain(e), href: `/e/${e.id}/manage` } : fromChain(e), hosting: hosts(e) }] : []),

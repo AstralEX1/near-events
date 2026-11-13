@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { events, formatUsdc, usdc, type EventView, type GuestStatus, isTicket } from "@/lib/near";
+import { events, formatUsdc, hostBondFor, hoursText, needsBond, registrationEndsAt, registrationOpen, usdc, windowText, bondPerSeatText, voidedByCouncil, type EventView, type GuestStatus, isTicket } from "@/lib/near";
 import { EVENTS_CONTRACT, HAS_FAUCET, TEST_EVM_FAUCET_LIMIT, USDC_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
@@ -12,6 +12,7 @@ import { NextSteps } from "@/components/EventParts";
 import { CashOut } from "@/components/CashOut";
 import { DepositRulesTooltip } from "@/components/DepositRulesTooltip";
 import { guestNamesApi } from "@/lib/guestNamesClient";
+import { ruleText, type AccessCheck } from "@/lib/access";
 
 function requireDisplayName(value: string): string {
   const name = value.trim().replace(/\s+/g, " ");
@@ -46,6 +47,8 @@ export function RegistrationCard({
   const [balanceAccountId, setBalanceAccountId] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [stage, setStage] = useState<string | null>(null);
+  // The escrow's verdict under the event's access rule; it refunds a refused registration.
+  const [access, setAccess] = useState<AccessCheck | null>(null);
   const paymentUrl = `/e/${event.id}/pay${embedReturnTo ? `?returnTo=${encodeURIComponent(embedReturnTo)}` : ""}`;
   const loadBalance = useCallback(async () => {
     if (!accountId) {
@@ -73,6 +76,17 @@ export function RegistrationCard({
   useEffect(() => {
     void loadBalance();
   }, [loadBalance]);
+
+  const rule = event.access ?? null;
+  useEffect(() => {
+    setAccess(null);
+    if (!accountId || !rule || myStatus) return;
+    let live = true;
+    events.checkAccess(event.id, accountId).then((c) => live && setAccess(c)).catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [accountId, event.id, rule, myStatus]);
 
   const balanceLoading = !accountId || balanceAccountId !== accountId || balanceState === "loading";
   const balanceError = balanceAccountId === accountId && balanceState === "error";
@@ -162,15 +176,29 @@ export function RegistrationCard({
 
   const price = `${formatUsdc(event.deposit)} USDC`;
   const ticket = isTicket(event);
-  const action = ticket ? "Get ticket" : "Register";
+  const action = ticket ? "Get Ticket" : "Register";
   // One primary button per state; alternatives stay folded away.
   let body;
   if (event.status === "Cancelled" && ticket) {
     body = <p className="text-sm">This event was cancelled. Tickets are not refunded.</p>;
+  } else if (event.status === "Submitted") {
+    // The "Who came" panel below has the list, the deadline and the dispute button.
+    body = (
+      <p className="text-sm">
+        {!myStatus ? "This event is over." : event.abandoned ? "The host published no list." : "The host published who came."} Payouts come after the dispute window.
+      </p>
+    );
+  } else if (event.status === "Refunded") {
+    // `refund` with no guests: the event just closed and the bond went back to the host.
+    body = <p className="text-sm">Nobody registered for this event, so it closed.</p>;
   } else if (event.status === "Cancelled") {
     body = (
       <div className="space-y-2">
-        <p className="text-sm">This event was cancelled. Refunds were credited to guests’ Nearvent balances.</p>
+        <p className="text-sm">
+          {voidedByCouncil(event)
+            ? `Cancelled by the council · everyone got their deposit back.${myStatus ? " Yours is in your Nearvent balance." : ""}`
+            : "This event was cancelled. Refunds were credited to guests’ Nearvent balances."}
+        </p>
         {!accountId ? (
           <SignInFolded hint="Registered? Sign in to see your refund." onDone={refreshAfterSignIn} />
         ) : balanceLoading ? (
@@ -235,16 +263,30 @@ export function RegistrationCard({
     body = (
       <div>
         <p className="font-semibold text-good">✓ You’re checked in</p>
-        {!ticket && <p className="text-sm text-muted mt-1">Withdraw your payout here once the host closes the event.</p>}
+        {!ticket && <p className="text-sm text-muted mt-1">Your payout arrives when the event is settled.</p>}
       </div>
     );
   } else if (myStatus === "Registered") {
     body = <NextSteps event={event} accountId={accountId!} />;
-  } else if (Date.now() >= event.metadata.ends_at) {
-    // The escrow refuses registrations once the event has ended.
+  } else if (Date.now() >= registrationEndsAt(event)) {
+    // The escrow refuses registrations once the event has ended (Deposit events: once it has started).
     body = accountId
-      ? <p className="text-sm">Registration is closed: the event has ended.</p>
+      ? <p className="text-sm">Registration is closed: the event has {Date.now() >= event.metadata.ends_at ? "ended" : "started"}.</p>
       : <SignInFolded hint="Registration is closed. Registered? Sign in to see your pass." onDone={refreshAfterSignIn} />;
+  } else if (needsBond(event)) {
+    body = accountId === event.host
+      ? <p className="text-sm text-muted">Registration opens once you lock your bond below.</p>
+      : <p className="text-sm text-muted">Registration opens once the host locks a bond of {formatUsdc(hostBondFor(event))} USDC.</p>;
+  } else if (accountId === event.host) {
+    body = <p className="text-sm">You’re the host. Hosts can’t take a seat at their own event.</p>;
+  } else if (accountId && rule && access?.allowed === false) {
+    body = (
+      <p className="text-sm">
+        You can’t register yet. {ruleText(rule)} You came to {access.attended}{access.no_shows ? ` and skipped ${access.no_shows}` : ""}.
+      </p>
+    );
+  } else if (accountId && rule && !access) {
+    body = <p className="text-sm text-muted">Checking whether you can register…</p>;
   } else if (!accountId) {
     body = choosing ? (
       <div className="space-y-2">
@@ -254,7 +296,7 @@ export function RegistrationCard({
       </div>
     ) : (
       <button className="btn btn-accent w-full !py-3.5" onClick={() => setChoosing(true)}>
-        {event.guest_count >= event.capacity ? "Sign in to view your pass" : `${action} · ${price}`}
+        {event.guest_count >= event.capacity ? "Sign In to View Your Pass" : `${action} · ${price}`}
       </button>
     );
   } else if (event.guest_count >= event.capacity) {
@@ -309,9 +351,10 @@ export function RegistrationCard({
     );
   }
 
-  const open = event.status === "Open" && !myStatus && event.guest_count < event.capacity && Date.now() < event.metadata.ends_at;
+  const open = registrationOpen(event) && !myStatus && event.guest_count < event.capacity;
   return (
     <div className="space-y-3">
+      {open && rule && access?.allowed !== false && <p className="text-sm text-muted">{ruleText(rule)}</p>}
       {body}
       {error && (
           <p className="text-sm text-warn break-words">
@@ -320,8 +363,16 @@ export function RegistrationCard({
         )}
       {open && (
         <div className="space-y-1.5 text-sm text-muted leading-relaxed">
-          {explain && <p>{ticket ? "A paid ticket. The money goes to the host when you register; tickets are not refunded." : "Get checked in and receive your deposit plus a share of no-shows after the host closes the event. Miss it, and your deposit goes to the guests who came."}</p>}
-          <DepositRulesTooltip ticket={ticket} amount={price} />
+          {explain && <p>{ticket ? "A paid ticket. The money goes to the host when you register; tickets are not refunded." : event.dao ? `Get checked in to get your deposit back plus a share of the no-shows, paid when the ${windowText(event)} dispute window ends. Miss it and your deposit goes to the guests who came. Marked absent by mistake? You can dispute it.` : "Get checked in to get your deposit back plus a share of the no-shows when the host publishes who came. Miss it and your deposit goes to the guests who came."}</p>}
+          <DepositRulesTooltip
+            ticket={ticket}
+            amount={price}
+            oracle={!!event.dao}
+            disputeWindow={windowText(event)}
+            submit={hoursText(event.rules?.submit_hours ?? 72)}
+            resolve={hoursText(event.rules?.resolve_hours ?? 168)}
+            perSeat={event.rules?.bond_per_seat ? bondPerSeatText(event) : undefined}
+          />
         </div>
       )}
     </div>

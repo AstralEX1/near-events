@@ -8,13 +8,13 @@
 
 /* Copy: compact dark pill like the app's primary buttons. */
 .nv-copy { display: inline-flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
-.nv-copy .sl-copy { --copy-unit: 0.62px; --copy-ink: var(--text); --copy-hover: color-mix(in srgb, var(--text) 88%, white); --copy-focus: var(--accent); font-family: inherit; width: calc(130 * var(--copy-unit)); }
+.nv-copy .sl-copy { --copy-unit: 0.62px; --copy-ink: var(--text); --copy-text: var(--bg); --copy-hover: color-mix(in srgb, var(--text) 88%, white); --copy-focus: var(--accent); font-family: inherit; width: calc(130 * var(--copy-unit)); }
 .nv-copy__feedback:empty { display: none; }
 .nv-copy__feedback { max-width: 16rem; margin-top: 4px; font-size: 11px; color: var(--muted); text-align: right; }
 
 /* Share: same size as the event page chips. */
 .nv-share { display: inline-flex; }
-.nv-share .sl-share-control { --share-unit: 0.6px; --share-width: 140; --share-ink: var(--text); --share-hover: color-mix(in srgb, var(--text) 88%, white); }
+.nv-share .sl-share-control { --share-unit: 0.6px; --share-width: 140; --share-ink: var(--text); --share-text: var(--bg); --share-hover: color-mix(in srgb, var(--text) 88%, white); }
 .nv-share .sl-share { font-family: inherit; }
 /* Opens below and right-aligned: the button sits in the top-right corner of the event card. */
 .nv-share .sl-share__popover { font-family: inherit; z-index: 30; bottom: auto; top: calc(100% + 8px); left: auto; right: 0; transform: translate(0, -7px) scale(.97); transform-origin: top right; }

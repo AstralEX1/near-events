@@ -5,12 +5,15 @@ export const cohosts = {
     if (!r.ok) throw new Error("Could not load the door team");
     return (await r.json()).cohosts;
   },
-  /** Door teams of up to 100 events at once. Missing events map to []. */
+  /** Door teams of any number of events, 100 per request. Missing events map to []. */
   many: async (eventIds: number[]): Promise<Record<number, string[]>> => {
-    if (eventIds.length === 0) return {};
-    const r = await fetch(`/api/cohosts?ids=${eventIds.slice(0, 100).join(",")}`, { cache: "no-store" });
-    if (!r.ok) throw new Error("Could not load door teams");
-    return (await r.json()).cohosts;
+    const out: Record<number, string[]> = {};
+    for (let i = 0; i < eventIds.length; i += 100) {
+      const r = await fetch(`/api/cohosts?ids=${eventIds.slice(i, i + 100).join(",")}`, { cache: "no-store" });
+      if (!r.ok) throw new Error("Could not load door teams");
+      Object.assign(out, (await r.json()).cohosts);
+    }
+    return out;
   },
   save: async (token: string, eventId: number, list: string[]): Promise<string[]> => {
     const r = await fetch("/api/cohosts", {

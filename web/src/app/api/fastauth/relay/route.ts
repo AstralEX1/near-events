@@ -1,3 +1,4 @@
+import { FASTAUTH_CLIENT_ID } from "@/lib/config";
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { actions, Signature } from "near-api-js";
 import { USDC_CONTRACT } from "@/lib/config";
@@ -19,6 +20,8 @@ const ED25519_SPKI = Buffer.from("302a300506032b6570032100", "hex");
 // let anyone move the relayer's NEAR (e.g. an overpaid create_event refunds the host).
 // Only calls to our own contracts pass; the chain checks the nonce and access key again.
 export async function POST(req: Request) {
+  // Google/email sign-in is off (no NEAR Auth client): nobody may spend the relayer's NEAR here.
+  if (!FASTAUTH_CLIENT_ID) return Response.json({ error: "Google and email sign-in are not enabled" }, { status: 503 });
   if (rateLimited(req)) return Response.json({ error: "Too many requests" }, { status: 429 });
   const body = await req.json().catch(() => null);
   if (typeof body?.storageFor === "string") return registerUsdc(req, body.storageFor);

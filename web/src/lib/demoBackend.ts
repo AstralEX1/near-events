@@ -11,6 +11,7 @@ import { freeEventProblem, type FreeEvent, type FreeEventInput } from "./freeEve
 import { cleanProfile, type Profile } from "./profilesShared";
 import { normalizeCohosts } from "./cohostsShared";
 import type { Call } from "./wallet";
+import { reputationIndex, emptyReputation } from "./reputationShared";
 
 export const DEMO_ACCOUNT = "you.demo";
 const KEY = "nearvent:demo";
@@ -124,6 +125,8 @@ function load(): State {
       memory = JSON.parse(localStorage.getItem(KEY) ?? "null");
     } catch {}
     memory ??= seed();
+    // The demo has no dispute council: its host bond is pretend, so registration is open.
+    for (const e of memory.events) e.host_bond ??= (BigInt(e.deposit) * BigInt(e.capacity)).toString();
   }
   return memory;
 }
@@ -214,6 +217,7 @@ export async function demoSend(call: Call): Promise<void> {
       s.events.push({
         id, host: me, metadata: a.metadata, deposit: a.deposit, mode: a.mode, capacity: a.capacity, status: "Open",
         guest_count: 0, attended_count: 0, total_pool: "0", payout_per_attendee: "0", created_at: Date.now(), closed_at: 0,
+        host_bond: (BigInt(a.deposit) * BigInt(a.capacity)).toString(),
       });
       s.guests[id] = [];
       break;
@@ -306,6 +310,9 @@ function view(s: State, contract: string, method: string, a: Record<string, any>
   if (contract === EVENTS_CONTRACT) {
     switch (method) {
       case "get_recent_events": return [...s.events].sort((x, y) => y.id - x.id).slice(0, a.limit ?? 100);
+      case "get_events": return [...s.events].sort((x, y) => x.id - y.id).slice(a.from_index ?? 0, (a.from_index ?? 0) + Math.min(a.limit ?? 50, 100));
+      // Demo events have no access rules.
+      case "check_access": return { allowed: true, attended: 0, no_shows: 0 };
       case "get_event": return s.events.find((e) => e.id === a.event_id) ?? null;
       case "get_guests": return s.guests[a.event_id] ?? [];
       case "get_guest_status": return statusOf(s, a.event_id, a.account_id);
@@ -313,7 +320,8 @@ function view(s: State, contract: string, method: string, a: Record<string, any>
       case "balance_of": return s.escrow[a.account_id] ?? "0";
       case "can_create": return true;
       case "create_event_cost": return "0";
-      case "get_attended_count": return s.events.filter((e) => e.status === "Finalized" && statusOf(s, e.id, a.account_id) === "Attended").length;
+      // Demo events close at once (no dispute window), so there are never disputes.
+      case "get_disputes": return [];
     }
   }
   if (contract === USDC_CONTRACT && method === "ft_balance_of") return s.usdc[a.account_id] ?? "0";
@@ -434,6 +442,16 @@ async function api(req: Request, url: URL): Promise<Response> {
 
     case "/api/telegram/link":
       return reply({ bot: null });
+
+    case "/api/keeper/event":
+      return reply({ results: [] });
+
+    case "/api/reputation": {
+      const facts = { events: s.events, guests: s.guests, disputes: {} };
+      const index = reputationIndex(facts, []);
+      const accounts = (q.get("a") ?? "").split(",").filter(Boolean);
+      return reply({ version: 1, accounts: Object.fromEntries(accounts.map((a) => [a, index.get(a) ?? emptyReputation(facts, a)])) });
+    }
   }
   return fail("This is not part of the demo", 404);
 }

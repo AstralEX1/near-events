@@ -1,4 +1,5 @@
 // Pure text helpers for the event page (no JSX), so node tests can import them.
+import type { EventView, GuestView } from "./near";
 
 /** "Sam, Hasan and 12 others", the line Luma shows under the avatars. */
 export function goingLine(names: string[], total: number): string {
@@ -35,4 +36,20 @@ export function mapQuery(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** One status per guest for the host's lists; it follows the event's phase (door marks, then the list, then payouts). */
+export function guestStatus(event: Pick<EventView, "status" | "mode" | "abandoned" | "attended_count">, g: Pick<GuestView, "status" | "listed">, isHost = true): { label: string; tone?: "good" | "solid" } {
+  const ticket = event.mode === "Ticket";
+  if (event.status === "Cancelled" || event.status === "Refunded") return { label: ticket ? "Ticket" : "Refunded" };
+  if (event.status === "Submitted") {
+    if (event.abandoned) return { label: "No list" };
+    const list = isHost ? "your list" : "the list";
+    return g.listed ? { label: `On ${list}`, tone: "good" } : { label: `Not on ${list}` };
+  }
+  if (event.status === "Finalized") {
+    if (g.status === "Attended") return { label: "Came", tone: "good" };
+    return { label: event.attended_count === 0 && !ticket ? "Refunded" : "No-show" };
+  }
+  return g.status === "Attended" ? { label: "Checked in", tone: "solid" } : { label: "Going", tone: "good" };
 }

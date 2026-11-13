@@ -28,6 +28,6 @@ export async function relayRefusal(p: Payload): Promise<string | null> {
 }
 
 export const HOST_ERROR = "Only verified hosts can create events right now.";
-export const FINALIZE_ERROR = "You can close the event once it ends. To refund everyone now, cancel it.";
+export const FINALIZE_ERROR = "You can publish the list once the event ends.";
 export const FREE_TIER_ERROR =
   "Free events are up to 50 seats, 2 per host in 30 days, ending within 60 days. Attach the storage deposit shown on the create page.";
