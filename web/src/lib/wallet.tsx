@@ -5,7 +5,7 @@ import type { NearConnector } from "@hot-labs/near-connect";
 import { EVENTS_CONTRACT, NETWORK } from "./config";
 import { STAFF_MESSAGE, evmStaffMessage } from "./staffShared";
 import { useRouter } from "next/navigation";
-import { connectEvm, disconnectEvm, evmAccount, hostFromIntents, personalSign, watchEvmAccount } from "./intents";
+import { connectEvm, disconnectEvm, evmAccount, evmWalletName, hostFromIntents, personalSign, watchEvmAccount } from "./intents";
 import { FREE_MAX_CAPACITY, FREE_MAX_DAYS, FREE_MAX_EVENTS } from "./near";
 import { toast } from "@/components/SlUi";
 import { RETURN_KEY, fastAuthEnsure, fastAuthLogin, fastAuthLogout, fastAuthProve, fastAuthRestore, fastAuthSend } from "./fastauth";
@@ -63,6 +63,8 @@ interface WalletState {
    * it is needed (an unsent transaction). After a day the next save asks the wallet once more.
    */
   staffToken: () => Promise<string>;
+  /** The wallet's own name (MetaMask, Meteor, HOT…), for "Confirm in MetaMask"; null when unknown. */
+  walletName: string | null;
   /** NEP-413 signature by the NEAR wallet (kind "wallet") of `message` for `recipient`; no transaction. */
   signMessage: (message: string, recipient: string, nonce: Uint8Array) => Promise<{ publicKey: string; signature: string }>;
 }
@@ -395,6 +397,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return prove(k, accountId, connector.current);
   }, [kind, accountId]);
 
+  const [walletName, setWalletName] = useState<string | null>(null);
+  useEffect(() => {
+    setWalletName(null);
+    if (kind === "evm") setWalletName(evmWalletName());
+    else if (kind === "wallet") connector.current?.wallet().then((w) => setWalletName(w.manifest?.name ?? null)).catch(() => {});
+  }, [kind, accountId]);
+
   const signMessage = useCallback(async (message: string, recipient: string, nonce: Uint8Array) => {
     const c = connector.current;
     if (kind !== "wallet" || !c) throw new Error("Sign in with a NEAR wallet first.");
@@ -417,6 +426,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         send,
         staffToken,
         signMessage,
+        walletName,
       }}
     >
       {children}

@@ -8,7 +8,9 @@
 // 3. on mainnet signs in to NEAR Intents and moves private USDC to the public balance;
 // 4. else pays from the wallet with a token we pick (1Click, quote signature checked),
 //    waits for the USDC and registers;
-// 5. else shows "Send from Another Wallet" (by hand, QR) and near.com top-up.
+// 5. else shows "Pay from Any Wallet" (by hand, QR) and near.com top-up.
+// The button names the source: "Deposit from near.com", "Deposit with MetaMask",
+// "Depositing via NEAR Intents · 14 s" (Alex's variant A).
 // A failed swap is refunded by 1Click; a failed registration leaves the USDC with the guest.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EVENTS_CONTRACT, HAS_FAUCET, NETWORK, TEST_EVM_FAUCET_LIMIT, USDC_CONTRACT } from "@/lib/config";
@@ -23,7 +25,9 @@ import {
 } from "@/lib/oneclickClient";
 import type { OneClickToken } from "@/lib/oneclick";
 import { pickUsdc } from "@/lib/nearcomShared";
-import { walletToken } from "@/lib/walletPay";
+import { walletBalances, walletToken } from "@/lib/walletPay";
+import { chainName } from "@/lib/tokenCatalog";
+import { TokenIcon, TokenPicker } from "@/components/TokenPicker";
 import { getProfiles } from "@/lib/profilesClient";
 import { displayName as profileName } from "@/lib/profilesShared";
 import { guestNamesApi } from "@/lib/guestNamesClient";
@@ -32,12 +36,6 @@ import { SignInOptions } from "@/components/SignIn";
 import { AccountQr } from "@/components/Qr";
 import { SlCopy } from "@/components/SlUi";
 
-const CHAINS: Record<string, string> = {
-  eth: "Ethereum", base: "Base", arb: "Arbitrum", op: "Optimism", pol: "Polygon", bsc: "BNB Chain", avax: "Avalanche",
-  gnosis: "Gnosis", near: "NEAR", sol: "Solana", stellar: "Stellar", btc: "Bitcoin", sui: "Sui", xrp: "XRP Ledger",
-  tron: "Tron", ton: "TON", aptos: "Aptos", doge: "Dogecoin", ltc: "Litecoin", zec: "Zcash", cardano: "Cardano",
-};
-const chainName = (c: string) => CHAINS[c] ?? c.charAt(0).toUpperCase() + c.slice(1);
 const COLORS = ["#d61f69", "#ff3d8b", "#ffd23f", "#d2ccff", "#ffb3d2"];
 // Mainnet only: the private (confidential) balance and live 1Click deposits.
 const LIVE = NETWORK === "mainnet";
@@ -56,11 +54,13 @@ function friendly(e: unknown, price: string): string {
 }
 
 export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRegistered: () => Promise<void> }) {
-  const { accountId, kind, send, staffToken, signMessage } = useWallet();
+  const { accountId, kind, send, staffToken, signMessage, walletName } = useWallet();
   const ticket = isTicket(event);
   const deposit = BigInt(event.deposit);
   const price = `${formatUsdc(event.deposit)} USDC`;
-  const action = `${ticket ? "Pay" : "Deposit"} with NEAR Intents`;
+  // The button names where the money comes from (Alex's variant A, research in research/near-intents-confidential-2026-11-13.md).
+  const verb = ticket ? { base: "Pay", ing: "Paying", ed: "Paid" } : { base: "Deposit", ing: "Depositing", ed: "Deposited" };
+  const confirmIn = `Confirm in ${walletName ?? "Wallet"}`;
   const storeKey = `near-me:payment:${event.id}:${accountId ?? ""}`;
   // NEAR wallets sign NEP-413 for NEAR Intents; EVM wallets ERC-191.
   const nep413 = kind === "wallet" ? signMessage : undefined;
@@ -82,6 +82,8 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
   const [manual, setManual] = useState<{ token: OneClickToken; quote: Quote } | null>(null);
   const [confidential, setConfidential] = useState<ConfidentialBalance | null>(null);
   const [publicUsdc, setPublicUsdc] = useState<bigint | null>(null);
+  // The wallet's own balances (tokens it can send itself), for the pick and the token picker.
+  const [held, setHeld] = useState<Map<string, bigint> | null>(null);
   const button = useRef<HTMLButtonElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const afterSignIn = useRef(false);
@@ -126,7 +128,7 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
   };
 
   const celebrate = async () => {
-    step("Registering", 1, 200);
+    step(verb.ed, 1, 200);
     try {
       const r = button.current?.getBoundingClientRect();
       const confetti = (await import("canvas-confetti")).default;
@@ -145,10 +147,13 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
     return null;
   };
 
-  /** Registers from the public NEAR Intents USDC (or, `fromWallet`, the NEAR wallet's own USDC). */
-  const register = async (who: string, fromWallet = false) => {
+  /**
+   * Registers from the public NEAR Intents USDC (or, `fromWallet`, the NEAR wallet's own USDC).
+   * `after`: the label once the wallet signed (where the money comes from).
+   */
+  const register = async (who: string, fromWallet = false, after = "Registering…") => {
     if (!accountId) return;
-    step("Confirm in Wallet", 0.9);
+    step(confirmIn, 0.9);
     if (kind === "evm") {
       await registerFromIntents(accountId, event.id, event.deposit, who);
     } else if (fromWallet) {
@@ -160,7 +165,7 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
     } else {
       await send([withdrawIntentsCall(EVENTS_CONTRACT, event.deposit, JSON.stringify({ action: "register", event_id: event.id, guest: accountId }))]);
     }
-    step("Registering", 0.95);
+    step(after, 0.95);
     await confirmRegistration(event.id, accountId);
     // EVM guests' names ride with the signed registration; others save it with the sign-in token.
     if (kind !== "evm") await staffToken().then((t) => guestNamesApi.save(event.id, who, t)).catch(() => {});
@@ -175,15 +180,15 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
     if (manual) {
       const end = quote.deadline ? Date.parse(quote.deadline) : Date.now() + 30 * 60_000;
       setDeadline({ at: end, minutes: true });
-      step("Waiting for Payment", 0.1);
+      step("§waiting", 0.1);
     } else {
       setDeadline({ at: Date.now() + seconds * 1000, minutes: false });
-      step("Paying", 0.85, seconds * 1000);
+      step("§paying", 0.85, seconds * 1000);
     }
     await waitForSwap(quote.depositAddress!, (s) => {
       if (manual && s !== "PENDING_DEPOSIT") {
         setDeadline({ at: Date.now() + seconds * 1000, minutes: false });
-        step("Paying", 0.85, seconds * 1000);
+        step("§paying", 0.85, seconds * 1000);
       }
     }, { memo: quote.depositMemo, timeoutMs: manual ? 60 * 60_000 : 15 * 60_000 });
     setDeadline(null);
@@ -204,7 +209,7 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
     });
 
   const payFromWallet = async (token: OneClickToken, need: bigint, who: string) => {
-    step("Confirm in Wallet", 0.15);
+    step(confirmIn, 0.15);
     const quote = await quoteFor(token, need, false);
     if (!quote.depositAddress) throw new Error("Payments from the wallet run on mainnet only.");
     save({ quote, assetId: token.assetId, manual: false, sent: false });
@@ -238,9 +243,12 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
       step("Checking", 0.05);
       const pub = await intentsUsdcBalance(accountId);
       setPublicUsdc(pub);
-      if (pub >= deposit) return await register(who);
+      const nearCom = `${verb.ing} from near.com…`;
+      if (pub >= deposit) return await register(who, false, nearCom);
       // NEAR wallets and Google/email: USDC in the wallet itself pays in one transaction.
-      if (kind !== "evm" && BigInt(await usdc.balance(accountId).catch(() => "0")) >= deposit) return await register(who, true);
+      if (kind !== "evm" && BigInt(await usdc.balance(accountId).catch(() => "0")) >= deposit) {
+        return await register(who, true, `${verb.ing} with ${walletName ?? "your wallet"}…`);
+      }
       if (HAS_FAUCET) {
         // Testnet: free test USDC (into NEAR Intents for EVM wallets, into the wallet otherwise).
         if (deposit > TEST_EVM_FAUCET_LIMIT) throw new Error(`You need ${price} to register.`);
@@ -252,7 +260,7 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
       let session = intentsCapable ? savedIntentsSession(accountId) : null;
       let conf = session ? confidential : null;
       if (intentsCapable && !session) {
-        step("Confirm in Wallet", 0.1);
+        step(confirmIn, 0.1);
         session = await signInToIntents(accountId, nep413);
       }
       if (session && !conf) {
@@ -262,13 +270,13 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
       if (session && conf && pub + conf.usdc >= deposit) {
         const from = pickUsdc(conf.kinds, deposit - pub, USDC_ASSET);
         if (!from) throw new Error("Your USDC is split across networks. On near.com, swap it into one USDC, then try again.");
-        step("Confirm in Wallet", 0.4);
-        await moveFromConfidential(accountId, session, deposit - pub, from, nep413);
-        return await register(who);
+        step(confirmIn, 0.4);
+        await moveFromConfidential(accountId, session, deposit - pub, from, nep413, () => step(nearCom, 0.6));
+        return await register(who, false, nearCom);
       }
       const need = deposit - pub;
       step("Checking", 0.1);
-      const token = pick?.token ?? (await walletToken(kind, accountId, need, tokens.length ? tokens : await oneClickTokens(), kind === "evm" ? await evmChainId() : null));
+      const token = pick?.token ?? (await walletToken(kind, accountId, need, tokens.length ? tokens : await oneClickTokens(), kind === "evm" ? await evmChainId() : null, held ?? undefined));
       if (!token) {
         setNoFunds(true);
         return idle();
@@ -282,7 +290,7 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
       idle();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy, accountId, kind, knownName, name, pick, tokens, confidential, deposit]);
+  }, [busy, accountId, kind, knownName, name, pick, tokens, confidential, deposit, held, walletName]);
 
   // After the sign-in options, the flow carries on by itself.
   useEffect(() => {
@@ -322,6 +330,7 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
     setPublicUsdc(null);
     setConfidential(null);
     setPick(null);
+    setHeld(null);
     setNoFunds(false);
     if (!accountId) return;
     let live = true;
@@ -341,7 +350,10 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
       // A NEAR wallet with USDC of its own pays from it in one transaction: nothing to pick.
       if (kind !== "evm" && BigInt(await usdc.balance(accountId).catch(() => "0")) >= deposit) return;
       const need = deposit - publicUsdc!;
-      const token = await walletToken(kind, accountId, need, tokens, kind === "evm" ? await evmChainId() : null);
+      const balances = await walletBalances(kind, accountId, tokens);
+      if (!live) return;
+      setHeld(balances);
+      const token = await walletToken(kind, accountId, need, tokens, kind === "evm" ? await evmChainId() : null, balances);
       if (!live) return;
       if (!token) return setNoFunds(true);
       const quote = await quoteFor(token, need, false, true).catch(() => null);
@@ -350,6 +362,14 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId, kind, publicUsdc, confidential, tokens.length]);
+
+  // The picker in wallet mode shows the wallet's balances: load them if they are not in yet.
+  useEffect(() => {
+    if (choosing !== "wallet" || held || !accountId || !tokens.length) return;
+    let live = true;
+    walletBalances(kind, accountId, tokens).then((b) => live && setHeld(b)).catch(() => {});
+    return () => { live = false; };
+  }, [choosing, held, accountId, kind, tokens]);
 
   const startManual = async (token?: OneClickToken) => {
     const t = token ?? tokens.find((x) => x.symbol === "USDC" && x.blockchain === "base") ?? tokens[0];
@@ -374,9 +394,13 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
   };
 
   const remaining = deadline ? Math.max(0, Math.ceil((deadline.at - now) / 1000)) : 0;
-  const shown = label === "Paying" ? `Paying · ${remaining} s`
-    : label === "Waiting for Payment" ? `Waiting for Payment · ${Math.max(1, Math.ceil(remaining / 60))} min`
-      : label ?? (error ? "Try Again" : manual ? "Waiting for Payment" : action);
+  // Before the tap: near.com when its balances cover the price, else the wallet that would pay.
+  const coveredByNearCom = publicUsdc !== null && (publicUsdc >= deposit || (!!confidential && publicUsdc + confidential.usdc >= deposit));
+  const idleLabel = coveredByNearCom ? `${verb.base} from near.com`
+    : pick ? `${verb.base} with ${walletName ?? pick.token.symbol}` : `${verb.base} with NEAR Intents`;
+  const shown = label === "§paying" ? `${verb.ing} via NEAR Intents · ${remaining} s`
+    : label === "§waiting" ? `Waiting for Your Deposit · ${Math.max(1, Math.ceil(remaining / 60))} min`
+      : label ?? (error ? "Try Again" : manual ? "Waiting for Your Deposit" : idleLabel);
 
   if (signingIn && !accountId) {
     return (
@@ -390,13 +414,11 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
 
   // From this wallet: only what it can send itself. By hand: anything 1Click takes.
   const sendable = (t: OneClickToken) => (kind === "evm" ? !!EVM_CHAIN_IDS[t.blockchain] : t.assetId === "nep141:wrap.near");
-  const tokenList = (onPick: (t: OneClickToken) => void, fromWallet: boolean) => (
-    <select className="input" aria-label="Pay with" defaultValue="" onChange={(e) => { const t = tokens.find((x) => x.assetId === e.target.value); if (t) onPick(t); }}>
-      <option value="" disabled>Pick a token</option>
-      {tokens.filter((t) => t.assetId !== USDC_ASSET && (!fromWallet || sendable(t))).sort((a, b) => a.symbol.localeCompare(b.symbol) || a.blockchain.localeCompare(b.blockchain))
-        .map((t) => <option key={t.assetId} value={t.assetId}>{t.symbol} on {chainName(t.blockchain)}</option>)}
-    </select>
-  );
+  const choosePick = (t: OneClickToken) => {
+    setChoosing(null);
+    setPick({ token: t, quote: null });
+    quoteFor(t, deposit - (publicUsdc ?? 0n), false, true).then((quote) => setPick({ token: t, quote })).catch(() => {});
+  };
 
   return (
     <div className="space-y-3">
@@ -412,7 +434,7 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
         <div className="space-y-3">
           <p className="text-sm">
             Send <b className="whitespace-nowrap">{manual.quote.amountInFormatted} {manual.token.symbol}</b> on {chainName(manual.token.blockchain)} ·{" "}
-            <button type="button" className="text-accent" disabled={busy && label !== "Waiting for Payment"} onClick={() => { idle(); save(null); setManual(null); setChoosing("manual"); }}>Change</button>
+            <button type="button" className="text-accent" disabled={busy && label !== "§waiting"} onClick={() => { idle(); save(null); setManual(null); setChoosing("manual"); }}>Change</button>
           </p>
           <div className="flex gap-4 items-start">
             <AccountQr account={manual.quote.depositAddress} size={120} />
@@ -426,8 +448,6 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
             </div>
           </div>
         </div>
-      ) : choosing === "manual" ? (
-        tokenList((t) => void startManual(t), false)
       ) : null}
 
       {error && <p className="text-sm text-warn break-words">{error}</p>}
@@ -435,10 +455,10 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
       {noFunds && !manual && !busy ? (
         <div className="space-y-2">
           <p className="text-sm">Add {price} to register.</p>
-          <button className="btn btn-accent w-full !py-3.5" onClick={() => setChoosing("manual")}>Send from Another Wallet</button>
+          <button className="btn btn-accent w-full !py-3.5" onClick={() => setChoosing("manual")}>Pay from Any Wallet</button>
           <a className="block text-center text-sm text-accent" href="https://near.com" target="_blank" rel="noopener noreferrer">Or top up on near.com ↗</a>
         </div>
-      ) : !(choosing === "manual" && !manual) && (
+      ) : (
         <button ref={button} type="button" aria-busy={busy}
           className={`btn btn-accent w-full !py-3.5 gc-progress${busy ? " is-busy" : ""}`}
           onClick={busy || manual ? undefined : () => void go()}>
@@ -447,19 +467,25 @@ export function OneTapCheckout({ event, onRegistered }: { event: EventView; onRe
         </button>
       )}
 
-      {pick && !busy && !manual && !noFunds && (
-        choosing === "wallet" ? tokenList((t) => {
-          setChoosing(null);
-          setPick({ token: t, quote: null });
-          const need = deposit - (publicUsdc ?? 0n);
-          quoteFor(t, need, false, true).then((quote) => setPick({ token: t, quote })).catch(() => {});
-        }, true)
-          : (
-            <p className="text-sm text-muted text-center">
-              {pick.quote ? `${pick.quote.amountInFormatted} ` : ""}{pick.token.symbol} from your wallet · {chainName(pick.token.blockchain)} ·{" "}
-              <button type="button" className="text-accent" onClick={() => setChoosing("wallet")}>Change</button>
-            </p>
-          )
+      {pick && !busy && !manual && !noFunds && !coveredByNearCom && (
+        <p className="flex items-center justify-center gap-1.5 text-sm text-muted">
+          <TokenIcon token={pick.token} size={18} />
+          <span>{pick.quote ? `${pick.quote.amountInFormatted} ` : ""}{pick.token.symbol} on {chainName(pick.token.blockchain)} ·</span>
+          <button type="button" className="text-accent" onClick={() => setChoosing("wallet")}>Change</button>
+        </p>
+      )}
+
+      {choosing && (
+        <TokenPicker
+          tokens={tokens.filter((t) => t.assetId !== USDC_ASSET && (choosing === "manual" || sendable(t)))}
+          balances={choosing === "wallet" ? held ?? new Map() : new Map()}
+          selected={choosing === "wallet" ? pick?.token.assetId : manual?.token.assetId}
+          hint={choosing === "wallet"
+            ? `Sent from ${walletName ?? "your wallet"}. If the swap fails, it comes back there.`
+            : "Send it from any wallet or exchange. If the swap fails, it comes back to your NEAR Intents account."}
+          onPick={(t) => (choosing === "wallet" ? choosePick(t) : void startManual(t))}
+          onClose={() => setChoosing(null)}
+        />
       )}
     </div>
   );
