@@ -15,11 +15,12 @@ export function DepositRulesTooltip({ ticket, amount, oracle }: Props) {
           <>
             <p>Your {amount} deposit is held in a NEAR smart contract. You cannot cancel your registration.</p>
             <p>
-              After the event the host publishes who came. For 24 hours any guest can dispute the list by locking one
-              deposit, and a council of 5 decides by vote. Then guests who came split the pool in their Nearvent balances.
+              Registration closes when the event starts. After the event the host publishes who came. For 12 hours any
+              guest can dispute the list by locking one deposit, and a council of 5 decides by vote. Then guests who came
+              split the pool in their Nearvent balances.
             </p>
             <p>
-              The host locks a bond of 5 deposits first and loses it if a dispute proves the list wrong. If the host
+              The host locks a bond of one deposit per seat first and loses it if a dispute proves the list wrong. If the host
               cancels before the start, everyone is refunded. If the host publishes no list within 3 days, the list counts
               as empty: guests who came can still prove it, and everyone else gets the deposit back plus a share of the bond.
             </p>

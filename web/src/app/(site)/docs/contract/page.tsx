@@ -57,9 +57,9 @@ export default async function ContractDocs() {
           items={[
             { title: "Deposit", text: "Guests who came split the whole pool. Nobody came: full refund." },
             { title: "Ticket", text: "The price goes to the host when a guest registers." },
-            { title: "Host bond", text: "A deposit event opens for registration once the host locks 5 deposits. The bond comes back unless a dispute proves the list wrong." },
+            { title: "Host bond", text: "A deposit event opens for registration once the host locks one deposit per seat. The bond comes back unless a dispute proves the list wrong. Registration closes when the event starts." },
             { title: "Publish", text: "Within 3 days after the end, the host publishes who came. Nothing is paid yet." },
-            { title: "Disputes", text: "For 24 hours any guest can dispute one record by locking one deposit. A council of 5 decides through a Sputnik DAO vote (3 of 5)." },
+            { title: "Disputes", text: "For 12 hours any guest can dispute one record by locking one deposit. A council of 5 decides through a Sputnik DAO vote (3 of 5)." },
             { title: "Payout", text: "Then anyone can settle. A host proven wrong loses the bond: half to the treasury, half to the winners. A wrong dispute loses its deposit: half to the treasury, half to the guests who came." },
             { title: "Cancel", text: "The host can cancel a deposit event before it starts. Everyone is refunded, the bond too." },
             { title: "No list", text: "3 days after the end without a list, anyone can start the refund: the list counts as empty, guests who came can still prove it, everyone else gets the deposit back plus a share of the bond." },
@@ -76,7 +76,7 @@ export default async function ContractDocs() {
           <li>Touch anyone’s balance.</li>
         </ul>
         <p className="text-sm text-muted">
-          The host publishes who came, and the bond makes a wrong list expensive. Registration closes when the event ends.
+          The host publishes who came, and the bond makes a wrong list expensive. Deposit events close registration when they start (ticket events when they end), so the host cannot add guests after seeing who came.
         </p>
         <p className="text-sm text-muted">
           Check-ins stay off-chain, so 300 guests cost nothing. Only the final list goes on-chain. The contract account
@@ -92,7 +92,7 @@ export default async function ContractDocs() {
             [<Mono key="1">create_event</Mono>, "Host", "Creates an event"],
             [<Mono key="2">ft_transfer_call</Mono>, "Guest", <>Pays and registers · <Mono>{`{"action":"register","event_id":N}`}</Mono></>],
             [<Mono key="2a">ft_transfer_call</Mono>, "Anyone, for the host", <>Locks the host bond · <Mono>{`{"action":"host_bond","event_id":N}`}</Mono></>],
-            [<Mono key="2b">ft_transfer_call</Mono>, "Guest, 24 h after the list", <>Opens a dispute · <Mono>{`{"action":"dispute","event_id":N,"target":"…","attended":true}`}</Mono></>],
+            [<Mono key="2b">ft_transfer_call</Mono>, "Guest, 12 h after the list", <>Opens a dispute · <Mono>{`{"action":"dispute","event_id":N,"target":"…","attended":true}`}</Mono></>],
             [<Mono key="3">finalize</Mono>, "Host, within 3 days after the end", "Publishes the list of who came (ticket: closes the event)"],
             [<Mono key="3a">resolve_dispute</Mono>, "The event’s DAO", "Records the council’s verdict on one dispute"],
             [<Mono key="3b">settle</Mono>, "Anyone, after the dispute window", "Pays out by the final list"],

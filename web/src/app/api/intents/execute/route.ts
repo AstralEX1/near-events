@@ -2,7 +2,7 @@ import { baseDecode } from "near-api-js";
 import { paidRequestLimited, rateLimited } from "@/lib/ratelimit";
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, USDC_CONTRACT } from "@/lib/config";
 import { relayer } from "@/lib/relayer";
-import { events, MAX_CAPACITY, needsBond, view } from "@/lib/near";
+import { events, hostBondFor, MAX_CAPACITY, needsBond, registrationEndsAt, view } from "@/lib/near";
 import { cleanGuestName, setGuestName } from "@/lib/guestNames";
 import { erc191Signer } from "@/lib/erc191";
 
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
     if (registration) {
       const event = await events.get(registration.eventId);
       const existing = await events.guestStatus(registration.eventId, signer);
-      if (!event || event.status !== "Open" || Date.now() >= event.metadata.ends_at || event.guest_count >= event.capacity
+      if (!event || event.status !== "Open" || Date.now() >= registrationEndsAt(event) || event.guest_count >= event.capacity
         || existing || event.deposit !== registration.amount || needsBond(event) || event.host === signer
         || (event.access && !(await events.checkAccess(event.id, signer)).allowed)) {
         return Response.json({ error: "This registration is unavailable. Your USDC is still in NEAR Intents." }, { status: 409 });
@@ -93,8 +93,8 @@ export async function POST(req: Request) {
     // A bond or dispute the escrow would refuse comes back, but the relayer still pays the gas.
     if (bond) {
       const event = await events.get(bond.eventId);
-      if (!event || event.mode === "Ticket" || event.status !== "Open" || Date.now() >= event.metadata.ends_at
-        || event.host_bond !== "0" || bond.amount !== (BigInt(event.deposit) * 5n).toString()) {
+      if (!event || event.mode === "Ticket" || event.status !== "Open" || Date.now() >= registrationEndsAt(event)
+        || event.host_bond !== "0" || bond.amount !== hostBondFor(event)) {
         return Response.json({ error: "This event takes no host bond now. Your USDC is still in NEAR Intents." }, { status: 409 });
       }
     }

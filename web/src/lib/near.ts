@@ -38,8 +38,12 @@ export interface EventView {
   dao?: string | null;
   /** Deposit events: receives the treasury share of lost bonds, fixed at creation. */
   treasury?: string | null;
-  /** USDC locked by the host; registration opens once it is `HOST_BOND_MULTIPLIER` deposits. */
+  /** USDC locked by the host; registration opens once it equals `bond_due`. */
   host_bond?: string;
+  /** The bond this event needs: one deposit per seat (v3); 0 for Ticket. */
+  bond_due?: string;
+  /** Registration closes at this time: `starts_at` for Deposit (v3), `ends_at` for Ticket. */
+  registration_ends_at?: number;
   /** When the host published the list; 0 before. */
   submitted_at?: number;
   /** Disputes are accepted until this time (exclusive); 0 before the list. */
@@ -77,8 +81,9 @@ export interface DisputeView {
 }
 
 /** Mirrors the escrow (v3). */
-export const HOST_BOND_MULTIPLIER = 5n;
-export const hostBondFor = (e: { deposit: string }) => (BigInt(e.deposit) * HOST_BOND_MULTIPLIER).toString();
+export const hostBondFor = (e: { bond_due?: string }) => e.bond_due ?? "0";
+/** Older escrows take guests until the end. */
+export const registrationEndsAt = (e: Pick<EventView, "registration_ends_at" | "metadata">) => e.registration_ends_at ?? e.metadata.ends_at;
 /** Deposit events that still need the host bond before guests can register. */
 export const needsBond = (e: EventView) => !!e.dao && !isTicket(e) && e.status === "Open" && BigInt(e.host_bond ?? "0") === 0n;
 

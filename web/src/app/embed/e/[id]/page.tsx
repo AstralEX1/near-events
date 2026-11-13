@@ -2,7 +2,7 @@
 
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { events, formatUsdc, isTicket, needsBond, type EventView } from "@/lib/near";
+import { events, formatUsdc, isTicket, needsBond, registrationEndsAt, type EventView } from "@/lib/near";
 import { embedQuery, embedVars, readEmbedStyle, type EmbedMessage } from "@/lib/embed";
 import { AvatarStack } from "@/components/ui";
 import { spotsLine } from "@/components/EventParts";
@@ -114,6 +114,7 @@ function CardAction({
   if (event.status === "Refunded") return <div className="btn btn-ghost w-full text-muted">Refunded · deposits returned</div>;
   if (event.status === "Submitted") return <div className="btn btn-ghost w-full text-muted">Event ended · payouts after the dispute window</div>;
   if (event.guest_count >= event.capacity) return <div className="btn btn-ghost w-full text-muted">Event is full</div>;
+  if (Date.now() >= registrationEndsAt(event)) return <div className="btn btn-ghost w-full text-muted">Registration closed</div>;
   if (needsBond(event)) return <div className="btn btn-ghost w-full text-muted">Registration opens soon</div>;
   return (
     <a href={joinUrl} target="_blank" rel="opener" onClick={onOpen} className="btn btn-accent w-full">

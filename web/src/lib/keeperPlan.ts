@@ -39,7 +39,7 @@ export const proposalTag = (escrow: string, eventId: number, target: string, uph
 export function proposalDescription(escrow: string, eventId: number, d: KeeperDispute, upheld: boolean, site: string): string {
   const claim = d.attended ? `${d.target} says they came` : `${d.challenger} says ${d.target} did not come`;
   const verdict = upheld ? "the challenger is right" : "the host's list stands";
-  return `${proposalTag(escrow, eventId, d.target, upheld)} — ${claim}. Approve if ${verdict}. Evidence: ${site}/e/${eventId}#disputes`;
+  return `${proposalTag(escrow, eventId, d.target, upheld)} — ${claim}. Approve if ${verdict}. Evidence (the host's list, the disputes and the door check-in log): ${site}/e/${eventId}#checkins`;
 }
 
 /**

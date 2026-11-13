@@ -4,7 +4,7 @@ import { SlShare } from "@/components/SlUi";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { events, formatUsdc, isTicket, type EventView, type GuestView } from "@/lib/near";
+import { events, formatUsdc, isTicket, registrationEndsAt, type EventView, type GuestView } from "@/lib/near";
 import { useWallet } from "@/lib/wallet";
 import { Avatar, Cover, DateBadge, EventSkeleton, StatusPill, formatWhen, shortAccount } from "@/components/ui";
 import { RegistrationCard } from "@/components/Registration";
@@ -165,7 +165,7 @@ export default function EventPage() {
           ) : open ? (
             <RegisterBox
               head="Registration"
-              aside={Date.now() >= event.metadata.ends_at ? "Closed" : spots ? `${spots} spot${spots === 1 ? "" : "s"} left` : "Full"}
+              aside={Date.now() >= registrationEndsAt(event) ? "Closed" : spots ? `${spots} spot${spots === 1 ? "" : "s"} left` : "Full"}
               icon={ticket ? ICONS.ticket : ICONS.wallet}
               title={ticket ? "Ticket" : "Attendance deposit"}
               desc={ticket ? "Goes to the host, no refunds" : "Show up, get it back + a no-show share"}

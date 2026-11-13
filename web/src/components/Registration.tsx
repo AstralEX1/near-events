@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { events, formatUsdc, hostBondFor, needsBond, usdc, type EventView, type GuestStatus, isTicket } from "@/lib/near";
+import { events, formatUsdc, hostBondFor, needsBond, registrationEndsAt, usdc, type EventView, type GuestStatus, isTicket } from "@/lib/near";
 import { EVENTS_CONTRACT, HAS_FAUCET, TEST_EVM_FAUCET_LIMIT, USDC_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
@@ -264,10 +264,10 @@ export function RegistrationCard({
     );
   } else if (myStatus === "Registered") {
     body = <NextSteps event={event} accountId={accountId!} />;
-  } else if (Date.now() >= event.metadata.ends_at) {
-    // The escrow refuses registrations once the event has ended.
+  } else if (Date.now() >= registrationEndsAt(event)) {
+    // The escrow refuses registrations once the event has ended (Deposit events: once it has started).
     body = accountId
-      ? <p className="text-sm">Registration is closed: the event has ended.</p>
+      ? <p className="text-sm">Registration is closed: the event has {Date.now() >= event.metadata.ends_at ? "ended" : "started"}.</p>
       : <SignInFolded hint="Registration is closed. Registered? Sign in to see your pass." onDone={refreshAfterSignIn} />;
   } else if (accountId === event.host) {
     body = <p className="text-sm">You’re the host. Hosts can’t take a seat at their own event.</p>;
@@ -345,7 +345,7 @@ export function RegistrationCard({
     );
   }
 
-  const open = event.status === "Open" && !myStatus && event.guest_count < event.capacity && Date.now() < event.metadata.ends_at && !needsBond(event);
+  const open = event.status === "Open" && !myStatus && event.guest_count < event.capacity && Date.now() < registrationEndsAt(event) && !needsBond(event);
   return (
     <div className="space-y-3">
       {open && rule && access?.allowed !== false && <p className="text-sm text-muted">{ruleText(rule)}</p>}
@@ -357,7 +357,7 @@ export function RegistrationCard({
         )}
       {open && (
         <div className="space-y-1.5 text-sm text-muted leading-relaxed">
-          {explain && <p>{ticket ? "A paid ticket. The money goes to the host when you register; tickets are not refunded." : "Get checked in and receive your deposit plus a share of no-shows once the host’s list has stood for 24 hours. Miss it, and your deposit goes to the guests who came. Marked absent by mistake? Dispute it."}</p>}
+          {explain && <p>{ticket ? "A paid ticket. The money goes to the host when you register; tickets are not refunded." : "Get checked in and receive your deposit plus a share of no-shows once the host’s list has stood for 12 hours. Miss it, and your deposit goes to the guests who came. Marked absent by mistake? Dispute it."}</p>}
           <DepositRulesTooltip ticket={ticket} amount={price} oracle={!!event.dao} />
         </div>
       )}

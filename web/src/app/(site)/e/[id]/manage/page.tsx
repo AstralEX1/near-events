@@ -257,8 +257,8 @@ function ManageEvent() {
       const confirmation = ticket
         ? `Close the event?\n\n${fresh.guest_count} tickets · ${formatUsdc(currentPool)} USDC is already in your balance.\n\nThis cannot be undone.`
         : attended.length === 0
-          ? "Publish the list with nobody checked in?\n\nGuests can dispute it for 24 hours. If nobody came, every deposit goes back to its guest.\n\nThis cannot be undone."
-          : `Publish who came?\n\n${attended.length} of ${fresh.guest_count} checked in.\nPool: ${formatUsdc(currentPool)} USDC, ${formatUsdc(currentPool / BigInt(attended.length))} USDC each if nobody disputes.\n\nGuests can dispute any record for 24 hours; the council decides. A record they prove wrong costs you half of your bond. Then anyone settles the payouts.\n\nThis cannot be undone.`;
+          ? "Publish the list with nobody checked in?\n\nGuests can dispute it for 12 hours. If nobody came, every deposit goes back to its guest.\n\nThis cannot be undone."
+          : `Publish who came?\n\n${attended.length} of ${fresh.guest_count} checked in.\nPool: ${formatUsdc(currentPool)} USDC, ${formatUsdc(currentPool / BigInt(attended.length))} USDC each if nobody disputes.\n\nGuests can dispute any record for 12 hours; the council decides. A record they prove wrong costs you your whole bond. Then anyone settles the payouts.\n\nThis cannot be undone.`;
       await run("finalize", { event_id: id, attended }, confirmation);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

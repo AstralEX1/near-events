@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { events, formatUsdc, hostBondFor, isTicket, needsBond, usdc, type DisputeView, type EventView, type GuestView } from "@/lib/near";
+import { events, formatUsdc, hostBondFor, isTicket, needsBond, registrationEndsAt, usdc, type DisputeView, type EventView, type GuestView } from "@/lib/near";
 import { EVENTS_CONTRACT, EXPLORER_URL, USDC_CONTRACT } from "@/lib/config";
 import { useWallet, type Call } from "@/lib/wallet";
 import { bondFromIntents, disputeFromIntents } from "@/lib/intents";
 import { shortAccount } from "@/components/ui";
+import { checkIns, type CheckInEntry } from "@/lib/checkinsClient";
 
 const when = (ms: number) =>
   new Date(ms).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -47,6 +48,15 @@ export function OraclePanel({ event, guests, hostTeam, onChange }: {
     if (!filed) return setDisputes([]);
     events.disputes(event.id).then(setDisputes).catch(() => {});
   }, [event.id, filed, event.status]);
+  // The door log is frozen once the list is published; the council reads it here (proposals link to #checkins).
+  const [doorLog, setDoorLog] = useState<CheckInEntry[] | null>(null);
+  useEffect(() => {
+    if (event.status === "Open") return;
+    checkIns.log(event.id).then(setDoorLog).catch(() => {});
+  }, [event.id, event.status]);
+  useEffect(() => {
+    if (doorLog && window.location.hash === "#checkins") document.getElementById("checkins")?.scrollIntoView();
+  }, [doorLog]);
 
   const run = useCallback(async (label: string, fn: () => Promise<void>) => {
     setBusy(label);
@@ -129,12 +139,12 @@ export function OraclePanel({ event, guests, hostTeam, onChange }: {
           : <span className="text-muted">expired, the list stands</span>;
 
   let body: React.ReactNode = null;
-  if (needsBond(event) && now < event.metadata.ends_at) {
+  if (needsBond(event) && now < registrationEndsAt(event)) {
     body = isHost ? (
       <div className="space-y-2">
         <p className="text-sm">
-          Lock a host bond of <b>{formatUsdc(bond)} USDC</b> (5 deposits) to open registration. You get it back after the
-          event, unless a guest proves your list wrong to the council.
+          Lock a host bond of <b>{formatUsdc(bond)} USDC</b> (one deposit per seat) to open registration before the
+          event starts. You get it back after the event, unless a guest proves your list wrong to the council.
         </p>
         {kind === "email" ? (
           <p className="text-xs text-muted">Google sign-in can’t send USDC yet: lock the bond from a NEAR or EVM wallet.</p>
@@ -156,14 +166,14 @@ export function OraclePanel({ event, guests, hostTeam, onChange }: {
       <div className="space-y-2">
         <p className="text-sm">
           The host did not publish who came by {when(event.submit_by!)}, so the host bond is lost. Anyone can start the
-          refund: it publishes an empty list, and for 24 hours guests who came can still prove it. Everyone else gets the
+          refund: it publishes an empty list, and for 12 hours guests who came can still prove it. Everyone else gets the
           deposit back with a share of the bond.
         </p>
         <button className="btn btn-accent" disabled={!!busy} onClick={() => settleNow("refund")}>{busy === "refund" ? "Starting…" : "Start the refund"}</button>
       </div>
     ) : (
       <p className="text-sm text-muted">
-        {isHost ? "Publish who came from Manage" : "The host publishes who came"} by {when(event.submit_by!)}. Then guests have 24 hours to dispute it.
+        {isHost ? "Publish who came from Manage" : "The host publishes who came"} by {when(event.submit_by!)}. Then guests have 12 hours to dispute it.
       </p>
     );
   } else if (event.status === "Submitted" || filed > 0) {
@@ -213,6 +223,18 @@ export function OraclePanel({ event, guests, hostTeam, onChange }: {
               );
             })}
           </ul>
+        </details>
+        <details id="checkins" className="text-sm" open={disputes.length > 0}>
+          <summary className="cursor-pointer font-medium">Door check-in log ({doorLog?.length ?? 0})</summary>
+          {doorLog?.length ? (
+            <ul className="mt-2 space-y-0.5 text-muted">
+              {doorLog.map((x, i) => (
+                <li key={i}>{when(x.at)} · {shortAccount(x.account)} {x.on ? "checked in" : "unchecked"} by {shortAccount(x.by)}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-muted">No door check-ins were recorded for this event.</p>
+          )}
         </details>
         {disputes.length > 0 && (
           <div id="disputes" className="text-sm space-y-1">

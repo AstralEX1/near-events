@@ -1,6 +1,10 @@
 // Door check-ins live on our server until the host finalizes; then the list
 // goes on-chain in one `finalize(event_id, attended)` call.
 //
+// Every mark and unmark is appended to a log that is never edited, and the API
+// stops taking marks once the event is no longer Open (the list is published).
+// The log is public: the dispute council reads it next to the host's list.
+//
 // Storage: Upstash Redis (REST) when UPSTASH_REDIS_REST_URL and
 // UPSTASH_REDIS_REST_TOKEN are set (needed on Vercel, whose disk is wiped),
 // otherwise a JSON file in .data/ for local runs.
@@ -11,8 +15,12 @@ import { EVENTS_CONTRACT } from "./config";
 
 /** account → when they were checked in (ms) and who did it. */
 export type CheckIns = Record<string, { at: number; by: string }>;
+/** One door action, in order: `on` checked the guest in, `!on` unchecked them. */
+export type CheckInEntry = { account: string; on: boolean; at: number; by: string };
 
+/** Before the log: a plain map, still read for events checked in with it. */
 const KEY = (eventId: number) => `checkins:${EVENTS_CONTRACT}:${eventId}`;
+const LOG = (eventId: number) => `checkinlog:${EVENTS_CONTRACT}:${eventId}`;
 
 // ---------------------------------------------------------------- redis
 
@@ -44,7 +52,9 @@ async function redis<T>(command: (string | number)[]): Promise<T> {
 const FILE = path.join(process.cwd(), ".data", "checkins.json");
 let lock: Promise<unknown> = Promise.resolve();
 
-async function loadFile(): Promise<Record<string, CheckIns>> {
+type FileState = Record<string, CheckIns | CheckInEntry[]>;
+
+async function loadFile(): Promise<FileState> {
   try {
     return JSON.parse(await readFile(FILE, "utf8"));
   } catch (error) {
@@ -53,7 +63,7 @@ async function loadFile(): Promise<Record<string, CheckIns>> {
   }
 }
 
-function updateFile<T>(fn: (s: Record<string, CheckIns>) => T): Promise<T> {
+function updateFile<T>(fn: (s: FileState) => T): Promise<T> {
   const run = lock.then(async () => {
     const s = await loadFile();
     const out = fn(s);
@@ -69,27 +79,41 @@ function updateFile<T>(fn: (s: Record<string, CheckIns>) => T): Promise<T> {
 
 // ------------------------------------------------------------------ api
 
-export async function listCheckIns(eventId: number): Promise<CheckIns> {
-  if (usesRedis()) {
-    const flat = await redis<string[]>(["HGETALL", KEY(eventId)]);
-    const out: CheckIns = {};
-    for (let i = 0; i + 1 < flat.length; i += 2) out[flat[i]] = JSON.parse(flat[i + 1]);
-    return out;
-  }
-  return (await loadFile())[KEY(eventId)] ?? {};
+/** Every mark and unmark of the event, oldest first. */
+export async function checkInLog(eventId: number): Promise<CheckInEntry[]> {
+  if (usesRedis()) return (await redis<string[]>(["LRANGE", LOG(eventId), 0, -1])).map((x) => JSON.parse(x));
+  return ((await loadFile())[LOG(eventId)] as CheckInEntry[] | undefined) ?? [];
 }
 
-/** Marks (`on`) or unmarks a guest. Safe to repeat. */
+export async function listCheckIns(eventId: number): Promise<CheckIns> {
+  const log = await checkInLog(eventId);
+  if (!log.length) {
+    if (usesRedis()) {
+      const flat = await redis<string[]>(["HGETALL", KEY(eventId)]);
+      const out: CheckIns = {};
+      for (let i = 0; i + 1 < flat.length; i += 2) out[flat[i]] = JSON.parse(flat[i + 1]);
+      return out;
+    }
+    return ((await loadFile())[KEY(eventId)] as CheckIns | undefined) ?? {};
+  }
+  const out: CheckIns = {};
+  for (const x of log) {
+    if (x.on) out[x.account] ??= { at: x.at, by: x.by };
+    else delete out[x.account];
+  }
+  return out;
+}
+
+/** Marks (`on`) or unmarks a guest by appending to the log. Repeating the current state adds nothing. */
 export async function setCheckIn(eventId: number, account: string, on: boolean, by: string): Promise<void> {
+  if (!!(await listCheckIns(eventId))[account] === on) return;
+  const entry: CheckInEntry = { account, on, at: Date.now(), by };
   if (usesRedis()) {
-    if (on) await redis(["HSET", KEY(eventId), account, JSON.stringify({ at: Date.now(), by })]);
-    else await redis(["HDEL", KEY(eventId), account]);
+    await redis(["RPUSH", LOG(eventId), JSON.stringify(entry)]);
     return;
   }
   await updateFile((s) => {
-    const list = (s[KEY(eventId)] ??= {});
-    if (on) list[account] ??= { at: Date.now(), by };
-    else delete list[account];
+    ((s[LOG(eventId)] ??= []) as CheckInEntry[]).push(entry);
   });
 }
 

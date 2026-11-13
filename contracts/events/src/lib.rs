@@ -12,9 +12,9 @@
 //! `deposit` in both modes.
 //!
 //! Deposit events:
-//! 1. The host (or anyone for them) locks a bond of `HOST_BOND_MULTIPLIER` × the
-//!    deposit (`host_bond` message). Registration opens only after that, and the
-//!    host can never take a seat.
+//! 1. The host (or anyone for them) locks a bond of one deposit per seat
+//!    (`HOST_BOND_PER_SEAT` × deposit × capacity, `host_bond` message). Registration
+//!    opens only after that and closes at `starts_at`, and the host can never take a seat.
 //! 2. After `ends_at` the host publishes who came (`finalize`, within
 //!    `SUBMIT_DEADLINE_MS`). Nothing is paid yet: the event is `Submitted`.
 //! 3. For `CHALLENGE_WINDOW_MS` any guest may dispute one record by locking a
@@ -124,14 +124,15 @@ pub const MAX_CAPACITY: u32 = 300;
 /// Ticket events: after `ends_at` + this grace period, anyone can `cancel` an unclosed event.
 pub const ABANDON_GRACE_MS: u64 = 30 * DAY_MS;
 
-/// Deposit events: the host bond is this many deposits.
-pub const HOST_BOND_MULTIPLIER: u128 = 5;
+/// Deposit events: the host bond is this many deposits per seat (bond = deposit × capacity × this),
+/// so a host whose list is proven wrong loses more than lying about every seat could win.
+pub const HOST_BOND_PER_SEAT: u128 = 1;
 /// One hour of the oracle's deadlines. Testnet rehearsal builds
 /// (`--features short-windows`, refused outside testnet and sandbox) make it
 /// 10 seconds, so a whole dispute cycle fits in minutes.
 const ORACLE_HOUR_MS: u64 = if cfg!(feature = "short-windows") { 10_000 } else { HOUR_MS };
 /// Disputes are accepted for this long after the host publishes the list.
-pub const CHALLENGE_WINDOW_MS: u64 = 24 * ORACLE_HOUR_MS;
+pub const CHALLENGE_WINDOW_MS: u64 = 12 * ORACLE_HOUR_MS;
 /// The host must publish the list within this time after `ends_at`.
 pub const SUBMIT_DEADLINE_MS: u64 = 72 * ORACLE_HOUR_MS;
 /// The DAO decides within this time after the window; later, open disputes expire.
@@ -292,8 +293,12 @@ pub struct EventView {
     pub access: Option<AccessRule>,
     pub dao: Option<AccountId>,
     pub treasury: Option<AccountId>,
-    /// Locked host bond; registration needs `HOST_BOND_MULTIPLIER` × deposit here.
+    /// Locked host bond; 0 until paid. Registration opens once it equals `bond_due`.
     pub host_bond: U128,
+    /// The bond this event needs: deposit × capacity (one deposit per seat); 0 for Ticket.
+    pub bond_due: U128,
+    /// Registration is accepted until this time (exclusive): `starts_at` for Deposit, `ends_at` for Ticket.
+    pub registration_ends_at: u64,
     pub submitted_at: u64,
     /// Disputes are accepted until this time (exclusive); 0 before the list.
     pub challenge_ends_at: u64,
@@ -366,7 +371,7 @@ pub struct ConfigView {
     pub dao: Option<AccountId>,
     /// Receives the treasury share of lost bonds.
     pub treasury: AccountId,
-    /// 86 400 000 (24 h) in a release build; less only in a testnet rehearsal build.
+    /// 43 200 000 (12 h) in a release build; less only in a testnet rehearsal build.
     pub challenge_window_ms: u64,
 }
 
@@ -1094,10 +1099,10 @@ impl Contract {
         let event = self.event(event_id);
         require!(event.mode == EventMode::Deposit, "Only Deposit events take a host bond");
         require!(event.status == EventStatus::Open, "Event is closed");
-        require!(env::block_timestamp_ms() < event.metadata.ends_at, "The event has ended");
+        require!(env::block_timestamp_ms() < registration_ends(event), "Registration has closed");
         require!(event.host_bond == 0, "The host bond is already paid");
-        let bond = event.deposit * HOST_BOND_MULTIPLIER;
-        require!(amount >= bond, format!("The host bond is {} (5 deposits)", bond));
+        let bond = bond_due(event);
+        require!(amount >= bond, format!("The host bond is {} (one deposit per seat)", bond));
         let host = event.host.clone();
         self.event_mut(event_id).host_bond = bond;
         emit("host_bond_paid", json!({ "event_id": event_id, "host": host, "paid_by": payer, "amount": U128(bond) }));
@@ -1444,7 +1449,7 @@ impl Contract {
     fn can_register(&self, event_id: u64, guest: &AccountId) -> bool {
         let event = self.event(event_id);
         event.status == EventStatus::Open
-            && env::block_timestamp_ms() < event.metadata.ends_at
+            && env::block_timestamp_ms() < registration_ends(event)
             && event.guest_count < event.capacity
             && Self::seats_open(event, guest)
             && self.keyless_ok(guest)
@@ -1457,7 +1462,7 @@ impl Contract {
     fn register(&mut self, event_id: u64, guest: AccountId, paid_by: AccountId) {
         let event = self.event(event_id);
         require!(event.status == EventStatus::Open, "Event is closed");
-        require!(env::block_timestamp_ms() < event.metadata.ends_at, "The event has ended");
+        require!(env::block_timestamp_ms() < registration_ends(event), "Registration has closed");
         require!(event.guest_count < event.capacity, "Event is full");
         require!(Self::seats_open(event, &guest), "Registration needs the host bond, and the host cannot take a seat");
         require!(!self.guests.contains_key(&(event_id, guest.clone())), "Already registered");
@@ -1527,6 +1532,15 @@ fn require_rehearsal_network() {
     );
 }
 
+/// Deposit events stop taking guests at `starts_at`: after that the host sees who came (Ticket: at `ends_at`).
+fn registration_ends(e: &Event) -> u64 {
+    if e.mode == EventMode::Deposit { e.metadata.starts_at } else { e.metadata.ends_at }
+}
+
+fn bond_due(e: &Event) -> u128 {
+    if e.mode == EventMode::Deposit { e.deposit * u128::from(e.capacity) * HOST_BOND_PER_SEAT } else { 0 }
+}
+
 fn challenge_ends_at(e: &Event) -> u64 {
     e.submitted_at + CHALLENGE_WINDOW_MS
 }
@@ -1583,6 +1597,8 @@ fn view_event(id: u64, e: &Event) -> EventView {
         dao: e.dao.clone(),
         treasury: e.treasury.clone(),
         host_bond: U128(e.host_bond),
+        bond_due: U128(bond_due(e)),
+        registration_ends_at: registration_ends(e),
         submitted_at: e.submitted_at,
         challenge_ends_at: if submitted { challenge_ends_at(e) } else { 0 },
         resolve_by: if submitted { resolve_by(e) } else { 0 },

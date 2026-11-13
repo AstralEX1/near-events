@@ -119,7 +119,7 @@ function load(): State {
     } catch {}
     memory ??= seed();
     // The demo has no dispute council: its host bond is pretend, so registration is open.
-    for (const e of memory.events) e.host_bond ??= (BigInt(e.deposit) * 5n).toString();
+    for (const e of memory.events) e.host_bond ??= (BigInt(e.deposit) * BigInt(e.capacity)).toString();
   }
   return memory;
 }
@@ -210,7 +210,7 @@ export async function demoSend(call: Call): Promise<void> {
       s.events.push({
         id, host: me, metadata: a.metadata, deposit: a.deposit, mode: a.mode, capacity: a.capacity, status: "Open",
         guest_count: 0, attended_count: 0, total_pool: "0", payout_per_attendee: "0", created_at: Date.now(), closed_at: 0,
-        host_bond: (BigInt(a.deposit) * 5n).toString(),
+        host_bond: (BigInt(a.deposit) * BigInt(a.capacity)).toString(),
       });
       s.guests[id] = [];
       break;
