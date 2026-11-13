@@ -701,6 +701,12 @@ impl Contract {
         near_sdk::assert_one_yocto();
         self.require_owner(&env::predecessor_account_id());
         rules.check();
+        // Balances of these accounts could never be withdrawn, and they cannot vote (audit 2, L-2).
+        let stuck = [Some(env::current_account_id()), Some(self.usdc.clone()), self.intents.clone()];
+        require!(
+            !stuck.contains(&Some(rules.treasury.clone())) && !stuck.contains(&rules.dao),
+            "The treasury and the court must be ordinary accounts"
+        );
         self.rules = rules;
         emit("rules_set", json!(self.rules));
     }

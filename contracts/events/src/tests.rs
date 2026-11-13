@@ -2403,6 +2403,10 @@ fn set_rules_refuses_unsafe_combinations() {
     for (rules, msg) in bad {
         rejects(move || { let (mut c, _) = setup(10); ctx(&owner(), one_yocto()); c.set_rules(rules); }, msg);
     }
+    for stuck in [contract_account(), usdc(), "intents.near".parse().unwrap()] {
+        rejects(move || { let (mut c, _) = setup(10); ctx(&owner(), one_yocto()); c.set_rules(Rules { treasury: stuck, ..court_rules() }); }, "ordinary accounts");
+    }
+    rejects(|| { let (mut c, _) = setup(10); ctx(&owner(), one_yocto()); c.set_rules(Rules { dao: Some(usdc()), ..court_rules() }); }, "ordinary accounts");
     // Without a court the host is trusted as before v3, and registration may run to the end.
     let (mut c, _) = setup(10);
     ctx(&owner(), one_yocto());

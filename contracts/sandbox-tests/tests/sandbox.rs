@@ -538,18 +538,26 @@ async fn measure_full_event_gas(
         let mut tasks = tokio::task::JoinSet::new();
         for guest in batch.iter().cloned() {
             let usdc = usdc.clone();
-            tasks.spawn(async move { mint(&usdc, &guest, guest.id(), 3 * USDC).await });
+            tasks.spawn(async move { mint(&usdc, &guest, guest.id(), 4 * USDC).await });
         }
         while let Some(result) = tasks.join_next().await {
             result??;
         }
     }
 
-    for operation in ["settle", "cancel"] {
+    // "final": no court, so `finalize` publishes and pays out 300 guests in one call (audit 2, L-3).
+    for operation in ["settle", "cancel", "final"] {
         let target = if operation == "settle" {
             events.clone()
-        } else {
+        } else if operation == "cancel" {
             let (contract, _, _) = new_escrow(worker, usdc, host).await?;
+            contract
+        } else {
+            let contract = worker.dev_deploy(wasm("near-events")).await?;
+            contract.call("new")
+                .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null, "owner": host.id() }))
+                .transact().await?.into_result()?;
+            storage_deposit(usdc, host, contract.id()).await?;
             contract
         };
         // Long enough for 300 registrations before the start (registration closes there); the cancel run cancels before it.
@@ -581,7 +589,9 @@ async fn measure_full_event_gas(
         assert!(spent <= cost + fees, "the excess deposit was not returned: spent {spent}, cost {cost}");
         eprintln!("300-seat create_event cost {cost} yoctoNEAR");
         let event_id: u64 = created.json()?;
-        lock_bond(host, usdc, &target, event_id).await?;
+        if operation != "final" {
+            lock_bond(host, usdc, &target, event_id).await?;
+        }
         let host_before = escrow_balance(&target, host.id()).await?;
         let register = vec![json!({ "action": "register", "event_id": event_id }); guests.len()];
         pay_each(usdc.id(), target.id(), &guests, register).await?;
@@ -601,6 +611,10 @@ async fn measure_full_event_gas(
         }
         let result = if operation == "settle" {
             call_settle(host, &target, event_id).await?.into_result()?
+        } else if operation == "final" {
+            wait_until(worker, end).await?;
+            let accounts: Vec<_> = guests.iter().map(|guest| guest.id()).collect();
+            finalize(host, &target, event_id, json!(accounts)).await?.into_result()?
         } else {
             host.call(target.id(), "cancel")
                 .args_json(json!({ "event_id": event_id }))
@@ -613,7 +627,8 @@ async fn measure_full_event_gas(
         assert!(gas < 240_000_000_000_000, "300-guest {operation} used {gas} gas");
         let expected = if operation == "settle" { 2 * USDC } else { USDC };
         assert_eq!(escrow_balance(&target, last).await?, expected);
-        assert_eq!(escrow_balance(&target, host.id()).await? - host_before, 600 * USDC, "the host gets the 300-seat bond back");
+        let bond = if operation == "final" { 0 } else { 600 * USDC };
+        assert_eq!(escrow_balance(&target, host.id()).await? - host_before, bond, "the host gets the 300-seat bond back");
     }
     Ok(())
 }

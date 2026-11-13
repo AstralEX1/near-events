@@ -250,7 +250,7 @@ steps["abandon-check"] = async () => {
 // Site demo (one dispute cycle to watch on the local site, ESCROW=oracle-v3b…):
 //   demo → demo-bond → demo-checkin → demo-late → demo-publish → demo-dispute → keeper → demo-votes → keeper → demo-check
 // Host carissan publishes stan and g2 but leaves off hebert, who came and was checked in; hebert proves it.
-const DEMO_HOST = n("carissan-nv1109");
+const DEMO_HOST = process.env.DEMO_HOST ?? n("carissan-nv1109");
 const SITE = process.env.SITE ?? "http://localhost:3000";
 const DEMO_PEOPLE = [STAN, HEBERT, G2, DEMO_HOST, OWNER];
 steps.demo = async () => {
