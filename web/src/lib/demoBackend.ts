@@ -4,7 +4,7 @@
 // Nothing reaches our server or the blockchain: window.fetch answers chain views
 // (RPC) and /api/* from local state, and wallet calls change that state.
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, RPC_URL, USDC_CONTRACT } from "./config";
-import { formatUsdc, toUnits, type EventMode, type EventView, type GuestStatus, type GuestView } from "./near";
+import { formatUsdc, registrationEndsAt, toUnits, type EventMetadata, type EventMode, type EventView, type GuestStatus, type GuestView } from "./near";
 import type { EventDetails } from "./eventImport";
 import type { EventVisualConfig } from "./event-visuals";
 import { freeEventProblem, type FreeEvent, type FreeEventInput } from "./freeEventsShared";
@@ -41,6 +41,14 @@ const H = 3_600_000;
 const D = 24 * H;
 const PEOPLE = ["Maya", "Leo", "Nina", "Omar", "Sara", "Kai", "Ivan", "Zoe", "Ravi", "Lena", "Theo", "Ana", "Max", "Ida", "Noah", "Eva", "Sam", "Mia", "Tom", "Liv", "Ben", "Ava", "Jon"];
 const acct = (name: string) => `${name.toLowerCase()}.demo`;
+/** The escrow's defaults with no court, as on mainnet at the v3 launch. */
+const RULES = { dao: null, treasury: "treasury.demo", bond_per_seat: 0, close_at_start: true, challenge_hours: 12, submit_hours: 72, resolve_hours: 168 };
+/** What `get_event` adds in v3: Deposit registration closes at the start, the list is due `submit_hours` after the end, no bond. */
+const v3 = (mode: EventMode, m: EventMetadata) => ({
+  dao: null, rules: RULES, host_bond: "0", bond_due: "0",
+  registration_ends_at: mode === "Deposit" ? m.starts_at : m.ends_at,
+  submit_by: mode === "Deposit" ? m.ends_at + RULES.submit_hours * H : 0,
+});
 const map = (place: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
 
 function seed(): State {
@@ -63,6 +71,7 @@ function seed(): State {
       deposit: toUnits(o.usdc), mode: o.mode, capacity: o.capacity, status: "Open", guest_count: o.guests.length,
       attended_count: 0, total_pool: (BigInt(toUnits(o.usdc)) * BigInt(o.guests.length)).toString(), payout_per_attendee: "0",
       created_at: Math.min(now, o.starts) - 7 * D, closed_at: 0,
+      ...v3(o.mode, { title: o.title, starts_at: o.starts, ends_at: o.starts + o.hours * H }),
     });
     s.guests[id] = o.guests.map((a, i) => ({ account_id: a, status: "Registered", registered_at: Math.min(now, o.starts) - (6 - i * 0.2) * D }));
     s.names[id] = Object.fromEntries(o.guests.map((a) => [a, s.profiles[a]?.first_name ?? "You"]));
@@ -118,8 +127,8 @@ function load(): State {
       memory = JSON.parse(localStorage.getItem(KEY) ?? "null");
     } catch {}
     memory ??= seed();
-    // The demo has no dispute council: its host bond is pretend, so registration is open.
-    for (const e of memory.events) e.host_bond ??= (BigInt(e.deposit) * BigInt(e.capacity)).toString();
+    // Saved demos from before v3 had a pretend host bond and no deadlines.
+    for (const e of memory.events) Object.assign(e, v3(e.mode, e.metadata));
   }
   return memory;
 }
@@ -210,7 +219,7 @@ export async function demoSend(call: Call): Promise<void> {
       s.events.push({
         id, host: me, metadata: a.metadata, deposit: a.deposit, mode: a.mode, capacity: a.capacity, status: "Open",
         guest_count: 0, attended_count: 0, total_pool: "0", payout_per_attendee: "0", created_at: Date.now(), closed_at: 0,
-        host_bond: (BigInt(a.deposit) * BigInt(a.capacity)).toString(),
+        ...v3(a.mode ?? "Deposit", a.metadata),
       });
       s.guests[id] = [];
       break;
@@ -219,7 +228,7 @@ export async function demoSend(call: Call): Promise<void> {
       const msg = JSON.parse(a.msg ?? "{}");
       const e = eventOf(s, msg.event_id);
       if (a.receiver_id !== EVENTS_CONTRACT || msg.action !== "register" || a.amount !== e.deposit) throw new Error("Bad registration");
-      if (e.status !== "Open" || Date.now() >= e.metadata.ends_at) throw new Error("Registration is closed");
+      if (e.status !== "Open" || Date.now() >= registrationEndsAt(e)) throw new Error("Registration is closed");
       if (statusOf(s, e.id, me)) throw new Error("You are already registered");
       if (e.guest_count >= e.capacity) throw new Error("This event is full");
       move(s.usdc, me, -BigInt(e.deposit));
@@ -235,6 +244,13 @@ export async function demoSend(call: Call): Promise<void> {
       if (e.status !== "Open") throw new Error("The event is already closed");
       if (Date.now() < e.metadata.ends_at) throw new Error("The event has not ended yet");
       finalize(s, e.id, a.attended ?? []);
+      break;
+    }
+    case `${EVENTS_CONTRACT} refund`: {
+      // No court: the empty list refunds every guest at once.
+      const e = eventOf(s, a.event_id);
+      if (e.mode !== "Deposit" || e.status !== "Open" || Date.now() <= (e.submit_by ?? Infinity)) throw new Error("Nothing to refund yet");
+      finalize(s, e.id, []);
       break;
     }
     case `${EVENTS_CONTRACT} cancel`: {
@@ -313,6 +329,7 @@ function view(s: State, contract: string, method: string, a: Record<string, any>
       case "balance_of": return s.escrow[a.account_id] ?? "0";
       case "can_create": return true;
       case "create_event_cost": return "0";
+      case "get_config": return { owner: "owner.demo", rules: RULES, oracle_hour_ms: H };
       // Demo events close at once (no dispute window), so there are never disputes.
       case "get_disputes": return [];
     }
