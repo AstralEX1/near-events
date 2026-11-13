@@ -55,3 +55,14 @@ test("cover uploads stop at the byte budget; a repeat upload is free", () => {
   assert.equal(r.used, 100_000_000 - 4, "a refused upload gives its bytes back");
   assert.equal(r.sets, 1, "the repeat and the refused upload store nothing");
 });
+
+test("funding a new Google account has its own day caps and leaves the relayer budget alone", () => {
+  const keys = run(`
+    const { dailyLimited } = await import(${JSON.stringify(path.join(web, "src/lib/ratelimit.ts"))});
+    await dailyLimited(new Request("http://x/api/fastauth/fund", { headers: { "x-forwarded-for": "1.2.3.4" } }), "fund", "a".repeat(64), 20, 100);
+    const [, , n, ...rest] = sent[0];
+    console.log(JSON.stringify(rest.slice(0, n)));
+  `);
+  assert.ok(keys.includes("near-me:testnet:fund:day"), "a cap for all callers a day");
+  assert.ok(!keys.some((k) => k.includes(":relayer:")), "not the shared relayer budget");
+});
