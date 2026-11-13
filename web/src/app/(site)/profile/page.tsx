@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { savedAccounts, savedStaffToken, useWallet } from "@/lib/wallet";
+import { DEMO_EVM } from "@/lib/demoBackend";
 import { SignInOptions } from "@/components/SignIn";
 import { ProfileCard } from "@/components/ProfileCard";
 import { shortAccount } from "@/components/ui";
@@ -23,7 +24,7 @@ export default function MyProfile() {
   return (
     <div className="max-w-xl mx-auto space-y-8 pt-4">
       <Editor key={accountId} accountId={accountId} linkRev={linkRev} />
-      {kind !== "demo" && <Wallets key={`wallets:${accountId}`} accountId={accountId} onChange={() => setLinkRev((n) => n + 1)} />}
+      <Wallets key={`wallets:${accountId}`} accountId={accountId} onChange={() => setLinkRev((n) => n + 1)} />
     </div>
   );
 }
@@ -32,7 +33,9 @@ const walletKind = (a: string) => (/^0x[0-9a-f]{40}$/i.test(a) ? "EVM" : /^[0-9a
 
 /** Wallets that share this profile. A wallet signed in earlier on this device (its sign-in token is still here) can be linked with one click. */
 function Wallets({ accountId, onChange }: { accountId: string; onChange: () => void }) {
-  const { staffToken } = useWallet();
+  const { staffToken, kind } = useWallet();
+  // Demo: the one other wallet is made up, and the demo server takes the account itself as its token.
+  const demo = kind === "demo";
   const [wallets, setWallets] = useState<string[]>([accountId]);
   const [others, setOthers] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
@@ -40,11 +43,11 @@ function Wallets({ accountId, onChange }: { accountId: string; onChange: () => v
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setOthers(savedAccounts().filter((a) => a !== accountId));
+    setOthers(demo ? [DEMO_EVM] : savedAccounts().filter((a) => a !== accountId));
     // Only with a token already here: opening the page never asks the wallet to sign.
-    const token = savedStaffToken(accountId);
+    const token = demo ? "demo" : savedStaffToken(accountId);
     if (token) getWallets(token).then(setWallets).catch(() => {});
-  }, [accountId]);
+  }, [accountId, demo]);
 
   const run = (label: string, fn: (token: string) => Promise<void>) => async () => {
     setBusy(label);
@@ -90,7 +93,7 @@ function Wallets({ accountId, onChange }: { accountId: string; onChange: () => v
           <span className="min-w-0 truncate">{walletKind(a)} · {shortAccount(a)} <span className="text-muted">signed in here before</span></span>
           <button type="button" className="btn btn-primary shrink-0 px-4 py-1.5 text-sm" disabled={busy !== null}
             onClick={change(a, async (token) => {
-              const other = savedStaffToken(a);
+              const other = demo ? a : savedStaffToken(a);
               if (!other) throw new Error("Sign in with that wallet again to link it.");
               return linkWallet(token, other);
             })}>
@@ -103,7 +106,7 @@ function Wallets({ accountId, onChange }: { accountId: string; onChange: () => v
           <p className="text-sm text-muted">Sign in with the other wallet, then press Link here.</p>
           <SignInOptions demo={false} />
         </div>
-      ) : (
+      ) : !demo && (
         // The token of this wallet stays on the device, so the next wallet can link to it.
         <button type="button" className="btn btn-ghost text-sm" disabled={busy !== null} onClick={run("add", async () => setAdding(true))}>
           {busy === "add" ? "Signing…" : "Link Another Wallet"}

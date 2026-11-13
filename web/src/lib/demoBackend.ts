@@ -12,13 +12,19 @@ import { cleanProfile, type Profile } from "./profilesShared";
 import { normalizeCohosts } from "./cohostsShared";
 import type { Call } from "./wallet";
 import { reputationIndex, emptyReputation } from "./reputationShared";
+import type { AccessCheck, AccessRule } from "./access";
 
 export const DEMO_ACCOUNT = "you.demo";
+/** A made-up EVM wallet that the demo profile can link (Profile → Wallets). */
+export const DEMO_EVM = "0xde30de30de30de30de30de30de30de30de30de30";
 const KEY = "nearvent:demo";
+/** Bump when the seed changes: a demo saved by an older version starts over. */
+const VERSION = 3;
 
 type Free = FreeEventInput & { id: string; host: string; created_at: number; guests: string[]; requests: string[] };
 
 interface State {
+  v: number;
   nextId: number;
   events: EventView[];
   guests: Record<number, GuestView[]>;
@@ -33,6 +39,8 @@ interface State {
   names: Record<number, Record<string, string>>;
   profiles: Record<string, Profile>;
   free: Record<string, Free>;
+  /** Wallets linked to the demo profile (Profile → Wallets). */
+  linked: string[];
 }
 
 // ------------------------------------------------------------------ seed
@@ -58,8 +66,8 @@ const HOSTS = { bstc: "Bali Startup & Tech", spacexai: "SpaceXAI Bali", nebula: 
 function seed(): State {
   const now = Date.now();
   const s: State = {
-    nextId: 1, events: [], guests: {}, escrow: {}, usdc: { [DEMO_ACCOUNT]: toUnits(50) }, intents: {},
-    details: {}, visuals: {}, checkins: {}, cohosts: {}, names: {}, profiles: {}, free: {},
+    v: VERSION, nextId: 1, events: [], guests: {}, escrow: {}, usdc: { [DEMO_ACCOUNT]: toUnits(50) }, intents: {},
+    details: {}, visuals: {}, checkins: {}, cohosts: {}, names: {}, profiles: {}, free: {}, linked: [],
   };
   PEOPLE.forEach((name, i) => {
     s.profiles[acct(name)] = { username: name.toLowerCase(), first_name: name, last_name: "", avatar_url: null, avatar_seed: 7919 * (i + 1), links: {} };
@@ -70,14 +78,14 @@ function seed(): State {
 
   const add = (o: {
     host: string; title: string; starts: number; hours: number; usdc: number; mode: EventMode; capacity: number;
-    guests: string[]; place: string; about: string; theme: EventVisualConfig["themeId"]; cover: string;
+    guests: string[]; place: string; about: string; theme: EventVisualConfig["themeId"]; cover: string; access?: AccessRule;
   }) => {
     const id = s.nextId++;
     s.events.push({
       id, host: o.host, metadata: { title: o.title, starts_at: o.starts, ends_at: o.starts + o.hours * H },
       deposit: toUnits(o.usdc), mode: o.mode, capacity: o.capacity, status: "Open", guest_count: o.guests.length,
       attended_count: 0, total_pool: (BigInt(toUnits(o.usdc)) * BigInt(o.guests.length)).toString(), payout_per_attendee: "0",
-      created_at: Math.min(now, o.starts) - 7 * D, closed_at: 0,
+      created_at: Math.min(now, o.starts) - 7 * D, closed_at: 0, access: o.access ?? null,
       ...v3(o.mode, { title: o.title, starts_at: o.starts, ends_at: o.starts + o.hours * H }),
     });
     s.guests[id] = o.guests.map((a, i) => ({ account_id: a, status: "Registered", registered_at: Math.min(now, o.starts) - (6 - i * 0.2) * D }));
@@ -113,6 +121,13 @@ function seed(): State {
     guests: PEOPLE.slice(0, 23).map(acct), place: "Nebula Coworking Space, Bali",
     about: "A hands-on LLM session: build small parts of a GPT-style language model together and see how LLMs work inside.", theme: "paradise", cover: "build-ai",
   });
+  // Regulars first: you came to Edition 18, so you can register now; the five who came with you are in. It opens to everyone in two days.
+  add({
+    host: acct("bstc"), title: "How I AI | Season 2 · Edition 19", starts: now + 5 * D, hours: 3, usdc: 5, mode: "Deposit", capacity: 30,
+    guests: PEOPLE.slice(1, 6).map(acct), place: "Seoul Soul Project, Canggu",
+    about: "The next night of the series. Everyone who came to the last one gets in first; the rest can join once it opens to all.", theme: "paradise", cover: "how-i-ai",
+    access: { past_events: [past], min_attended: 1, max_no_shows: 0, open_to_all_at: now + 2 * D },
+  });
 
   s.free.demoAiCoffee = {
     id: "demoAiCoffee", host: acct("aialliance"), created_at: now - 2 * D, title: "Bali AI Alliance: Coffee & Connections",
@@ -133,9 +148,10 @@ function load(): State {
     try {
       memory = JSON.parse(localStorage.getItem(KEY) ?? "null");
     } catch {}
-    memory ??= seed();
-    // Saved demos from before v3 had a pretend host bond and no deadlines.
-    for (const e of memory.events) Object.assign(e, v3(e.mode, e.metadata));
+    if (memory?.v !== VERSION) {
+      memory = seed();
+      save(); // one stable seed until the next change
+    }
   }
   return memory;
 }
@@ -169,6 +185,21 @@ function eventOf(s: State, id: unknown): EventView {
   const e = s.events.find((x) => x.id === id);
   if (!e) throw new Error("Event not found");
   return e;
+}
+
+/** The escrow's `check_access`: who may register under the event's rule, judged by the host's past events. */
+function accessOf(s: State, e: EventView, account: string): AccessCheck {
+  const rule = e.access;
+  if (!rule) return { allowed: true, attended: 0, no_shows: 0 };
+  let attended = 0, no_shows = 0;
+  for (const id of rule.past_events) {
+    const status = statusOf(s, id, account);
+    if (status === "Attended") attended++;
+    // An event closed with nobody checked in refunded everyone: not a no-show.
+    else if (status === "Registered" && eventOf(s, id).attended_count > 0) no_shows++;
+  }
+  const open = rule.open_to_all_at !== null && Date.now() >= rule.open_to_all_at;
+  return { allowed: open || (attended >= rule.min_attended && (rule.max_no_shows === null || no_shows <= rule.max_no_shows)), attended, no_shows };
 }
 
 /** Same rules as the escrow: show-ups split the pool; nobody checked in means everyone gets the deposit back. */
@@ -226,7 +257,7 @@ export async function demoSend(call: Call): Promise<void> {
       s.events.push({
         id, host: me, metadata: a.metadata, deposit: a.deposit, mode: a.mode, capacity: a.capacity, status: "Open",
         guest_count: 0, attended_count: 0, total_pool: "0", payout_per_attendee: "0", created_at: Date.now(), closed_at: 0,
-        ...v3(a.mode ?? "Deposit", a.metadata),
+        access: a.access ?? null, ...v3(a.mode ?? "Deposit", a.metadata),
       });
       s.guests[id] = [];
       break;
@@ -238,6 +269,7 @@ export async function demoSend(call: Call): Promise<void> {
       if (e.status !== "Open" || Date.now() >= registrationEndsAt(e)) throw new Error("Registration is closed");
       if (statusOf(s, e.id, me)) throw new Error("You are already registered");
       if (e.guest_count >= e.capacity) throw new Error("This event is full");
+      if (!accessOf(s, e, me).allowed) throw new Error("This event is for regulars first");
       move(s.usdc, me, -BigInt(e.deposit));
       if (e.mode === "Ticket") move(s.escrow, e.host, BigInt(e.deposit));
       s.guests[e.id].push({ account_id: me, status: "Registered", registered_at: Date.now() });
@@ -327,8 +359,7 @@ function view(s: State, contract: string, method: string, a: Record<string, any>
     switch (method) {
       case "get_recent_events": return [...s.events].sort((x, y) => y.id - x.id).slice(0, a.limit ?? 100);
       case "get_events": return [...s.events].sort((x, y) => x.id - y.id).slice(a.from_index ?? 0, (a.from_index ?? 0) + Math.min(a.limit ?? 50, 100));
-      // Demo events have no access rules.
-      case "check_access": return { allowed: true, attended: 0, no_shows: 0 };
+      case "check_access": return accessOf(s, eventOf(s, a.event_id), a.account_id);
       case "get_event": return s.events.find((e) => e.id === a.event_id) ?? null;
       case "get_guests": return s.guests[a.event_id] ?? [];
       case "get_guest_status": return statusOf(s, a.event_id, a.account_id);
@@ -361,7 +392,7 @@ async function api(req: Request, url: URL): Promise<Response> {
   const q = url.searchParams;
   const post = req.method === "POST";
   if (url.pathname === "/api/covers" && post) return reply({ url: await asDataUrl(await req.blob()) }); // the photo stays in this browser
-    const body: Record<string, any> = post ? await req.json().catch(() => ({})) : {};
+  const body: Record<string, any> = req.method === "GET" ? {} : await req.json().catch(() => ({}));
   const ids = (q.get("ids") ?? q.get("e") ?? "").split(",").filter(Boolean).map(Number);
   const done = (out: unknown = { ok: true }) => (save(), reply(out));
   const hosted = (id: unknown) => {
@@ -434,6 +465,14 @@ async function api(req: Request, url: URL): Promise<Response> {
       s.profiles[me] = profile;
       return done({ profile });
     }
+
+    // The profile lives under the demo account; the made-up EVM wallet can be linked and unlinked.
+    case "/api/profiles/link":
+      if (post) {
+        if (body.other !== DEMO_EVM) return fail("Sign in with that wallet again to link it.");
+        s.linked = [DEMO_EVM];
+      } else if (req.method === "DELETE") s.linked = s.linked.filter((a) => a !== body.account);
+      return done({ wallets: [me, ...s.linked] });
 
     case "/api/free-events":
       return freeEvents(s, q, post, body, done);
