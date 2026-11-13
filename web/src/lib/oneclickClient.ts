@@ -2,7 +2,7 @@
 
 // Browser side of NEAR Intents 1Click. Every request goes through our
 // /api/oneclick proxy, so the API key stays on the server.
-import { USDC_CONTRACT } from "./config.ts";
+import { NETWORK, USDC_CONTRACT } from "./config.ts";
 import type { Call } from "./wallet";
 import type { OneClickToken } from "./oneclick";
 
@@ -49,7 +49,18 @@ export async function oneClickQuote(body: Record<string, unknown>): Promise<Quot
   });
   const json = await r.json();
   if (!r.ok) throw new Error(json.message ?? json.error ?? `NEAR Intents error ${r.status}`);
+  // 1Click signs its quotes; a changed deposit address or amount fails here, before anything is shown or sent.
+  // Loaded on demand (ed25519 + sha256). Tidepool on testnet does not sign.
+  if (NETWORK === "mainnet") {
+    const { quoteSigned } = await import("./quoteSignature");
+    if (!quoteSigned(json)) throw new Error("NEAR Intents could not confirm this quote, so nothing was sent. Try again.");
+  }
   return json.quote;
+}
+
+/** Tells 1Click the deposit was sent, so it picks it up sooner. Best effort. */
+export function submitDeposit(depositAddress: string, txHash: string): void {
+  fetch("/api/oneclick/deposit/submit", { method: "POST", body: JSON.stringify({ depositAddress, txHash }) }).catch(() => {});
 }
 
 export const INTENTS_SESSION_EXPIRED = "Your NEAR Intents sign-in has expired. Sign in again.";
@@ -112,6 +123,40 @@ export async function waitForSwap(
     delay = Math.min(delay * 2, 20_000);
   }
   throw new Error("The swap may still be processing. Check the existing payment before sending again.");
+}
+
+/** The NEAR wallet calls that pay a 1Click deposit address with a NEP-141 token. */
+export function payDepositAddress(tokenContract: string, depositAddress: string, amount: string): Call[] {
+  return [
+    {
+      receiverId: tokenContract,
+      methodName: "storage_deposit",
+      args: { account_id: depositAddress, registration_only: true },
+      deposit: STORAGE_DEPOSIT,
+      gas: 30_000_000_000_000n,
+    },
+    { receiverId: tokenContract, methodName: "ft_transfer", args: { receiver_id: depositAddress, amount }, deposit: 1n, gas: 50_000_000_000_000n },
+  ];
+}
+
+/** 1Click `blockchain` → EVM chain id, for paying a deposit address straight from an EVM wallet. */
+export const EVM_CHAIN_IDS: Record<string, number> = { eth: 1, base: 8453, arb: 42161, op: 10, pol: 137, bsc: 56, avax: 43114, gnosis: 100 };
+
+/** The EVM transaction that pays a 1Click deposit address: the native coin, or an ERC-20 `transfer`. */
+export function evmDepositTx(from: string, token: Pick<OneClickToken, "contractAddress">, depositAddress: string, amount: string) {
+  const address = /^0x[0-9a-f]{40}$/i;
+  if (!address.test(depositAddress) || (token.contractAddress && !address.test(token.contractAddress)) || !/^[1-9]\d*$/.test(amount)) {
+    throw new Error("This payment can't be sent from the wallet here. Send it by hand to the address above.");
+  }
+  const value = BigInt(amount).toString(16);
+  return token.contractAddress
+    ? { from, to: token.contractAddress, data: `0xa9059cbb${depositAddress.slice(2).toLowerCase().padStart(64, "0")}${value.padStart(64, "0")}` }
+    : { from, to: depositAddress, value: `0x${value}` };
+}
+
+/** NEP-141 contract behind a 1Click asset id ("nep141:usdc.near" → "usdc.near"). */
+export function nep141Contract(assetId: string): string | null {
+  return assetId.startsWith("nep141:") ? assetId.slice(7) : null;
 }
 
 /** Storage deposit so the escrow's `ft_transfer` to a 1Click address can't fail. */

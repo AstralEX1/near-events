@@ -124,6 +124,17 @@ export function disconnectEvm(): void {
   } catch {}
 }
 
+/** Sends one transaction from the EVM wallet on `chainId` (switching network first); returns its hash. */
+export async function sendFromEvm(chainId: number, tx: object): Promise<string> {
+  const eth = ethereum();
+  try {
+    await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: `0x${chainId.toString(16)}` }] });
+    return (await eth.request({ method: "eth_sendTransaction", params: [tx] })) as string;
+  } catch (e) {
+    throw walletError(e);
+  }
+}
+
 /** USDC this account holds inside NEAR Intents. */
 export async function intentsUsdcBalance(accountId: string): Promise<bigint> {
   if (!INTENTS_CONTRACT) return 0n;
