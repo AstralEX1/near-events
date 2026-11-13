@@ -13,7 +13,6 @@ export default function SiteLayout({ children }: LayoutProps<"/">) {
       </Suspense>
       <main className="gc-main">{children}</main>
       <footer className="gc-footer">
-        <span>Nearvent · no platform fee</span>
         {/* Unlabelled groups: product, on-chain, us. The landing footer mirrors this. */}
         <nav aria-label="Footer" className="gc-footer-links">
           <div>

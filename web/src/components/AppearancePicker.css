@@ -22,3 +22,6 @@
 /* The theme switch's circle reveal (AppearancePicker): no default crossfade under it. */
 ::view-transition-old(root),
 ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+
+/* The SL UI night circle grows in a square box behind the pill (black corners in dark mode); the page's own view transition replaces it. */
+.nv-theme .ld-sky { display: none; }
