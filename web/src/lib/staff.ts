@@ -19,8 +19,8 @@ import { hostAccounts } from "./daoHost";
 import { STAFF_MESSAGE, STAFF_PROOF_METHOD, evmStaffMessage } from "./staffShared";
 import { erc191Signer } from "./erc191";
 
-// Stay signed in like Luma/Unlock sessions instead of re-signing every 12 h. Signing out drops it locally.
-const TOKEN_TTL_S = 30 * 24 * 60 * 60;
+// One sign-in (one signed message at wallet connect) lasts a day (Alex). Signing out drops it locally.
+const TOKEN_TTL_S = 24 * 60 * 60;
 const PROOF_MAX_AGE_MS = 10 * 60 * 1000;
 
 function secret(): string {
@@ -40,7 +40,9 @@ export function readStaffToken(token: string | null | undefined): string | null 
   if (!acc || !exp || !sig) return null;
   const want = sign(`${acc}.${exp}`);
   if (sig.length !== want.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
-  if (Number(exp) < Date.now() / 1000) return null;
+  const now = Date.now() / 1000;
+  // A token that runs longer than a day comes from the old 30-day rule: no longer accepted.
+  if (Number(exp) < now || Number(exp) > now + TOKEN_TTL_S + 60) return null;
   return Buffer.from(acc, "base64url").toString();
 }
 
