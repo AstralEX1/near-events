@@ -171,6 +171,19 @@ section { padding-block: clamp(72px, 10vw, 128px); }
 .payrow .amt { margin-left: auto; font-family: var(--mono); color: var(--good-ink); font-weight: 600; }
 .payrow.no { color: var(--muted); }
 .payrow.no .amt { color: var(--muted); text-decoration: line-through; }
+/* Step 5: who may register under a Regulars rule; badges look like the app's ReputationBadges. */
+.gates { display: flex; flex-direction: column; gap: 9px; }
+.gate { display: flex; align-items: center; gap: 10px; font-size: 14px; min-width: 0; }
+.gate .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rep { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12.5px; font-weight: 650; font-variant-numeric: tabular-nums; background: var(--good-wash); color: var(--good-ink); flex-shrink: 0; }
+.rep svg { width: 12px; height: 12px; }
+.rep.no { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+.rep.new { background: var(--soft); color: var(--muted); }
+.gate .st { margin-left: auto; font-size: 12.5px; font-weight: 650; flex-shrink: 0; }
+.gate .st.ok { color: var(--good-ink); }
+.gate .st.wait { color: var(--muted); }
+/* Phones: the status drops under the name so names stay readable. */
+@media (max-width: 520px) { .gate { flex-wrap: wrap; row-gap: 0; } .gate .st { order: 5; flex-basis: 100%; margin: -6px 0 0 38px; } }
 /* A ring that grows and fades: only transform and opacity animate, so no repaint every frame. */
 .pulse { position: relative; }
 .pulse::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 3px rgba(214,31,105,.45); pointer-events: none; animation: pulse 2.4s ease-out infinite; }
@@ -546,6 +559,26 @@ footer a { text-decoration: none; } /* plain gray links, like the app footer */
                 <div class="payrow no"><span class="av" style="background:#cdb8d6">L</span>lucas.near<span class="amt">10.00</span></div>
               </div>
               <a class="big-btn" href="/create">Send payouts</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="step reveal">
+          <span class="num">5</span>
+          <div class="txt">
+            <h3>Next time, your regulars get in first</h3>
+            <p>Who came is saved on NEAR. Make your next event regulars-only, or open it to them a day before everyone else. The contract refunds anyone who doesn’t qualify.</p>
+          </div>
+          <div class="shot">
+            <div class="ui">
+              <div class="ui-top"><div class="cover"></div><div><div class="ui-title">Builders Breakfast #5</div><div class="ui-sub">Fri, Nov 21 · 9:00 · Canggu</div></div></div>
+              <span class="pill">Regulars first · everyone from Sat 9:00</span>
+              <div class="gates">
+                <div class="gate"><span class="av" style="background:#d61f69">M</span><span class="who">maria.near</span><span class="rep" aria-label="Attended 5 events"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>5</span><span class="st ok">Can register</span></div>
+                <div class="gate"><span class="av" style="background:#ffd23f;color:#1e0b2b">P</span><span class="who">priya.near</span><span class="rep" aria-label="Attended 2 events"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>2</span><span class="st ok">Can register</span></div>
+                <div class="gate"><span class="av" style="background:#cdb8d6">L</span><span class="who">lucas.near</span><span class="rep no">1 no-show</span><span class="st wait">Waits till Sat</span></div>
+                <div class="gate"><span class="av" style="background:#d2ccff;color:#1e0b2b">0</span><span class="who">0x8f3c…a21e</span><span class="rep new">First event</span><span class="st wait">Waits till Sat</span></div>
+              </div>
             </div>
           </div>
         </div>
