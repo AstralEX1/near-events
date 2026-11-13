@@ -44,6 +44,12 @@ export function evmWallets(): EvmWallet[] {
   return list;
 }
 
+/** The signed-in EVM wallet's own name (MetaMask, Rabby…), for "Confirm in MetaMask". */
+export function evmWalletName(): string | null {
+  const id = savedWallet();
+  return (id && extensions.get(id)?.info.name) || null;
+}
+
 function savedWallet(): string | null {
   try {
     return localStorage.getItem(WALLET_KEY);
@@ -357,7 +363,7 @@ export async function confidentialBalance(session: string): Promise<Confidential
  * balance and waits for it. `from` is the USDC kind it is paid with; other than NEAR's own,
  * 1Click swaps it (stablecoin to stablecoin, 0.5% slippage room, the rest refunded).
  */
-export async function moveFromConfidential(account: string, session: string, amount: bigint, from: string, nep413?: Nep413Sign): Promise<void> {
+export async function moveFromConfidential(account: string, session: string, amount: bigint, from: string, nep413?: Nep413Sign, onSigned?: () => void): Promise<void> {
   const before = await intentsUsdcBalance(account);
   const { quote } = await oneClickCall<{ quote: { depositAddress: string; amountIn: string } }>("quote", {
     dry: false, swapType: "EXACT_OUTPUT", slippageTolerance: from === USDC_ASSET ? 0 : 50,
@@ -378,6 +384,7 @@ export async function moveFromConfidential(account: string, session: string, amo
   if (problem) throw new Error(`NEAR Intents asked to sign something unexpected (${problem}), so nothing was signed.`);
   const signedData = await signedForOneClick(account, message, wrapper.nonce ?? "", nep413, wrapper.recipient);
   await oneClickCall("submit-intent", { type: "swap_transfer", signedData }, session);
+  onSigned?.();
   // The public balance is the proof: wait until the USDC lands there.
   for (let i = 0; i < 40; i++) {
     await new Promise((resolve) => setTimeout(resolve, 3000));
