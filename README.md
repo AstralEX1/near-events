@@ -10,23 +10,25 @@
 
 ## For judges
 
-- **What it is:** RSVP to a meetup with a small USDC deposit; the guests who
-  come split the no-shows' deposits.
-- **Try it, no wallet, 2 minutes:** [www.nearvent.site/demo](https://www.nearvent.site/demo),
-  then the five steps in [Try it in two minutes](#try-it-in-two-minutes-no-wallet).
-- **Live app:** [www.nearvent.site](https://www.nearvent.site) on NEAR mainnet,
-  escrow [`escrow.lold.near`](https://nearblocks.io/address/escrow.lold.near)
-  ([how to check its code](#networks-2026-11-13)).
-- **Check without a browser:** `cargo test --locked -p near-events-sandbox`
-  runs the full money cycle on a local NEAR sandbox ([Build and test](#build-and-test)).
+- **Track: Social Money.** Reputation-based access, a Sputnik DAO as the
+  event host and as the dispute council (votes in Trezu), named accounts as
+  identity; see [Social Money](#social-money-dao-reputation-named-accounts).
+  Already used at a real meetup with BaliSquad:
+  [the event on BaliSquad](https://balisquad.com/event/bukitsocial-z3CmSN),
+  [our landing](https://www.nearvent.site/about).
 - **Track: Real-World Money.** Its three hints in the code: stablecoins (USDC
   deposits and payouts, `contracts/events/src/lib.rs`), NEAR Intents (pay from
   and withdraw to other chains through 1Click, `web/src/app/api/oneclick/`,
   `web/src/app/api/intents/`), meta-transactions (NEP-366, our relayer pays the
   gas, `web/src/app/api/fastauth/relay/`).
-- **Track: Social Money.** Reputation-based access, a Sputnik DAO as the
-  event host and as the dispute council (votes in Trezu), named accounts as
-  identity; see [Social Money](#social-money-dao-reputation-named-accounts).
+- **What it is:** RSVP to a meetup with a small USDC deposit; the guests who
+  come split the no-shows' deposits.
+- **Try it, no wallet, 2 minutes:** [www.nearvent.site/demo](https://www.nearvent.site/demo);
+  the steps are in the [user docs](https://www.nearvent.site/docs).
+- **Live app:** [www.nearvent.site](https://www.nearvent.site) on NEAR mainnet,
+  escrow [`escrow.lold.near`](https://nearblocks.io/address/escrow.lold.near).
+- **Check without a browser:** `cargo test --locked -p near-events-sandbox`
+  runs the full money cycle on a local NEAR sandbox ([Build and test](#build-and-test)).
 - **Built during the hackathon:** all of it, see [Hackathon work](#hackathon-work).
 
 **Problem.** Free meetups lose many of their RSVPs to no-shows: an RSVP costs
@@ -37,26 +39,18 @@ every guest puts down the same small USDC deposit. Guests who show up get it
 back plus an equal share of the no-shows' deposits. Hosts can also sell paid
 tickets or run free RSVP events. Creating an event is free.
 
-**What is new compared to Kickback.** Kickback (2018–2023) ran on Ethereum:
-deposits in ETH, every guest needed ETH for gas, and each event was a new
-contract the host paid to deploy. To serve Solana or Base users, someone would
-have to build the same app again for each ecosystem. Nearvent is one app for
-all of them: through NEAR Intents a guest pays from the chain they already use
-and takes the payout back to any chain. Deposits are in USDC, so they keep
-their value; guests pay no gas; hosts create events for free; the same escrow
-also sells tickets and runs free RSVPs; hosts import an existing Luma event by
-its link, and a two-line button adds registration to their own website.
-
 **Business model.** Guests never pay Nearvent a fee; hosts and venues do. For
 now everything is free so we can bring hosts in. Next: a monthly plan for
 communities that run regular events and a small fee on paid tickets. We will
 also test sponsored placement of events in Explore. We are checking these
-options with event hosts in Bali, where we run our first events.
+options with event hosts in Bali, where we run our first events. We keep
+hosting and attending meetups there, showing Nearvent to hosts and introducing
+the local crypto crowd to NEAR Intents.
 
 **How NEAR fits in.**
 - A Rust escrow contract on NEAR holds the deposits. The host records who came
   and the contract splits the pool among them; the host has no way to withdraw
-  it directly (see [Trust model](#trust-model)).
+  it directly (see [Optimistic escrow](#optimistic-escrow)).
 - Payments and payouts go through NEAR Intents (`intents.near`): a guest can pay
   from another chain through 1Click and withdraw to any chain or to an Intents
   account.
@@ -65,7 +59,17 @@ options with event hosts in Bali, where we run our first events.
   (on mainnet once NEAR Auth issues our client id); our relayer pays the gas in
   both cases. Hosts need no NEAR to create a small event.
 - A community can run its events as a Sputnik DAO, and the escrow can admit
-  only the regulars of a host; see the next section.
+  only the regulars of a host; see [Social Money](#social-money-dao-reputation-named-accounts).
+
+## Tested in Bali with BaliSquad
+
+BaliSquad runs most of the meetups in Bali (90% market share). We ran a real
+meetup with Nearvent together with its founder: the AI Coworking Meetup in
+Uluwatu on 9 November ([the event on BaliSquad](https://balisquad.com/event/bukitsocial-z3CmSN)).
+7 guests put down a deposit and all 7 checked in. The run used NEAR testnet
+and test USDC. The founder liked it: he sees the same problem at his own
+events, where free RSVPs often don't show up. Photos and clips from the
+evening are on [our landing](https://www.nearvent.site/about).
 
 ## Social Money: DAO, reputation, named accounts
 
@@ -111,187 +115,56 @@ a NEAR account. Named accounts (for example `alice.near` or
 Google/email users get an implicit account and EVM users their `0x` NEAR
 Intents account; the site shortens both on screen.
 
-## Attendance oracle (optional, off by default)
+## Optimistic escrow
 
-We count on hosts being honest, as at any meetup, so by default the host's list
-of who came is final and pays out at once, as in Kickback. The oracle is for
-communities that want a check, and we expect most events never to need it. That
-is why it is optimistic: nobody votes unless someone disputes.
+The escrow holds the deposits; the host only says who came.
 
-When the owner switches it on (`set_rules` with a Sputnik DAO as the court):
-1. After the event the host publishes who came (`finalize`); nothing is paid yet.
-2. For 12 hours any guest can dispute one record ("I came" or "X did not come")
-   by locking one deposit.
-3. Our keeper bot opens a proposal in the court DAO. When 3 of its 5 council
-   members approve, the proposal calls `resolve_dispute`.
-4. Anyone calls `settle`, and the pool is split by the final list. An event
-   with no disputes simply settles after the 12 hours.
+- **The host cannot take the pool.** USDC leaves the escrow only as shares to
+  the guests who came, refunds and, for tickets, the ticket price to the host
+  at registration. Each account withdraws only its own balance. No method lets
+  the owner (`lold.near`) touch balances, though it can replace the code until
+  the one-way `freeze`.
+- **Optimistic by default.** We count on hosts being honest, as at any meetup,
+  so the host's list is final and pays out at once, as in Kickback. Hosts'
+  records are public, and with the whitelist mode on (off now) only verified
+  hosts can create events.
+- **Optional dispute oracle.** For communities that want a check, the owner
+  turns on a Sputnik DAO court (`set_rules`). After the host publishes who
+  came, guests have 12 hours to dispute one record by locking one deposit. Our
+  keeper bot opens a proposal; when 3 of the 5 council members approve, it calls
+  `resolve_dispute`. Then anyone calls `settle`. Nobody votes unless someone
+  disputes, and a host bond can be required too (0 by default). We expect most
+  events never to need it.
+- **Deadlines.** Registration for deposit events closes at the start. The host
+  publishes who came within 72 hours after the end; if not, anyone can call
+  `refund`, and everyone gets the deposit back unless guests prove they came.
+  The host can cancel and refund everyone while the event is open.
+- **Limits.** Free for hosts up to 50 seats, 2 events per 30 days, ending
+  within 60 days; bigger events pay a little NEAR for storage. Up to 300 seats,
+  deposit from 0.1 USDC.
+- **Off-chain parts.** Check-ins, the door team, guest names and event details
+  live on the Nearvent server. The door log only grows and is frozen once the
+  list is published. Without our server the host can still publish or cancel
+  from any NEAR client.
 
-If the host publishes nothing within 72 hours, anyone can call `refund`: guests
-who came can still prove it, otherwise everyone gets the deposit back. The owner
-can also require a host bond (0 by default). The full rules are in the comments
-at the top of `contracts/events/src/lib.rs`.
+The full rules are in the comments at the top of `contracts/events/src/lib.rs`.
 
-## Networks (2026-11-13)
+## Networks
 
-[www.nearvent.site](https://www.nearvent.site) runs on **NEAR mainnet** with real
-USDC since 2026-11-11. Testnet stays for development and Vercel preview builds.
-
-| | Mainnet (www.nearvent.site) | Testnet (development, previews) |
-|---|---|---|
-| Escrow | [`escrow.lold.near`](https://nearblocks.io/address/escrow.lold.near), deployed 2026-11-11 | [`escrow-tp7.tp7-nv1110.testnet`](https://testnet.nearblocks.io/address/escrow-tp7.tp7-nv1110.testnet) |
-| USDC | native Circle USDC [`17208628…36133a1`](https://nearblocks.io/address/17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1) | test USDC `usdc.tidepool-sandbox.testnet` |
-| NEAR Intents, 1Click | `intents.near`, `1click.chaindefuser.com` | the [Tidepool](https://www.usetidepool.tech/docs) sandbox (official verifier code), since Intents has no testnet |
-| Google/email (NEAR Auth) | `fast-auth.near`; the button stays hidden until NEAR Auth issues our client id (requested 2026-11-09) | shared client, `localhost:3000` only |
-| Gas for Google/email users | relayer pays (meta-transactions) | relayer gives 0.5 NEAR once |
-| Demo account (made-up data in the browser) | yes | yes |
-| Test USDC faucet | no | yes |
-
-- **The contract in this repo is the next release.** It adds the Regulars
-  access rule, DAO hosts and the optional oracle. `escrow.lold.near` still runs
-  the previous release, where the host's list is final and there are no access
-  rules. The owner will apply this release in place with `upgrade`; the escrow
-  keeps its address. The upgrade from the exact mainnet code was rehearsed on
-  testnet (`v3rh2.stan-nv1109.testnet`), including a full dispute cycle with a
-  Sputnik DAO court.
-- Mainnet escrow: the CI reproducible WASM of `0361b38` (code hash
-  `7nrLLgzcUP1NUyUcKACekuq1EoEXWe5jW5a314HiVjm4`), owner `lold.near`, relayer
-  `event_relayer.near`. Deploy, init and key removal ran in one transaction
-  ([`Br4HMem…`](https://nearblocks.io/txns/Br4HMemQfN4WhqoVDchoPQ66XeWcis7onxxJB1gXeGt6)),
-  so the account has no access keys. The owner can still `upgrade` the code until
-  the one-way `freeze`; `get_config` shows `frozen`, the owner and the whitelist
-  and sponsored modes (both off). Evidence in [docs/DEPLOY.md](docs/DEPLOY.md#mainnet-release).
-
-  <details><summary>How to check the mainnet code against this repo</summary>
-
-  The mainnet WASM was built by CI in our private workspace repo at commit
-  `0361b388…`. This repo has the same history with the AI notes filtered out,
-  which gave every commit a new hash (see [Hackathon work](#hackathon-work)).
-  cargo-near writes the commit into the contract's NEP-330 metadata
-  (`contract_source_metadata`), so a rebuild here differs only in that embedded
-  hash. The contract did not change between the commit below and `0361b38`.
-  Check it out, build it and swap the hash back:
-
-  ```bash
-  git checkout "$(git log -1 --format=%H --grep='^Escrow: whitelist gates hosts')"
-  cd contracts && cargo near build reproducible-wasm --manifest-path events/Cargo.toml
-  perl -pe "s/$(git rev-parse HEAD)/0361b388eb9ea8dbd15b29108b49837621782946/g" \
-    target/near/near_events/near_events.wasm | shasum -a 256
-  # 64e50a1a50efb49ab093715d3d1066f40da22855d25d89432b697f902f5d0693
-  # = SHA-256 of the code on escrow.lold.near (base58: 7nrLLgzc…iVjm4)
-  ```
-  </details>
-- Testnet escrow used by the app: the previous release, CI reproducible WASM of
-  `96cb1ee` (code hash `571uYapS2GwgvfAXrzAcHaLgpb1s1gScUbSb35ESWztE`). Free
-  and paid creation, deposit, ticket, finalize and withdraw ran there with real
-  transactions before the mainnet deploy (see docs/DEPLOY.md).
-- `web/scripts/check-release.mjs` checks the mainnet setup read-only: escrow code,
-  keys and config, USDC, `intents.near`, the relayer, `fast-auth.near` + MPC
-  signer, NEAR Auth JWT keys, 1Click tokens and a dry quote.
-- Older testnet escrows (`tp3`–`tp6`) keep their test data on chain but the app does not read them.
-
-## Try it in two minutes (no wallet)
-
-Open **[www.nearvent.site/demo](https://www.nearvent.site/demo)** (or **Sign In** →
-**Try with a demo account**). The site switches to a demo with made-up events, guests and
-50 demo USDC. Everything stays in your browser: no server, no blockchain,
-nothing to pay. **Exit Demo** in the account menu clears it.
-
-1. **Explore** → *NEAR Builders Night* → type a name in **Your name** → **Register** → you appear under "Going" with a QR pass.
-2. **My Events** → *Sunset Builders Meetup* (yours, it just ended) → **Manage → Guests** → check a few guests in.
-3. **Publish Who Came** → the pool is split among the guests who came.
-4. *AI Coworking Morning* (you went) → **Withdraw** your share.
-5. **Create Event** → Stake to RSVP, Ticket or Free → it shows up in Explore.
-
-Outside the demo the site moves real USDC on mainnet: sign in with a NEAR wallet
-or an EVM browser-extension wallet (MetaMask etc.); the wallet asks before each
-transaction. Free mode: on `/create` pick Free → `/f/<id>` with a one-click RSVP. User docs: [www.nearvent.site/docs](https://www.nearvent.site/docs),
-smart contract: [/docs/contract](https://www.nearvent.site/docs/contract).
-
-## Run it locally
-
-```bash
-cd web
-cp .env.example .env.local      # optional server settings are listed in docs/DEPLOY.md
-npm install
-npm run dev                     # http://localhost:3000
-```
-
-`.env.example` already points at the testnet escrow; `.env.mainnet.example`
-lists the mainnet settings. Set `APP_SECRET` to any
-long random string (it signs host and door-team sessions). Without Upstash
-settings the server keeps check-ins, names and event details in `web/.data/`. The test
-USDC top-up and EVM registration need a relayer account (`RELAYER_ACCOUNT_ID`,
-`RELAYER_PRIVATE_KEY`, see docs/DEPLOY.md); without it, get test USDC from
-Tidepool. Google/email sign-in works on `http://localhost:3000` once
-`NEXT_PUBLIC_FASTAUTH_CLIENT_ID` is set to the shared testnet client from
-docs.auth.near.org. Then follow the steps above on `localhost:3000`.
-
-Without a browser or any account, `cargo test --locked -p near-events-sandbox`
-(see [Build and test](#build-and-test)) runs the whole money cycle on a local
-NEAR sandbox: a deposit event with no-shows, a ticket event, the Regulars rule,
-a dispute decided by a real Sputnik DAO, upgrade and freeze.
-
-## Rules the escrow enforces
-
-- Free tier for hosts: the escrow pays storage for events up to 50 seats that
-  end within 60 days, up to 2 free events per host in any 30 days (closing one
-  early does not give it back). Bigger or extra events cost the host a little
-  NEAR for storage (~0.29 NEAR for 50 seats, ~1.7 NEAR for 300), and the empty
-  seats' share comes back at close.
-- The host decides who came, so with the whitelist mode on only whitelisted
-  (verified) hosts can create events at all. A separate sponsored list, when its
-  mode is on, limits the free tier to listed hosts. Both are off by default.
-- Deposit events: registration closes when the event starts. Tickets are sold
-  until the end.
-- The host publishes who came (`finalize`) after the event ends and within 72
-  hours. Before the end the only way out is `cancel`, which refunds everyone.
-  With no list after 72 hours, anyone can call `refund` (see the oracle section).
-- Deposit mode: the host records who showed up but cannot take the pool. Ticket
-  mode: each ticket goes to the host's balance at registration and is never
-  refunded; anyone can close a ticket event 30 days after it ended.
-- An event can carry a Regulars access rule; the escrow checks it at every
-  registration.
-- A guest always pays for their own seat; only a payment relayed by NEAR
-  Intents names the guest.
-- The host is any NEAR account, a Sputnik DAO included. The door team
-  (co-hosts), check-ins, guest names, profiles, location, description and cover
-  live on the Nearvent server, not in the escrow; only the host can close or
-  cancel.
-- The oracle settings (`set_rules`) apply only to events created after the
-  change: each event keeps its own copy.
-
-## Trust model
-
-- **By default the host decides who came.** `finalize` counts only accounts
-  registered for that event, but a host who registers extra accounts of their
-  own and marks only those as present takes the real guests' deposits. This
-  rests on hosts being honest, as at any meetup: guests already trust the
-  organiser with the venue and the list. Profiles show each host's record, and
-  with the whitelist mode on (off now) only hosts the owner verified can create
-  events. Communities that want a check turn on the optional oracle, so guests
-  can dispute the list before any money moves.
-- **The host cannot withdraw the pool.** The escrow credits USDC only as shares
-  to attended guests, refunds, the rounding remainder (to the host) and, in
-  Ticket mode, the ticket price to the host at registration. Each account can
-  withdraw only its own balance.
-- **Check-ins live on the Nearvent server.** The door log only grows and is
-  frozen once the list is published. With the oracle on, every council
-  proposal carries the log's hash. Without our server the host can still
-  `finalize` or `cancel` from any NEAR client, and anyone can `refund` 72 hours
-  after the end.
-- **With the oracle on, guests also trust the council** (3 of 5). If it does
-  not vote, the host's record stands.
-- **The owner (`lold.near` on mainnet)** has no method that moves balances, but
-  until `freeze` it can replace the code, so until then guests trust the owner
-  too.
+- **Mainnet**, www.nearvent.site since 2026-11-11: escrow
+  [`escrow.lold.near`](https://nearblocks.io/address/escrow.lold.near), owner
+  `lold.near`, relayer `event_relayer.near`, no access keys on the escrow.
+  Native Circle USDC, `intents.near` and 1Click. Releases use the CI
+  reproducible build; hashes and checks are in [docs/DEPLOY.md](docs/DEPLOY.md#mainnet-release),
+  and `web/scripts/check-release.mjs` checks the setup read-only.
+- **Testnet** is for development and preview builds. We ran one real event on
+  it, the BaliSquad meetup above.
 
 ## Current limits
 
 - **Google/email sign-in on mainnet** is built and was tested on testnet. It
   appears on www.nearvent.site once NEAR Auth approves our application
   (submitted 2026-11-09).
-- **This release is not on mainnet yet**; see [Networks](#networks-2026-11-13).
 - **The escrow is not frozen yet.** We plan upgrades, so the owner keeps the
   right to replace the code; `freeze` makes it immutable and cannot be undone.
 
