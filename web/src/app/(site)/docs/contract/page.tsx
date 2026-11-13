@@ -10,13 +10,15 @@ const REPO = "https://github.com/AstralEX1/near-events";
 const tx = (hash: string) => `${EXPLORER_URL}/txns/${hash}`;
 const acc = (id: string) => `${EXPLORER_URL}/address/${id}`;
 
-// Real transactions on the escrow this site uses; mainnet gets its own once they exist.
+// Real transactions on the escrow this site uses.
 const PROOF: [string, string][] = NETWORK === "testnet" ? [
   ["5THM1T3rxJ2Lm2Gnmc4YSaXUgNM87poq4hbhEZuRn6U2", "Guest pays 0.1 USDC"],
   ["FNzcdnkA5KNVP8C2NXCo2bgjgy73HL9yNFbsfHbn2VmB", "Host closes: the guest came"],
   ["8shBJSzRK7aKDEHNPupzfvLY8funfvfR1fFbxkZEsp3Y", "The guest withdraws 0.1 USDC"],
   ["5ovEmf3ue62JSxkNzkY17dXWYdJM8W3pss2jDGSNydQf", "Owner upgrades the code"],
-] : [];
+] : [
+  ["22AN62wuxS1ngiEULEBbFMQw1qjziAK5BMWDgiYdndGx", "Owner upgrades the code to v3"],
+];
 
 /** The deployed code hash, read from the chain so it always matches the escrow above. */
 async function codeHash(): Promise<string> {
