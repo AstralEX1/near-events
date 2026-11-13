@@ -57,12 +57,11 @@ export default async function ContractDocs() {
           items={[
             { title: "Deposit", text: "Guests who came split the whole pool. Nobody came: full refund." },
             { title: "Ticket", text: "The price goes to the host when a guest registers." },
-            { title: "Host bond", text: "If the rules ask for one, a deposit event opens for registration once the host locks a bond of 0–2 deposits per seat (the owner sets it; 0 by default). The bond comes back unless the council upholds a dispute or the host publishes no list. Registration closes when the event starts." },
             { title: "Publish", text: "Within 3 days after the end (by default), the host publishes who came. Nothing is paid yet." },
             { title: "Disputes", text: "For 12 hours (by default) any guest can dispute one record by locking one deposit. A council of 5 decides through a Sputnik DAO vote (3 of 5) within 7 days after the window (by default). A dispute it doesn’t decide in time expires: the list stands and the deposit goes back." },
-            { title: "Payout", text: "Then anyone can settle. A host proven wrong loses the bond: part of it, up to 5 deposits each, to the guests whose dispute was upheld; the rest to the treasury. A wrong dispute loses its deposit: half to the treasury, half to the guests who came." },
-            { title: "Cancel", text: "The host can cancel a deposit event before it starts (or any time before the bond is locked). Everyone is refunded, the bond too. Cancelling a ticket event refunds nothing." },
-            { title: "No list", text: "3 days after the end (by default) without a list, anyone can start the refund. The list then counts as empty, and guests who came have the dispute window to prove it. If nobody does, everyone gets the deposit back plus a share of the bond. If someone does, the guests who proved it split the pool." },
+            { title: "Payout", text: "Then anyone can settle. A wrong dispute loses its deposit: half to the treasury, half to the guests who came." },
+            { title: "Cancel", text: "The host can cancel a deposit event until it publishes the list. Everyone is refunded. Cancelling a ticket event refunds nothing." },
+            { title: "No list", text: "3 days after the end (by default) without a list, anyone can start the refund. The list then counts as empty, and guests who came have the dispute window to prove it. If nobody does, everyone gets the deposit back. If someone does, the guests who proved it split the pool." },
           ]}
         />
       </Section>
@@ -76,7 +75,7 @@ export default async function ContractDocs() {
           <li>Touch anyone’s balance.</li>
         </ul>
         <p className="text-sm text-muted">
-          The host publishes who came, and the bond makes a wrong list expensive. Deposit events close registration when they start (ticket events when they end), so the host cannot add guests after seeing who came.
+          The host publishes who came, and any guest can dispute a record before the council. Deposit events close registration when they start (ticket events when they end), so the host cannot add guests after seeing who came.
         </p>
         <p className="text-sm text-muted">
           Check-ins stay off-chain, so 300 guests cost nothing. Only the final list goes on-chain. The contract account
@@ -91,14 +90,13 @@ export default async function ContractDocs() {
           rows={[
             [<Mono key="1">create_event</Mono>, "Host", "Creates an event"],
             [<Mono key="2">ft_transfer_call</Mono>, "Guest", <>Pays and registers · <Mono>{`{"action":"register","event_id":N}`}</Mono></>],
-            [<Mono key="2a">ft_transfer_call</Mono>, "Anyone, for the host", <>Locks the host bond · <Mono>{`{"action":"host_bond","event_id":N}`}</Mono></>],
             [<Mono key="2b">ft_transfer_call</Mono>, "Guest, during the dispute window", <>Opens a dispute · <Mono>{`{"action":"dispute","event_id":N,"target":"…","attended":true}`}</Mono></>],
             [<Mono key="3">finalize</Mono>, "Host, by the deadline (3 days after the end by default)", "Publishes the list of who came (ticket: closes the event)"],
             [<Mono key="3a">resolve_dispute</Mono>, "The event’s DAO", "Records the council’s verdict on one dispute"],
             [<Mono key="3b">settle</Mono>, "Anyone, after the dispute window", "Pays out by the final list"],
             [<Mono key="3c">refund</Mono>, "Anyone, after that deadline", "Publishes an empty list for a host who published none"],
-            [<Mono key="4">cancel</Mono>, "Host · ticket: anyone after 30 days", "Refunds every deposit and the host bond (tickets: no refund)"],
-            [<Mono key="4a">set_rules</Mono>, "Owner", "Court, treasury, bond per seat and hours for new events; running events keep theirs"],
+            [<Mono key="4">cancel</Mono>, "Host · ticket: anyone after 30 days", "Refunds every deposit (tickets: no refund)"],
+            [<Mono key="4a">set_rules</Mono>, "Owner", "Court, treasury and hours for new events; running events keep theirs"],
             [<Mono key="5">withdraw</Mono>, "Anyone", "Sends out your balance"],
             [<Mono key="6">on_auth</Mono>, "NEAR Intents wallets", "Create, finalize or cancel through an auth_call intent"],
             [<Mono key="7">add_to_whitelist · set_whitelist_mode</Mono>, "Owner", "Only listed hosts create events, when on"],

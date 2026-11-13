@@ -86,8 +86,8 @@ export default function DocsHome() {
             ["Who holds the money?", "A smart contract. Not Nearvent, not the host."],
             ["Can the host keep the deposits?", "No. The host only says who came, and guests can dispute it."],
             ["Nobody showed up?", "Everyone gets their deposit back."],
-            ["The host never publishes who came?", "3 days after the end (by default), anyone can start the refund. The list then counts as empty, and guests who came have 12 hours to prove it. If nobody does, everyone gets the deposit back plus a share of the host’s bond. If someone does, the guests who proved it split the pool."],
-            ["I came but was marked absent.", "Open a dispute on the event page within 12 hours (by default) after the host publishes the list. It locks one deposit, and a council of 5 decides. If it agrees, you get your share, your deposit and part of the host’s bond. If it disagrees, you lose the deposit."],
+            ["The host never publishes who came?", "3 days after the end (by default), anyone can start the refund. The list then counts as empty, and guests who came have 12 hours to prove it. If nobody does, everyone gets the deposit back. If someone does, the guests who proved it split the pool."],
+            ["I came but was marked absent.", "Open a dispute on the event page within 12 hours (by default) after the host publishes the list. It locks one deposit, and a council of 5 decides. If it agrees, you get your share and your deposit back. If it disagrees, you lose the deposit."],
             ["Fees?", "None from Nearvent."],
           ]}
         />
