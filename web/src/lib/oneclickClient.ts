@@ -52,6 +52,20 @@ export async function oneClickQuote(body: Record<string, unknown>): Promise<Quot
   return json.quote;
 }
 
+/** Any other proxied 1Click call; `session` is the guest's own 1Click session (near.com balance). */
+export async function oneClickCall<T>(path: string, body?: unknown, session?: string): Promise<T> {
+  const r = await fetch(`/api/oneclick/${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    signal: AbortSignal.timeout(20_000),
+    headers: session ? { Authorization: `Bearer ${session}` } : undefined,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const json = await r.json().catch(() => ({}));
+  if (r.status === 401 && session) throw new Error("Your near.com check has expired. Check the balance again.");
+  if (!r.ok) throw new Error(json.message ?? json.error ?? `NEAR Intents error ${r.status}`);
+  return json as T;
+}
+
 export type SwapStatus = "PENDING_DEPOSIT" | "KNOWN_DEPOSIT_TX" | "PROCESSING" | "SUCCESS" | "INCOMPLETE_DEPOSIT" | "REFUNDED" | "FAILED";
 
 export async function oneClickStatus(depositAddress: string, memo?: string, signal?: AbortSignal): Promise<SwapStatus | null> {
