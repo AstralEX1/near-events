@@ -13,12 +13,8 @@
 //!
 //! Deposit events follow the `Rules` the owner set when they were created
 //! (`set_rules`; defaults: no court; window 12 h, publish 72 h, court 7 days;
-//! a host bond of 0–2 deposits per seat, only with a court; a court may ask none).
-//! Without a court (`rules.dao = None`) there is no bond and no dispute:
-//! registration closes at `starts_at` (`close_at_start`, the default), the
-//! host's list pays out when published, and if none comes within
-//! `submit_hours` anyone calls `refund`, which gives every guest the deposit
-//! back. With one:
+//! a host bond of 0–2 deposits per seat, only with a court). Without a court (`rules.dao = None`) there
+//! is no bond and no dispute: the host's list pays out when published. With one:
 //! 1. If `bond_per_seat` > 0, the host (or anyone for them) locks a bond of that many
 //!    deposits per seat (`host_bond` message); registration opens only after that.
 //!    It closes at `starts_at`, and the host can never take a seat.
@@ -45,9 +41,9 @@
 //!    dispute window. Guests who came can still prove it ("I came") and then
 //!    split the pool; if nobody proves it, everyone gets the deposit back. The
 //!    bond goes to the winners and the treasury, or, with no winner, to all
-//!    guests and the treasury. So abandoning never beats publishing an honest
-//!    list. The host may `cancel` while the event is open; once a bond is
-//!    locked, only before `starts_at`.
+//!    guests and the treasury. So abandoning never
+//!    beats publishing an honest list. The host may `cancel` only before
+//!    `starts_at` (or before the bond).
 //!
 //! Payouts land on an internal balance that the owner can withdraw to any
 //! NEAR account or into their NEAR Intents balance (`intents.near`, from where
@@ -707,10 +703,9 @@ impl Contract {
     }
 
     /// For a Deposit event whose host published no list by `submit_by`: anyone
-    /// publishes an empty list in the host's place. Without a court every guest
-    /// is refunded at once; with one the dispute window opens (then `settle`;
-    /// the host bond is lost, see the crate docs). With no guests the event
-    /// just closes (`Refunded`) and the bond goes back.
+    /// publishes an empty list in the host's place and opens the dispute window
+    /// (then `settle`; the host bond is lost, see the crate docs). With no
+    /// guests the event just closes (`Refunded`) and the bond goes back.
     pub fn refund(&mut self, event_id: u64) {
         let event = self.event(event_id);
         require!(event.mode == EventMode::Deposit, "Only Deposit events are refunded");
