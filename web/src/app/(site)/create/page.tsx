@@ -557,6 +557,16 @@ function CreateEvent() {
               >
                 <input className="input" type="number" min="1" max={maxSeats} required value={form.capacity} onChange={(e) => set("capacity")(e.target.value)} />
               </OptionRow>
+              {/* With a court the host locks a bond before registration opens: show the amount up front, not only in the Deposit help. */}
+              {form.mode === "Deposit" && rules?.dao && (
+                <div className="lu-row" tabIndex={0} data-tooltip={`Locked before registration opens. It comes back after the event unless the council upholds a dispute or you publish no list within ${hoursText(rules.submit_hours)}.`}>
+                  <Icon d="M5 11h14v10H5zM8 11V7a4 4 0 018 0v4" className="text-muted" />
+                  <span className="flex-1">Your bond</span>
+                  <span className="font-medium text-muted tabular-nums">
+                    {amountOk && seatsOk ? `${formatUsdc(BigInt(toUnits(form.deposit)) * BigInt(seats) * BigInt(rules.bond_per_seat))} USDC` : bondPerSeatText({ rules })}
+                  </span>
+                </div>
+              )}
               {free && <ApprovalToggle checked={approval} onChange={setApproval} />}
               {/* Door check-in is for paid events; free events only keep an RSVP list. */}
               {!free && <OptionRow
@@ -944,7 +954,7 @@ function depositHint(rules: EventView["rules"] | null, pool: bigint | null): str
   if (!rules) return base;
   if (!rules.dao) return `${base} Your list of who came is final. Registration closes when the event ${rules.close_at_start ? "starts" : "ends"}.`;
   const bond = pool === null ? "deposit × seats" : `${formatUsdc(pool * BigInt(rules.bond_per_seat))} USDC`;
-  return `${base} Before registration opens, you lock a bond of ${bondPerSeatText({ rules })} (${bond}). You get it back after the event unless the council upholds a dispute or you publish no list within ${hoursText(rules.submit_hours)}. Registration closes when the event starts.`;
+  return `${base} Before registration opens, you lock a bond of ${bondPerSeatText({ rules })} (${bond}). It comes back after the event unless the council upholds a dispute or you publish no list within ${hoursText(rules.submit_hours)}. Registration closes when the event starts.`;
 }
 
 /** After creating: share the event page, quick checkout, or simple site button. */

@@ -12,6 +12,7 @@ import { Avatar, StatusPill, shortAccount } from "@/components/ui";
 import { QrScanner } from "@/components/Qr";
 import { IntegrationGuide } from "@/components/IntegrationGuide";
 import { Overview, cancelText } from "./Overview";
+import { guestStatus } from "@/lib/eventLines";
 import { PublicDetailsEditor } from "./PublicDetailsEditor";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 import { guestNamesApi, type GuestNames } from "@/lib/guestNamesClient";
@@ -260,7 +261,7 @@ function ManageEvent() {
       const currentPool = BigInt(fresh.total_pool);
       // With a court the list waits out the dispute window; without one it pays out now.
       const after = fresh.dao
-        ? `Guests can dispute any record for ${windowText(fresh)}; the council decides. A record they prove wrong costs you your whole bond. Then anyone settles the payouts.`
+        ? `Guests can dispute any record for ${windowText(fresh)}; the council decides. A record they prove wrong costs you your whole bond (${formatUsdc(fresh.host_bond ?? "0")} USDC). Then anyone settles the payouts.`
         : "Payouts go out now.";
       const confirmation = ticket
         ? `Close the event?\n\n${fresh.guest_count} tickets · ${formatUsdc(currentPool)} USDC is already in your balance.\n\nThis cannot be undone.`
@@ -321,7 +322,7 @@ function ManageEvent() {
 
       {tab === "overview" && (
         <>
-          <OraclePanel event={event} guests={guests} hostTeam={hostTeam} onChange={load} />
+          <OraclePanel event={event} guests={guests} hostTeam={hostTeam} onChange={load} manage />
           <Overview
             event={event}
             guests={guests}
@@ -557,7 +558,7 @@ function GuestsTab({
                     </div>
                     <div className="text-xs text-muted">
                       {name ? `${shortAccount(g.account_id)} · ` : ""}
-                      {attended ? "Checked in" : "Paid · going"}
+                      {guestStatus(event, g, isHost).label}
                     </div>
                   </div>
                   {attended ? (
@@ -591,15 +592,10 @@ function GuestsTab({
         )}
       </section>
 
-      {open && isHost && paid > 0 && (
+      {/* Shown only when it works: before the end the Overview says when it opens; past the deadline only the refund is left. */}
+      {open && isHost && paid > 0 && ended && !late && (
         <div className="pt-2 border-t border-border">
-          <button
-            type="button"
-            className="btn btn-primary w-full sm:w-auto"
-            disabled={busy || !ended || late}
-            data-tooltip={!ended ? "Available once the event ends" : late ? `Too late: the deadline was ${new Date(event.submit_by!).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : undefined}
-            onClick={onFinalize}
-          >
+          <button type="button" className="btn btn-accent w-full sm:w-auto" disabled={busy} onClick={onFinalize}>
             {ticket ? "Close Event & Get Paid" : "Publish Who Came"}
           </button>
         </div>

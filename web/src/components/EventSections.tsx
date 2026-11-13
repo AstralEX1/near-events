@@ -75,6 +75,7 @@ export const ICONS = {
   heart: ["M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"],
   check: ["M20 6 9 17l-5-5"],
   clock: ["M12 6v6l4 2", "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20"],
+  lock: ["M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z", "M7 11V7a5 5 0 0 1 10 0v4"],
 };
 
 // Icon paths from Lucide (ISC license).
@@ -90,7 +91,8 @@ export function Icon({ paths, size = 20 }: { paths: string[]; size?: number }) {
  * The registration card: a header strip, one summary row (icon, what it is, price)
  * and one main action below. Luma's layout with our price on the right.
  */
-export function RegisterBox({ head, aside, icon, title, desc, price, tone = "accent", children }: {
+export function RegisterBox({ id = "registration", head, aside, icon, title, desc, price, tone = "accent", children }: {
+  id?: string;
   head: ReactNode;
   aside?: ReactNode;
   icon?: string[];
@@ -101,7 +103,7 @@ export function RegisterBox({ head, aside, icon, title, desc, price, tone = "acc
   children?: ReactNode;
 }) {
   return (
-    <div id="registration" className="gc-reg">
+    <div id={id} className="gc-reg">
       <div className="gc-reg-head"><span>{head}</span>{aside && <span className="tabular-nums">{aside}</span>}</div>
       <div className="gc-reg-body">
         {title && (

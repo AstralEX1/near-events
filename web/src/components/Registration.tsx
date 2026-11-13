@@ -14,9 +14,6 @@ import { DepositRulesTooltip } from "@/components/DepositRulesTooltip";
 import { guestNamesApi } from "@/lib/guestNamesClient";
 import { ruleText, type AccessCheck } from "@/lib/access";
 
-const when = (ms: number) =>
-  new Date(ms).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-
 function requireDisplayName(value: string): string {
   const name = value.trim().replace(/\s+/g, " ");
   if (!name) throw new Error("Enter your name so the host can find you at the door.");
@@ -185,12 +182,11 @@ export function RegistrationCard({
   if (event.status === "Cancelled" && ticket) {
     body = <p className="text-sm">This event was cancelled. Tickets are not refunded.</p>;
   } else if (event.status === "Submitted") {
-    body = !myStatus ? (
-      <p className="text-sm">This event is over. Payouts follow the dispute window.</p>
-    ) : event.abandoned ? (
-      <p className="text-sm">The host published no list. Came to the event? Prove it below before {when(event.challenge_ends_at ?? 0)}.</p>
-    ) : (
-      <p className="text-sm">The host published who came. Payouts follow when the dispute window ends on {when(event.challenge_ends_at ?? 0)}; see below.</p>
+    // The "Who came" panel below has the list, the deadline and the dispute button.
+    body = (
+      <p className="text-sm">
+        {!myStatus ? "This event is over." : event.abandoned ? "The host published no list." : "The host published who came."} Payouts come after the dispute window.
+      </p>
     );
   } else if (event.status === "Refunded") {
     // `refund` with no guests: the event just closed and the bond went back to the host.
@@ -273,10 +269,12 @@ export function RegistrationCard({
     body = accountId
       ? <p className="text-sm">Registration is closed: the event has {Date.now() >= event.metadata.ends_at ? "ended" : "started"}.</p>
       : <SignInFolded hint="Registration is closed. Registered? Sign in to see your pass." onDone={refreshAfterSignIn} />;
+  } else if (needsBond(event)) {
+    body = accountId === event.host
+      ? <p className="text-sm text-muted">Registration opens once you lock your bond below.</p>
+      : <p className="text-sm text-muted">Registration opens once the host locks a bond of {formatUsdc(hostBondFor(event))} USDC.</p>;
   } else if (accountId === event.host) {
     body = <p className="text-sm">You’re the host. Hosts can’t take a seat at their own event.</p>;
-  } else if (needsBond(event)) {
-    body = <p className="text-sm text-muted">Registration opens once the host locks a bond of {formatUsdc(hostBondFor(event))} USDC.</p>;
   } else if (accountId && rule && access?.allowed === false) {
     body = (
       <p className="text-sm">
