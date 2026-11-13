@@ -180,7 +180,6 @@ export default function TopUpAndRegister() {
       {event.access && <p className={notAllowed ? "text-warn" : "text-muted"}>{notAllowed ? `You can't register yet. ${ruleText(event.access)}` : ruleText(event.access)}</p>}
       <p className="text-muted">
         Your {isTicket(event) ? "ticket" : "deposit"} of <b className="text-text">{price}</b> is paid from your NEAR Intents balance.
-        Top it up on near.com, the official NEAR app, then confirm here.
       </p>
       {!accountId ? (
         <button className="btn btn-primary w-full" onClick={() => void signIn()}>Sign In First</button>
