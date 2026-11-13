@@ -8,9 +8,9 @@ import { EXPLORER_URL } from "@/lib/config";
 
 const LINK_LABEL = { x: "X", telegram: "Telegram", instagram: "Instagram", website: "Website" } as const;
 
-/** The wallet this account signs in with, on a public explorer: DeBank for 0x addresses, NearBlocks for NEAR accounts. */
+/** A NEAR account on NearBlocks; 0x addresses get no link (Alex dropped DeBank). */
 function walletLink(account: string): [string, string] | null {
-  if (/^0x[0-9a-f]{40}$/i.test(account)) return ["DeBank", `https://debank.com/profile/${account}`];
+  if (account.startsWith("0x")) return null;
   if (/^[a-z0-9._-]+$/.test(account) && !account.endsWith(".demo")) return ["NearBlocks", `${EXPLORER_URL}/address/${account}`];
   return null; // demo people and imported guests like "balisquad:name" have no wallet
 }
