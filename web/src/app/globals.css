@@ -242,10 +242,9 @@ button:not(:disabled), summary { cursor: pointer; }
   max-width:300px; padding:4px 8px; border-radius:4px;
   background:rgba(97,97,97,.92); color:#fff;
   font-size:0.6875rem; font-weight:500; line-height:1.4em; overflow-wrap:break-word; white-space:pre-line;
-  opacity:0; transform:scale(.97); transition:opacity 125ms var(--ease-out), transform 125ms var(--ease-out);
+  opacity:0; transform:scale(.97); transition:opacity 150ms var(--ease-out), transform 150ms var(--ease-out);
 }
-.nv-tooltip.is-open { opacity:1; transform:none; transition-duration:150ms; }
-.nv-tooltip.is-instant { transition-duration:0ms; }
+.nv-tooltip.is-open { opacity:1; transform:none; transition-duration:300ms; }
 @media (prefers-reduced-motion: reduce) { .nv-tooltip { transform:none; } }
 
 /* Loading placeholder: appears only if loading takes a beat, so fast loads don't flash. */
