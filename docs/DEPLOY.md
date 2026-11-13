@@ -466,7 +466,7 @@ Before the upgrade:
    ```bash
    OWNER=lold.near EVENTS_CONTRACT=escrow.lold.near NETWORK=mainnet node web/scripts/escrow-owner.mjs mode on
    ```
-   `check-release.mjs` (step 5) must then print "whitelist on" and "0 recent events".
+   The step 5 command (without `WASM=`) must then print "whitelist on" and "0 recent events".
 2. **Reproducible WASM.** Take the `escrow-wasm` artifact of the CI run of the release commit on `main` (`cargo near build reproducible-wasm`, no features). Record its SHA-256 and the NEAR code hash here.
    - The local non-reproducible release build is 357 900 B.
    - Never deploy a `--features short-windows` WASM: `new` and `migrate` refuse it outside `.testnet` / `.test.near`.
