@@ -16,7 +16,7 @@ export function ReputationBadges({ attended, hosted = 0, guestsCame = 0, showUp,
   return (
     <>
       {hosted > 0 && (
-        <Badge small={small} tone="bg-accent-soft text-accent" value={hosted} tip={`Hosted ${plural(hosted)}`}
+        <Badge small={small} tone="bg-accent-soft text-accent" value={hosted} tip={`Held ${plural(hosted)}`}
           sub={guestsCame > 0 ? `${guestsCame} guest${guestsCame === 1 ? "" : "s"} came` : undefined}
           icon={<path d="M5 21V4h11l-2 4 2 4H5" />} />
       )}

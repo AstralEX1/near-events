@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { events, formatUsdc, isTicket, type EventView } from "@/lib/near";
+import { ruleText, type AccessCheck } from "@/lib/access";
 import { EVENTS_CONTRACT, LIVE_EVENT_SWAPS } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import type { OneClickToken } from "@/lib/oneclick";
@@ -37,6 +38,8 @@ export default function PayFromAnyChain() {
   const [available, setAvailable] = useState<bigint | null>(null);
   const [walletSent, setWalletSent] = useState(false);
   const [registered, setRegistered] = useState(false);
+  // The access rule's verdict for this account; registering would refund the payment otherwise.
+  const [access, setAccess] = useState<AccessCheck | null>(null);
   const live = LIVE_EVENT_SWAPS;
   const paymentKey = `near-me:payment:${id}:${accountId ?? ""}`;
 
@@ -60,8 +63,11 @@ export default function PayFromAnyChain() {
     setRegistered(false);
     setWalletSent(false);
     setAvailable(null);
-    if (!accountId || !live) return;
+    setAccess(null);
+    if (!accountId) return;
     let active = true;
+    events.checkAccess(id, accountId).then((check) => { if (active) setAccess(check); }).catch(() => {});
+    if (!live) return () => { active = false; };
     try {
       const saved = sessionStorage.getItem(paymentKey);
       if (saved) {
@@ -101,7 +107,8 @@ export default function PayFromAnyChain() {
   if (loadError) return <p className="text-warn">{loadError}</p>;
   if (event === undefined) return <p className="text-muted">Loading…</p>;
   if (!event) return <p>Event not found.</p>;
-  const canRegister = event.status === "Open" && event.guest_count < event.capacity && !registered;
+  const notAllowed = !!event.access && access?.allowed === false;
+  const canRegister = event.status === "Open" && event.guest_count < event.capacity && !registered && !notAllowed;
 
   const finishRegistration = async () => {
     if (!accountId || !canRegister) return;
@@ -137,7 +144,7 @@ export default function PayFromAnyChain() {
 
   const getQuote = async () => {
     if (!accountId) return signIn();
-    if (live && !canRegister) return;
+    if (notAllowed || (live && !canRegister)) return;
     setBusy(true);
     setError(null);
     setQuote(null);
@@ -173,6 +180,7 @@ export default function PayFromAnyChain() {
     <div className="max-w-lg mx-auto space-y-6">
       <Link href={`/e/${id}`} className="text-muted hover:text-text">← {event.metadata.title}</Link>
       <h1 className="gc-page-title">Save your place.</h1>
+      {event.access && <p className={notAllowed ? "text-warn" : "text-muted"}>{notAllowed ? `You can't register yet. ${ruleText(event.access)}` : ruleText(event.access)}</p>}
       <p className="text-muted">
         Send any supported token from any chain. NEAR Intents (1Click) swaps it to exactly{" "}
         <b className="text-text">{formatUsdc(event.deposit)} USDC</b> {isTicket(event) ? "for your ticket " : ""}and credits your NEAR Intents balance. Confirm registration once the USDC arrives.

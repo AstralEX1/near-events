@@ -49,6 +49,11 @@
 //! change the code. The owner also runs both host lists (whitelist, sponsored).
 //!
 //! Each guest's finalized attendances are counted (`get_attended_count`).
+//!
+//! Access rule (optional, set at creation): only guests with a history at the
+//! same host's earlier finalized events may register — at least `min_attended`
+//! visits and at most `max_no_shows` no-shows among `past_events` — until
+//! `open_to_all_at`, if given. `check_access` shows the result for any account.
 
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use near_sdk::json_types::U128;
@@ -60,12 +65,12 @@ use near_sdk::{
 };
 
 // Sizes below are the measured worst case (64-char accounts, 120-char title)
-// plus ~25%: event 331 B, registration 191 B, balance entry 141 B,
-// attendance counter 113 B, whitelist entry 110 B, free log 125 B. `tests.rs` checks real
-// storage stays under them.
+// plus ~25%: event with the largest access rule 428 B, registration 247 B,
+// balance entry 141 B, attendance counter 113 B, whitelist entry 109 B, free log 125 B.
+// `tests.rs` checks real storage stays under them.
 /// Storage for one registration and its indexes. Each seat also reserves
 /// a separate balance entry and an attendance counter for settlement.
-pub const STORAGE_BYTES_PER_GUEST: u64 = 240;
+pub const STORAGE_BYTES_PER_GUEST: u64 = 310;
 const BALANCE_BYTES: u64 = 176;
 /// One entry in `attended_events`.
 const ATTENDED_BYTES: u64 = 144;
@@ -77,8 +82,11 @@ const FREE_LOG_BYTES: u64 = 160;
 const SETTLE_BYTES: u64 = BALANCE_BYTES + ATTENDED_BYTES;
 const SEAT_BYTES: u64 = STORAGE_BYTES_PER_GUEST + SETTLE_BYTES;
 const MAX_VIEW_PAGE: u32 = 100;
-/// Upper bound for one event record: max-length title and the vector slot.
-const EVENT_RECORD_BYTES: u64 = 420;
+/// Upper bound for one event record: max-length title, the largest access
+/// rule and the vector slot.
+const EVENT_RECORD_BYTES: u64 = 540;
+/// Most past events an access rule may look at.
+pub const MAX_RULE_EVENTS: usize = 10;
 /// Largest event the contract pays storage for.
 pub const FREE_MAX_CAPACITY: u32 = 50;
 /// The free tier gives a host this many events...
@@ -173,6 +181,32 @@ pub struct Event {
     pub closed_at: u64,
     /// NEAR (yocto) the host paid for storage; 0 on the free tier.
     storage_paid: u128,
+    /// Who may register; `None` lets everyone in.
+    pub access: Option<AccessRule>,
+}
+
+/// Registration limited to guests with a history at the same host's earlier events.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq)]
+pub struct AccessRule {
+    /// The host's own finalized events the rule looks at, 1 to `MAX_RULE_EVENTS`.
+    pub past_events: Vec<u64>,
+    /// The guest came to at least this many of them.
+    pub min_attended: u8,
+    /// And skipped at most this many (registered, never checked in at an
+    /// event someone attended). `None`: no limit.
+    pub max_no_shows: Option<u8>,
+    /// From this time (ms) anyone may register. `None`: never.
+    pub open_to_all_at: Option<u64>,
+}
+
+#[near(serializers = [json])]
+#[derive(Debug, PartialEq)]
+pub struct AccessCheck {
+    pub allowed: bool,
+    /// Visits and no-shows among the rule's past events.
+    pub attended: u8,
+    pub no_shows: u8,
 }
 
 #[near(serializers = [json])]
@@ -191,6 +225,7 @@ pub struct EventView {
     pub payout_per_attendee: U128,
     pub created_at: u64,
     pub closed_at: u64,
+    pub access: Option<AccessRule>,
 }
 
 #[near(serializers = [json])]
@@ -234,7 +269,7 @@ pub enum TransferMsg {
 #[near(serializers = [json])]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum AuthMsg {
-    CreateEvent { metadata: EventMetadata, deposit: U128, capacity: u32, mode: Option<EventMode> },
+    CreateEvent { metadata: EventMetadata, deposit: U128, capacity: u32, mode: Option<EventMode>, access: Option<AccessRule> },
     Finalize { event_id: u64, attended: Vec<AccountId> },
     Cancel { event_id: u64 },
     SetWhitelistMode { enabled: bool },
@@ -305,25 +340,6 @@ pub struct Contract {
     free_log: LookupMap<AccountId, [u64; FREE_MAX_EVENTS]>,
 }
 
-/// The tp7 state layout, read once by `migrate`.
-#[near(serializers = [borsh])]
-struct StateTp7 {
-    usdc: AccountId,
-    intents: Option<AccountId>,
-    events: Vector<Event>,
-    guests: LookupMap<(u64, AccountId), GuestRecord>,
-    guest_index: LookupMap<(u64, u32), AccountId>,
-    balances: LookupMap<AccountId, Balance>,
-    reserved_bytes: u64,
-    _open_events: LookupMap<AccountId, u32>,
-    attended_events: LookupMap<AccountId, u32>,
-    relayer: Option<AccountId>,
-    owner: AccountId,
-    frozen: bool,
-    _whitelist_mode: bool,
-    whitelist: LookupSet<AccountId>,
-}
-
 #[near]
 impl Contract {
     #[init]
@@ -362,9 +378,10 @@ impl Contract {
         deposit: U128,
         capacity: u32,
         mode: Option<EventMode>,
+        access: Option<AccessRule>,
     ) -> u64 {
         let attached = env::attached_deposit().as_yoctonear();
-        self.create_event_for(env::predecessor_account_id(), metadata, deposit, capacity, mode, attached)
+        self.create_event_for(env::predecessor_account_id(), metadata, deposit, capacity, mode, access, attached)
     }
 
     /// Closes the event with the guests who came (`attended`, checked in at
@@ -400,8 +417,8 @@ impl Contract {
         require!(env::attached_deposit().is_zero(), "Attach no NEAR to Intents calls");
         let action: AuthMsg = serde_json::from_str(&msg).unwrap_or_else(|_| env::panic_str("Invalid msg"));
         match action {
-            AuthMsg::CreateEvent { metadata, deposit, capacity, mode } => {
-                self.create_event_for(signer_id, metadata, deposit, capacity, mode, 0);
+            AuthMsg::CreateEvent { metadata, deposit, capacity, mode, access } => {
+                self.create_event_for(signer_id, metadata, deposit, capacity, mode, access, 0);
             }
             AuthMsg::Finalize { event_id, attended } => self.finalize_by(&signer_id, event_id, attended),
             AuthMsg::Cancel { event_id } => self.cancel_by(&signer_id, event_id),
@@ -475,36 +492,17 @@ impl Contract {
             .as_return()
     }
 
-    /// Run by `upgrade` on the new code. Keeps the current layout as is and
-    /// converts the tp7 layout (one list that gated the free tier, an
-    /// open-event counter): its list becomes the host whitelist, both modes off.
+    /// Run by `upgrade` on the new code. The state root keeps its layout.
     #[private]
     #[init(ignore_state)]
     pub fn migrate() -> Self {
         let raw = env::storage_read(b"STATE").unwrap_or_else(|| env::panic_str("No state to migrate"));
-        if let Ok(state) = near_sdk::borsh::from_slice::<Self>(&raw) {
-            return state;
-        }
-        let old: StateTp7 =
+        let state: Self =
             near_sdk::borsh::from_slice(&raw).unwrap_or_else(|_| env::panic_str("Unknown state layout"));
-        Self {
-            usdc: old.usdc,
-            intents: old.intents,
-            events: old.events,
-            guests: old.guests,
-            guest_index: old.guest_index,
-            balances: old.balances,
-            reserved_bytes: old.reserved_bytes,
-            attended_events: old.attended_events,
-            relayer: old.relayer,
-            owner: old.owner,
-            frozen: old.frozen,
-            whitelist_mode: false,
-            whitelist: old.whitelist,
-            sponsored_mode: false,
-            sponsored: LookupSet::new(StorageKey::Sponsored),
-            free_log: LookupMap::new(StorageKey::FreeLog),
-        }
+        // shortcut: `Event` gained `access`, so records written by the old code would not decode;
+        // this release upgrades only an escrow without events. Drop the check in the next release.
+        require!(state.events.len() == 0, "Events exist: their records need a migration");
+        state
     }
 
     /// Makes the code permanent: `upgrade` stops working for good. One-way.
@@ -590,6 +588,13 @@ impl Contract {
             .collect()
     }
 
+    /// Every event in creation order, a page of up to 100 from `from_index`.
+    pub fn get_events(&self, from_index: Option<u64>, limit: Option<u64>) -> Vec<EventView> {
+        let from = from_index.unwrap_or(0);
+        let end = u64::from(self.events.len()).min(from.saturating_add(limit.unwrap_or(50).min(100)));
+        (from..end).map(|id| view_event(id, &self.events[id as u32])).collect()
+    }
+
     pub fn get_guests(&self, event_id: u64, from_index: Option<u32>, limit: Option<u32>) -> Vec<GuestView> {
         let count = self.event(event_id).guest_count;
         let from = from_index.unwrap_or(0);
@@ -619,6 +624,12 @@ impl Contract {
     /// Finalized events the account was checked in at.
     pub fn get_attended_count(&self, account_id: AccountId) -> u32 {
         self.attended_events.get(&account_id).copied().unwrap_or(0)
+    }
+
+    /// Whether `account_id` may register under the event's access rule right
+    /// now, with their visits and no-shows among the rule's past events.
+    pub fn check_access(&self, event_id: u64, account_id: AccountId) -> AccessCheck {
+        self.access_check(event_id, &account_id)
     }
 
     /// NEAR (yocto) `host` must attach to create an event of `capacity` seats
@@ -695,11 +706,15 @@ impl Contract {
         deposit: U128,
         capacity: u32,
         mode: Option<EventMode>,
+        access: Option<AccessRule>,
         attached: u128,
     ) -> u64 {
         let mode = mode.unwrap_or_default();
         require!(self.can_create(host.clone()), "Only whitelisted hosts can create events");
         validate_metadata(&metadata);
+        if let Some(rule) = &access {
+            self.validate_access(&host, &metadata, rule);
+        }
         require!(deposit.0 >= MIN_DEPOSIT, "Deposit must be at least 0.1 USDC");
         require!(capacity > 0 && capacity <= MAX_CAPACITY, "Capacity out of range");
         // The whole event, full house included, must be paid for up front.
@@ -742,6 +757,7 @@ impl Contract {
             created_at: env::block_timestamp_ms(),
             closed_at: 0,
             storage_paid: cost,
+            access,
         });
 
         emit("event_created", json!({ "event_id": id, "host": host, "deposit": deposit, "mode": mode }));
@@ -881,6 +897,44 @@ impl Contract {
         );
     }
 
+    fn validate_access(&self, host: &AccountId, metadata: &EventMetadata, rule: &AccessRule) {
+        let n = rule.past_events.len();
+        require!(n >= 1 && n <= MAX_RULE_EVENTS, "An access rule lists 1 to 10 past events");
+        for (i, id) in rule.past_events.iter().enumerate() {
+            require!(!rule.past_events[..i].contains(id), "Past events repeat");
+            let past = self.event(*id);
+            require!(past.host == *host, "Past events must be your own");
+            require!(past.status == EventStatus::Finalized, "Past events must be finalized");
+        }
+        require!(
+            usize::from(rule.min_attended) <= n && rule.max_no_shows.map_or(true, |m| usize::from(m) <= n),
+            "The rule asks for more than its past events"
+        );
+        require!(rule.min_attended > 0 || rule.max_no_shows.is_some(), "The rule lets everyone in");
+        require!(
+            rule.open_to_all_at.map_or(true, |at| at < metadata.ends_at),
+            "Open the event to all before it ends"
+        );
+    }
+
+    fn access_check(&self, event_id: u64, guest: &AccountId) -> AccessCheck {
+        let Some(rule) = &self.event(event_id).access else {
+            return AccessCheck { allowed: true, attended: 0, no_shows: 0 };
+        };
+        let (mut attended, mut no_shows) = (0u8, 0u8);
+        for &id in &rule.past_events {
+            match self.guests.get(&(id, guest.clone())).map(|r| r.status) {
+                Some(GuestStatus::Attended) => attended += 1,
+                // An event closed with nobody checked in refunded everyone: not a no-show.
+                Some(GuestStatus::Registered) if self.event(id).attended_count > 0 => no_shows += 1,
+                _ => {}
+            }
+        }
+        let open = rule.open_to_all_at.map_or(false, |at| env::block_timestamp_ms() >= at);
+        let allowed = open || (attended >= rule.min_attended && rule.max_no_shows.map_or(true, |m| no_shows <= m));
+        AccessCheck { allowed, attended, no_shows }
+    }
+
     fn get_event_deposit(&self, event_id: u64) -> Option<u128> {
         self.events.get(u32::try_from(event_id).ok()?).map(|event| event.deposit)
     }
@@ -970,6 +1024,7 @@ impl Contract {
             && event.guest_count < event.capacity
             && self.keyless_ok(guest)
             && !self.guests.contains_key(&(event_id, guest.clone()))
+            && self.access_check(event_id, guest).allowed
     }
 
     /// Every seat was reserved when the event was created, so a registration
@@ -981,6 +1036,7 @@ impl Contract {
         require!(event.guest_count < event.capacity, "Event is full");
         require!(!self.guests.contains_key(&(event_id, guest.clone())), "Already registered");
         require!(self.keyless_ok(&guest), "Keyless registration requires Intents and a relayer");
+        require!(self.access_check(event_id, &guest).allowed, "Only regulars can register yet");
         let index = event.guest_count;
         self.reserved_bytes -= STORAGE_BYTES_PER_GUEST;
         self.guests.insert(
@@ -1063,6 +1119,7 @@ fn view_event(id: u64, e: &Event) -> EventView {
         payout_per_attendee: U128(e.payout_per_attendee),
         created_at: e.created_at,
         closed_at: e.closed_at,
+        access: e.access.clone(),
     }
 }
 

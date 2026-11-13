@@ -11,7 +11,7 @@ export function useReputation(account: string | null): Reputation | null {
     if (!account) return;
     let live = true;
     setRep(null);
-    Promise.all([events.attendedCount(account), events.list()])
+    Promise.all([events.attendedCount(account), events.all()])
       .then(([attended, all]) => live && setRep({ attended, ...hostedStats(all, account) }))
       .catch(() => live && setRep(null));
     return () => {

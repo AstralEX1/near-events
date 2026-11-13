@@ -2,6 +2,7 @@ import { rateLimited } from "@/lib/ratelimit";
 import { getCohostsMany, saveCohosts } from "@/lib/cohosts";
 import { normalizeCohosts } from "@/lib/cohostsShared";
 import { events } from "@/lib/near";
+import { hostAccounts } from "@/lib/daoHost";
 import { readStaffToken } from "@/lib/staff";
 
 // The door team of an event, kept on this server (see lib/cohosts.ts).
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
   try {
     const event = await events.get(body.eventId!);
     if (!event) return Response.json({ error: "Event not found" }, { status: 404 });
-    if (event.host !== accountId) return Response.json({ error: "Only the event host can change the door team" }, { status: 403 });
+    if (!(await hostAccounts(event.host)).includes(accountId)) return Response.json({ error: "Only the event host can change the door team" }, { status: 403 });
     const cohosts = normalizeCohosts(body.cohosts, event.host);
     if (!cohosts) return Response.json({ error: "Use up to 10 NEAR accounts or 0x addresses" }, { status: 400 });
     await saveCohosts(body.eventId!, cohosts);

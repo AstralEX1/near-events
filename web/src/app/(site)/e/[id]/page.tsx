@@ -18,6 +18,8 @@ import { guestNamesApi, type GuestNames } from "@/lib/guestNamesClient";
 import { useEventVisual } from "@/lib/event-visual-client";
 import { EventPageBackground } from "@/components/EventVisual";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
+import { hostAccounts, isDaoAccount } from "@/lib/daoHost";
+import { hostedStats } from "@/lib/reputationShared";
 
 /**
  * The hosted event page, laid out like Luma so hosts and guests feel at home.
@@ -33,6 +35,9 @@ export default function EventPage() {
   const [details, setDetails] = useState<EventDetails | null>(null);
   const [detailsUnavailable, setDetailsUnavailable] = useState(false);
   const [doorTeam, setDoorTeam] = useState<string[]>([]);
+  // The host, or the council when a DAO hosts.
+  const [hostTeam, setHostTeam] = useState<string[]>([]);
+  const [hostRecord, setHostRecord] = useState<{ hosted: number; guestsCame: number } | null>(null);
   const [names, setNames] = useState<GuestNames>({});
   const visual = useEventVisual(id, event?.metadata.title ?? "");
 
@@ -56,6 +61,9 @@ export default function EventPage() {
     setEvent(e);
     setGuests(g);
     if (e) {
+      setHostTeam([e.host]);
+      void hostAccounts(e.host).then(setHostTeam).catch(() => {});
+      void events.all().then((all) => setHostRecord(hostedStats(all, e.host))).catch(() => {});
       void team.then(setDoorTeam);
       void guestNames.then(setNames);
       void publicDetails.then((d) => {
@@ -74,7 +82,7 @@ export default function EventPage() {
   if (event === null) return <p>Event not found.</p>;
 
   const me = guests.find((g) => g.account_id === accountId);
-  const isStaff = !!accountId && (accountId === event.host || doorTeam.includes(accountId));
+  const isStaff = !!accountId && (hostTeam.includes(accountId) || doorTeam.includes(accountId));
 
   const going = guests.map((g) => g.account_id);
   const ticket = isTicket(event);
@@ -95,9 +103,17 @@ export default function EventPage() {
                 <Link key={a} href={`/u/${encodeURIComponent(a)}`} className="flex items-center gap-2 text-sm hover:text-accent">
                   <Avatar account={a} size={24} />
                   <span className="truncate font-medium">{shortAccount(a)}</span>
+                  {i === 0 && isDaoAccount(a) && <span className="text-xs text-muted">DAO</span>}
                   {i > 0 && <span className="text-xs text-muted">door</span>}
                 </Link>
               ))}
+              {hostRecord && (
+                <p className="text-xs text-muted">
+                  {hostRecord.hosted === 0
+                    ? "First event on Nearvent"
+                    : `Held ${hostRecord.hosted} event${hostRecord.hosted === 1 ? "" : "s"} · ${hostRecord.guestsCame} guest${hostRecord.guestsCame === 1 ? "" : "s"} came`}
+                </p>
+              )}
             </div>
           </Section>
           <GoingList accounts={going} names={names} total={event.guest_count} verb={open ? "Going" : "Went"} />

@@ -2,6 +2,7 @@ import { rateLimited } from "@/lib/ratelimit";
 import { getEventVisuals, saveEventVisual } from "@/lib/event-visual-store";
 import { validEventVisual } from "@/lib/event-visuals";
 import { events } from "@/lib/near";
+import { hostAccounts } from "@/lib/daoHost";
 import { readStaffToken } from "@/lib/staff";
 
 export async function GET(req: Request) {
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
   try {
     const event = await events.get(body.eventId!);
     if (!event) return Response.json({ error: "Event not found" }, { status: 404 });
-    if (event.host !== accountId) return Response.json({ error: "Only the event host can save event visuals" }, { status: 403 });
+    if (!(await hostAccounts(event.host)).includes(accountId)) return Response.json({ error: "Only the event host can save event visuals" }, { status: 403 });
     await saveEventVisual(body.eventId!, { themeId: body.visual.themeId, seed: body.visual.seed >>> 0 });
     return Response.json({ ok: true });
   } catch {

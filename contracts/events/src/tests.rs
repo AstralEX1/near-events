@@ -53,14 +53,14 @@ fn meta() -> EventMetadata {
 fn setup(capacity: u32) -> (Contract, u64) {
     ctx(&accounts(0), NearToken::from_near(5));
     let mut c = Contract::new(usdc(), Some("intents.near".parse().unwrap()), None, owner());
-    let id = c.create_event(meta(), U128(10 * USDC), capacity, None);
+    let id = c.create_event(meta(), U128(10 * USDC), capacity, None, None);
     (c, id)
 }
 
 fn setup_with_relayer(capacity: u32, relayer: AccountId) -> (Contract, u64) {
     ctx(&accounts(0), NearToken::from_near(5));
     let mut c = Contract::new(usdc(), Some("intents.near".parse().unwrap()), Some(relayer), owner());
-    let id = c.create_event(meta(), U128(10 * USDC), capacity, None);
+    let id = c.create_event(meta(), U128(10 * USDC), capacity, None, None);
     (c, id)
 }
 
@@ -105,7 +105,7 @@ fn full_cycle_attendees_split_pool() {
 fn remainder_goes_to_host() {
     let (mut c, _) = setup(10);
     ctx(&accounts(0), NearToken::from_near(5));
-    let id = c.create_event(meta(), U128(10 * USDC + 1), 10, None);
+    let id = c.create_event(meta(), U128(10 * USDC + 1), 10, None, None);
     for g in [accounts(2), accounts(3), accounts(4)] {
         pay(&mut c, &g, 10 * USDC + 1, &format!(r#"{{"action":"register","event_id":{id}}}"#));
     }
@@ -223,7 +223,7 @@ fn no_registration_after_finalize() {
 fn create_event_is_free_for_the_host() {
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = Contract::new(usdc(), Some("intents.near".parse().unwrap()), None, owner());
-    let id = c.create_event(meta(), U128(10 * USDC), 10, None);
+    let id = c.create_event(meta(), U128(10 * USDC), 10, None, None);
     assert!(c.free_log.contains_key(&accounts(0)));
     assert_eq!(c.get_event(id).unwrap().guest_count, 0);
     // Nothing is sent back to the host: no storage refunds exist any more.
@@ -239,7 +239,7 @@ fn create_event_fails_clearly_when_the_storage_pool_is_empty() {
         .account_balance(NearToken::from_millinear(1))
         .build());
     let mut c = Contract::new(usdc(), None, None, owner());
-    c.create_event(meta(), U128(10 * USDC), 10, None);
+    c.create_event(meta(), U128(10 * USDC), 10, None, None);
 }
 
 #[test]
@@ -277,7 +277,7 @@ fn open_event_reservations_cannot_be_reused() {
         .storage_usage(used)
         .account_balance(NearToken::from_yoctonear(bytes_cost(used + second)))
         .build());
-    c.create_event(meta(), U128(10 * USDC), 1, None);
+    c.create_event(meta(), U128(10 * USDC), 1, None, None);
 }
 
 #[test]
@@ -299,7 +299,7 @@ fn third_free_event_in_30_days_without_storage_deposit_is_rejected() {
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = Contract::new(usdc(), None, None, owner());
     for _ in 0..=FREE_MAX_EVENTS {
-        c.create_event(meta(), U128(10 * USDC), 10, None);
+        c.create_event(meta(), U128(10 * USDC), 10, None, None);
     }
 }
 
@@ -325,7 +325,7 @@ fn create_event_cost_is_zero_on_the_free_tier_only() {
     let big = c.create_event_cost(host.clone(), FREE_MAX_CAPACITY + 1, None).0;
     assert_eq!(big, bytes_cost(EVENT_RECORD_BYTES + SEAT_BYTES * 51 + BALANCE_BYTES));
     for _ in 0..FREE_MAX_EVENTS {
-        c.create_event(meta(), U128(10 * USDC), 10, None);
+        c.create_event(meta(), U128(10 * USDC), 10, None, None);
     }
     assert_eq!(c.create_event_cost(host.clone(), 10, None).0, bytes_cost(EVENT_RECORD_BYTES + SEAT_BYTES * 10 + BALANCE_BYTES));
     // Another host still has the free tier.
@@ -337,7 +337,7 @@ fn create_event_cost_is_zero_on_the_free_tier_only() {
 fn big_event_without_storage_deposit_is_rejected() {
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = Contract::new(usdc(), None, None, owner());
-    c.create_event(meta(), U128(10 * USDC), FREE_MAX_CAPACITY + 1, None);
+    c.create_event(meta(), U128(10 * USDC), FREE_MAX_CAPACITY + 1, None, None);
 }
 
 #[test]
@@ -347,7 +347,7 @@ fn big_event_with_too_little_deposit_is_rejected() {
     let mut c = Contract::new(usdc(), None, None, owner());
     let cost = c.create_event_cost(accounts(0), 60, None).0;
     ctx(&accounts(0), NearToken::from_yoctonear(cost - 1));
-    c.create_event(meta(), U128(10 * USDC), 60, None);
+    c.create_event(meta(), U128(10 * USDC), 60, None, None);
 }
 
 #[test]
@@ -357,7 +357,7 @@ fn paid_event_keeps_the_cost_and_returns_the_excess() {
     let cost = c.create_event_cost(accounts(0), MAX_CAPACITY, None).0;
     let extra = NearToken::from_near(1).as_yoctonear();
     ctx(&accounts(0), NearToken::from_yoctonear(cost + extra));
-    let id = c.create_event(meta(), U128(10 * USDC), MAX_CAPACITY, None);
+    let id = c.create_event(meta(), U128(10 * USDC), MAX_CAPACITY, None, None);
     assert_eq!(c.get_event(id).unwrap().capacity, MAX_CAPACITY);
     assert_eq!(transfers(), vec![(accounts(0), extra)]);
     // Same reservation as a free event of that size.
@@ -372,7 +372,7 @@ fn exact_cost_sends_nothing_back() {
     let mut c = Contract::new(usdc(), None, None, owner());
     let cost = c.create_event_cost(accounts(0), 51, None).0;
     ctx(&accounts(0), NearToken::from_yoctonear(cost));
-    c.create_event(meta(), U128(10 * USDC), 51, None);
+    c.create_event(meta(), U128(10 * USDC), 51, None, None);
     assert!(transfers().is_empty());
 }
 
@@ -381,11 +381,11 @@ fn paid_third_event_is_accepted() {
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = Contract::new(usdc(), None, None, owner());
     for _ in 0..FREE_MAX_EVENTS {
-        c.create_event(meta(), U128(10 * USDC), 10, None);
+        c.create_event(meta(), U128(10 * USDC), 10, None, None);
     }
     let cost = c.create_event_cost(accounts(0), 10, None).0;
     ctx(&accounts(0), NearToken::from_yoctonear(cost));
-    c.create_event(meta(), U128(10 * USDC), 10, None);
+    c.create_event(meta(), U128(10 * USDC), 10, None, None);
     assert_eq!(c.events.len(), 3);
 }
 
@@ -394,7 +394,7 @@ fn free_event_returns_attached_near() {
     ctx(&accounts(0), NearToken::from_near(2));
     let mut c = Contract::new(usdc(), None, None, owner());
     let before = c.unreserved_storage();
-    c.create_event(meta(), U128(10 * USDC), FREE_MAX_CAPACITY, None);
+    c.create_event(meta(), U128(10 * USDC), FREE_MAX_CAPACITY, None, None);
     assert_eq!(transfers(), vec![(accounts(0), NearToken::from_near(2).as_yoctonear())]);
     assert!(before < env::account_balance().as_yoctonear(), "attached NEAR is not the pool");
 }
@@ -409,7 +409,7 @@ fn attached_near_does_not_pay_for_a_free_event() {
         .attached_deposit(NearToken::from_near(1))
         .build());
     let mut c = Contract::new(usdc(), None, None, owner());
-    c.create_event(meta(), U128(10 * USDC), 10, None);
+    c.create_event(meta(), U128(10 * USDC), 10, None, None);
 }
 
 #[test]
@@ -417,7 +417,7 @@ fn closing_a_free_event_does_not_give_its_slot_back() {
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = Contract::new(usdc(), None, None, owner());
     for _ in 0..FREE_MAX_EVENTS {
-        let id = c.create_event(meta(), U128(10 * USDC), 10, None);
+        let id = c.create_event(meta(), U128(10 * USDC), 10, None, None);
         ctx(&accounts(0), one_yocto());
         c.cancel(id);
         ctx(&accounts(0), NearToken::from_yoctonear(0));
@@ -434,14 +434,14 @@ fn a_free_slot_opens_30_days_after_the_oldest_free_event() {
     let t1 = t0 + 1_000;
     at(t0);
     let mut c = Contract::new(usdc(), None, None, owner());
-    c.create_event(meta(), U128(10 * USDC), 10, None);
+    c.create_event(meta(), U128(10 * USDC), 10, None, None);
     at(t1);
-    c.create_event(meta(), U128(10 * USDC), 10, None);
+    c.create_event(meta(), U128(10 * USDC), 10, None, None);
     at(t0 + FREE_WINDOW_MS - 1);
     assert!(c.create_event_cost(accounts(0), 10, None).0 > 0);
     at(t0 + FREE_WINDOW_MS);
     assert_eq!(c.create_event_cost(accounts(0), 10, None).0, 0);
-    c.create_event(meta(), U128(10 * USDC), 10, None);
+    c.create_event(meta(), U128(10 * USDC), 10, None, None);
     // The next slot waits for the second event's window.
     assert!(c.create_event_cost(accounts(0), 10, None).0 > 0);
     at(t1 + FREE_WINDOW_MS);
@@ -453,7 +453,7 @@ fn a_free_slot_opens_30_days_after_the_oldest_free_event() {
 fn dust_deposit_is_rejected() {
     ctx(&accounts(0), NearToken::from_yoctonear(0));
     let mut c = Contract::new(usdc(), None, None, owner());
-    c.create_event(meta(), U128(MIN_DEPOSIT - 1), 10, None);
+    c.create_event(meta(), U128(MIN_DEPOSIT - 1), 10, None, None);
 }
 
 #[test]
@@ -543,7 +543,7 @@ fn rejects_far_future_events() {
     let mut c = Contract::new(usdc(), None, None, owner());
     let mut m = meta();
     m.ends_at = u64::MAX;
-    c.create_event(m, U128(10 * USDC), 10, None);
+    c.create_event(m, U128(10 * USDC), 10, None, None);
 }
 
 #[test]
@@ -561,7 +561,7 @@ fn contract_account_can_host() {
     let dao: AccountId = "community.sputnik-v2.testnet".parse().unwrap();
     ctx(&dao, NearToken::from_near(5));
     let mut c = Contract::new(usdc(), Some("intents.near".parse().unwrap()), None, owner());
-    let id = c.create_event(meta(), U128(10 * USDC), 10, None);
+    let id = c.create_event(meta(), U128(10 * USDC), 10, None, None);
     assert_eq!(c.get_event(id).unwrap().host, dao);
 
     register(&mut c, id, &accounts(2));
@@ -764,7 +764,7 @@ fn event_created_already_past_the_grace_period_can_be_cancelled_by_anyone() {
     let mut m = meta();
     m.starts_at = 0;
     m.ends_at = 0;
-    let id = c.create_event(m, U128(10 * USDC), 10, None);
+    let id = c.create_event(m, U128(10 * USDC), 10, None, None);
     // It has already ended, so it takes no deposits.
     let msg = format!(r#"{{"action":"register","event_id":{id}}}"#);
     assert_eq!(pay_at(&mut c, &accounts(2), 10 * USDC, &msg, now_ms), 10 * USDC);
@@ -784,7 +784,7 @@ fn largest_event_fits_the_reserved_record_size() {
     m.title = "t".repeat(MAX_TITLE_LEN);
     let host: AccountId = format!("{:064x}", 99).parse().unwrap();
     ctx(&host, NearToken::from_yoctonear(0));
-    c.create_event(m, U128(MIN_DEPOSIT), FREE_MAX_CAPACITY, None);
+    c.create_event(m, U128(MIN_DEPOSIT), FREE_MAX_CAPACITY, None, None);
     c.events.flush();
     assert!(env::storage_usage() - before <= EVENT_RECORD_BYTES);
 }
@@ -798,11 +798,13 @@ fn one_seat_fits_the_reserved_guest_size_for_a_guest_with_history() {
     for i in 0..24 {
         let host: AccountId = format!("host{i}.testnet").parse().unwrap();
         ctx(&host, NearToken::from_yoctonear(0));
-        let id = c.create_event(meta(), U128(10 * USDC), 1, None);
+        let id = c.create_event(meta(), U128(10 * USDC), 1, None, None);
         c.events.flush();
         c.free_log.flush();
+        // Measure inside one context: every `testing_env!` restarts the storage counter.
+        ctx_at(&usdc(), NearToken::from_yoctonear(0), 1_000_000 * 1_000_000);
         let before = env::storage_usage();
-        register(&mut c, id, &guest);
+        c.register(id, guest.clone(), guest.clone());
         c.events.flush();
         c.guests.flush();
         c.guest_index.flush();
@@ -932,7 +934,7 @@ fn intents_callback_keeps_only_the_unused_amount() {
 fn payout_to_intents_without_intents_panics() {
     ctx(&accounts(0), NearToken::from_near(5));
     let mut c = Contract::new(usdc(), None, None, owner());
-    let id = c.create_event(meta(), U128(10 * USDC), 10, None);
+    let id = c.create_event(meta(), U128(10 * USDC), 10, None, None);
     register(&mut c, id, &accounts(2));
     ctx_ended(&accounts(0));
     c.finalize(id, vec![accounts(2)]);
@@ -946,7 +948,7 @@ fn finalize_does_not_wrap_a_huge_pool() {
     ctx(&accounts(0), NearToken::from_near(5));
     let mut c = Contract::new(usdc(), None, None, owner());
     let deposit = u128::MAX / 2 + 1;
-    let id = c.create_event(meta(), U128(deposit), 2, None);
+    let id = c.create_event(meta(), U128(deposit), 2, None, None);
     for guest in [accounts(2), accounts(3)] {
         let refund = pay(&mut c, &guest, deposit, &format!(r#"{{"action":"register","event_id":{id}}}"#));
         assert_eq!(refund, 0);
@@ -962,7 +964,7 @@ fn large_but_safe_pool_splits_exactly() {
     // A second event carries the large deposit.
     ctx(&accounts(0), NearToken::from_near(5));
     let deposit = 1_000_000_000_000_000_000u128;
-    let big = c.create_event(meta(), U128(deposit), 4, None);
+    let big = c.create_event(meta(), U128(deposit), 4, None, None);
     for guest in [accounts(2), accounts(3), accounts(4)] {
         let refund = pay(&mut c, &guest, deposit, &format!(r#"{{"action":"register","event_id":{big}}}"#));
         assert_eq!(refund, 0);
@@ -991,7 +993,7 @@ fn door_helper_cannot_cancel_before_the_grace_period() {
 fn capacity_above_the_max_is_rejected() {
     ctx(&accounts(0), NearToken::from_near(5));
     let mut c = Contract::new(usdc(), None, None, owner());
-    c.create_event(meta(), U128(USDC), MAX_CAPACITY + 1, None);
+    c.create_event(meta(), U128(USDC), MAX_CAPACITY + 1, None, None);
 }
 
 #[test]
@@ -999,7 +1001,7 @@ fn capacity_above_the_max_is_rejected() {
 fn zero_deposit_is_rejected() {
     ctx(&accounts(0), NearToken::from_near(5));
     let mut c = Contract::new(usdc(), None, None, owner());
-    c.create_event(meta(), U128(0), 10, None);
+    c.create_event(meta(), U128(0), 10, None, None);
 }
 
 #[test]
@@ -1009,7 +1011,7 @@ fn blank_title_is_rejected() {
     let mut c = Contract::new(usdc(), None, None, owner());
     let mut m = meta();
     m.title = "   ".into();
-    c.create_event(m, U128(USDC), 10, None);
+    c.create_event(m, U128(USDC), 10, None, None);
 }
 
 #[test]
@@ -1020,7 +1022,7 @@ fn inverted_times_are_rejected() {
     let mut m = meta();
     m.starts_at = 50;
     m.ends_at = 40;
-    c.create_event(m, U128(USDC), 10, None);
+    c.create_event(m, U128(USDC), 10, None, None);
 }
 
 #[test]
@@ -1105,7 +1107,7 @@ const AFTER_START_NS: u64 = 2_500_000 * 1_000_000;
 fn setup_tickets(capacity: u32) -> (Contract, u64) {
     ctx(&accounts(0), NearToken::from_near(5));
     let mut c = Contract::new(usdc(), Some("intents.near".parse().unwrap()), None, owner());
-    let id = c.create_event(meta(), U128(TICKET), capacity, Some(EventMode::Ticket));
+    let id = c.create_event(meta(), U128(TICKET), capacity, Some(EventMode::Ticket), None);
     (c, id)
 }
 
@@ -1287,7 +1289,7 @@ fn many_events_from_many_hosts_and_recent_views_page() {
     for i in 0..120 {
         let host: AccountId = format!("host{i}.testnet").parse().unwrap();
         ctx(&host, NearToken::from_yoctonear(0));
-        c.create_event(meta(), U128(MIN_DEPOSIT), 1, None);
+        c.create_event(meta(), U128(MIN_DEPOSIT), 1, None, None);
     }
     assert_eq!(c.events.len(), 120);
     assert_eq!(c.get_recent_events(None).len(), 50);
@@ -1301,7 +1303,7 @@ fn max_capacity_event_is_accepted() {
     let mut c = Contract::new(usdc(), None, None, owner());
     let cost = c.create_event_cost(accounts(0), MAX_CAPACITY, None).0;
     ctx(&accounts(0), NearToken::from_yoctonear(cost));
-    let id = c.create_event(meta(), U128(MIN_DEPOSIT), 300, None);
+    let id = c.create_event(meta(), U128(MIN_DEPOSIT), 300, None, None);
     assert_eq!(c.get_event(id).unwrap().capacity, 300);
 }
 
@@ -1321,10 +1323,10 @@ fn attendance_counts_only_checked_in_guests_once_per_event() {
 
     // Ticket events count too; cancelled events do not.
     ctx(&accounts(0), NearToken::from_yoctonear(0));
-    let t = c.create_event(meta(), U128(10 * USDC), 10, Some(EventMode::Ticket));
+    let t = c.create_event(meta(), U128(10 * USDC), 10, Some(EventMode::Ticket), None);
     let x = c.create_event_cost(accounts(0), 10, None).0;
     ctx(&accounts(0), NearToken::from_yoctonear(x));
-    let cancelled = c.create_event(meta(), U128(10 * USDC), 10, None);
+    let cancelled = c.create_event(meta(), U128(10 * USDC), 10, None, None);
     register(&mut c, t, &accounts(2));
     register(&mut c, cancelled, &accounts(3));
     ctx_ended(&accounts(0));
@@ -1349,7 +1351,7 @@ fn storage_reserves_cover_the_measured_worst_case() {
     let before = env::storage_usage();
     let mut m = meta();
     m.title = "t".repeat(MAX_TITLE_LEN);
-    let id = c.create_event(m, U128(MIN_DEPOSIT), 8, None);
+    let id = c.create_event(m, U128(MIN_DEPOSIT), 8, None, None);
     c.events.flush();
     let event_bytes = env::storage_usage() - before;
     let before = env::storage_usage();
@@ -1357,9 +1359,11 @@ fn storage_reserves_cover_the_measured_worst_case() {
     let log_bytes = env::storage_usage() - before;
 
     let guests: Vec<AccountId> = (0..8).map(long).collect();
+    // One context for the whole measurement: every `testing_env!` restarts the storage counter.
+    ctx_at(&usdc(), NearToken::from_yoctonear(0), 1_000_000 * 1_000_000);
     let before = env::storage_usage();
     for g in &guests {
-        pay(&mut c, g, MIN_DEPOSIT, &format!(r#"{{"action":"register","event_id":{id}}}"#));
+        c.register(id, g.clone(), g.clone());
     }
     c.events.flush();
     c.guests.flush();
@@ -1374,7 +1378,16 @@ fn storage_reserves_cover_the_measured_worst_case() {
     c.attended_events.flush();
     c.guests.flush();
     let settle = env::storage_usage() - before;
-    eprintln!("measured: event {event_bytes} B, free log {log_bytes} B, registration {seat_bytes} B/seat, settlement {settle} B for 7 attendees + host");
+    // The event above has no rule; the largest rule is stored inline in the same record
+    // (its `None` tag is already counted).
+    let max_rule = Some(AccessRule {
+        past_events: vec![u64::MAX; MAX_RULE_EVENTS],
+        min_attended: u8::MAX,
+        max_no_shows: Some(u8::MAX),
+        open_to_all_at: Some(u64::MAX),
+    });
+    let event_bytes = event_bytes + near_sdk::borsh::to_vec(&max_rule).unwrap().len() as u64 - 1;
+    eprintln!("measured: event with the largest rule {event_bytes} B, free log {log_bytes} B, registration {seat_bytes} B/seat, settlement {settle} B for 7 attendees + host");
     assert!(event_bytes <= EVENT_RECORD_BYTES, "event used {event_bytes}, reserve {EVENT_RECORD_BYTES}");
     assert!(log_bytes <= FREE_LOG_BYTES, "free log used {log_bytes}, reserve {FREE_LOG_BYTES}");
     assert!(seat_bytes <= STORAGE_BYTES_PER_GUEST, "seat used {seat_bytes}, reserve {STORAGE_BYTES_PER_GUEST}");
@@ -1464,37 +1477,232 @@ fn upgrade_without_code_fails() {
 #[test]
 fn migrate_keeps_the_state() {
     let mut c = fresh(true);
-    ctx(&accounts(0), NearToken::from_yoctonear(0));
-    c.create_event(meta(), U128(MIN_DEPOSIT), 10, None);
-    c.events.flush();
+    ctx(&owner(), one_yocto());
+    c.add_to_whitelist(vec![accounts(1)]);
     env::state_write(&c);
     let migrated = Contract::migrate();
     assert_eq!(migrated.get_config().owner, owner());
-    assert_eq!(migrated.get_event(0).unwrap().capacity, 10);
+    assert!(migrated.is_whitelisted(accounts(1)));
+}
+
+/// Root `STATE` of mainnet `escrow.lold.near` (176 bytes, read-only `view_state`
+/// at block 224210379; `docs/oracle-upgrade/evidence/mainnet-readonly.json`).
+const MAINNET_ROOT: &str = "QAAAADE3MjA4NjI4Zjg0ZjVkNmFkMzNmMGRhM2JiYmViMjdmZmNiMzk4ZWFjNTAxYTMxYmQ2YWQyMDExZTM2MTMzYTEBDAAAAGludGVudHMubmVhcgAAAAABAAAAAAEAAAABAQAAAAIBAAAAAwAAAAAAAAAAAQAAAAUBEgAAAGV2ZW50X3JlbGF5ZXIubmVhcgkAAABsb2xkLm5lYXIAAAEAAAAGAAEAAAAHAQAAAAg=";
+
+#[test]
+fn migrate_reads_the_mainnet_root() {
+    let raw: near_sdk::json_types::Base64VecU8 = serde_json::from_str(&format!("\"{MAINNET_ROOT}\"")).unwrap();
+    assert_eq!(raw.0.len(), 176);
+    ctx(&accounts(0), NearToken::from_yoctonear(0));
+    env::storage_write(b"STATE", &raw.0);
+    let migrated = Contract::migrate();
+    let cfg = migrated.get_config();
+    assert_eq!(cfg.owner.as_str(), "lold.near");
+    assert_eq!(cfg.intents.unwrap().as_str(), "intents.near");
+    assert_eq!(cfg.relayer.unwrap().as_str(), "event_relayer.near");
+    assert!(!cfg.frozen && !cfg.whitelist_mode && !cfg.sponsored_mode);
+    assert!(migrated.get_recent_events(None).is_empty());
 }
 
 #[test]
-fn migrate_converts_the_tp7_layout() {
+#[should_panic(expected = "Events exist")]
+fn migrate_refuses_an_escrow_with_events() {
     let mut c = fresh(true);
     ctx(&accounts(0), NearToken::from_yoctonear(0));
-    c.create_event(meta(), U128(MIN_DEPOSIT), 10, None);
-    ctx(&owner(), one_yocto());
-    c.add_to_whitelist(vec![accounts(1)]);
-    let Contract { usdc, intents, events, guests, guest_index, balances, reserved_bytes, attended_events, relayer, owner, frozen, whitelist, .. } = c;
-    env::state_write(&StateTp7 {
-        usdc, intents, events, guests, guest_index, balances, reserved_bytes,
-        _open_events: LookupMap::new(StorageKey::OpenEvents),
-        attended_events, relayer, owner, frozen,
-        _whitelist_mode: true,
-        whitelist,
+    c.create_event(meta(), U128(MIN_DEPOSIT), 10, None, None);
+    c.events.flush();
+    env::state_write(&c);
+    Contract::migrate();
+}
+
+// --------------------------------------------------------- access rules
+
+struct Past {
+    c: Contract,
+    /// Host accounts(0): 2 and 4 came, 3 was a no-show.
+    a: u64,
+    /// Host accounts(0): 3 registered, closed with nobody checked in.
+    b: u64,
+    /// Host accounts(1), finalized.
+    other: u64,
+    /// Host accounts(0), still open.
+    open: u64,
+}
+
+fn past_events() -> Past {
+    let (mut c, a) = setup(10);
+    ctx(&accounts(0), NearToken::from_near(5));
+    let b = c.create_event(meta(), U128(10 * USDC), 10, None, None);
+    let open = c.create_event(later_meta(), U128(10 * USDC), 10, None, None);
+    ctx(&accounts(1), NearToken::from_near(5));
+    let other = c.create_event(meta(), U128(10 * USDC), 10, None, None);
+    for g in [accounts(2), accounts(3), accounts(4)] {
+        register(&mut c, a, &g);
+    }
+    register(&mut c, b, &accounts(3));
+    ctx_ended(&accounts(0));
+    c.finalize(a, vec![accounts(2), accounts(4)]);
+    c.finalize(b, vec![]);
+    ctx_ended(&accounts(1));
+    c.finalize(other, vec![]);
+    Past { c, a, b, other, open }
+}
+
+fn later_meta() -> EventMetadata {
+    EventMetadata { title: "Next meetup".into(), starts_at: 5_000_000, ends_at: 6_000_000 }
+}
+
+fn rule(past_events: Vec<u64>, min_attended: u8, max_no_shows: Option<u8>, open_to_all_at: Option<u64>) -> Option<AccessRule> {
+    Some(AccessRule { past_events, min_attended, max_no_shows, open_to_all_at })
+}
+
+/// The next event of accounts(0), created after the past events ended.
+fn gated(c: &mut Contract, access: Option<AccessRule>) -> u64 {
+    ctx_at(&accounts(0), NearToken::from_near(5), 3_500_000 * 1_000_000);
+    c.create_event(later_meta(), U128(10 * USDC), 10, None, access)
+}
+
+/// Returns the refunded amount: 0 = registered, the full deposit = refused.
+fn try_register(c: &mut Contract, id: u64, guest: &AccountId, now_ms: u64) -> u128 {
+    pay_at(c, guest, 10 * USDC, &format!(r#"{{"action":"register","event_id":{id}}}"#), now_ms)
+}
+
+#[test]
+fn regulars_register_and_newcomers_are_refunded() {
+    let Past { mut c, a, .. } = past_events();
+    let id = gated(&mut c, rule(vec![a], 1, None, None));
+    assert_eq!(try_register(&mut c, id, &accounts(2), 3_600_000), 0, "a regular gets in");
+    assert_eq!(try_register(&mut c, id, &accounts(5), 3_600_000), 10 * USDC, "a newcomer is refunded in full");
+    assert_eq!(try_register(&mut c, id, &accounts(3), 3_600_000), 10 * USDC, "a no-show never attended");
+    assert_eq!(c.get_event(id).unwrap().guest_count, 1);
+    assert_eq!(c.check_access(id, accounts(2)), AccessCheck { allowed: true, attended: 1, no_shows: 0 });
+    assert_eq!(c.check_access(id, accounts(5)), AccessCheck { allowed: false, attended: 0, no_shows: 0 });
+}
+
+#[test]
+fn everyone_gets_in_once_the_event_opens_to_all() {
+    let Past { mut c, a, .. } = past_events();
+    let id = gated(&mut c, rule(vec![a], 1, None, Some(4_000_000)));
+    assert_eq!(try_register(&mut c, id, &accounts(5), 3_999_999), 10 * USDC);
+    assert_eq!(try_register(&mut c, id, &accounts(5), 4_000_000), 0);
+}
+
+#[test]
+fn no_show_limit_keeps_flakes_out() {
+    let Past { mut c, a, b, .. } = past_events();
+    // Anyone except people who skipped A; B, closed with nobody checked in, never counts.
+    let id = gated(&mut c, rule(vec![a, b], 0, Some(0), None));
+    assert_eq!(c.check_access(id, accounts(3)), AccessCheck { allowed: false, attended: 0, no_shows: 1 });
+    assert_eq!(try_register(&mut c, id, &accounts(3), 3_600_000), 10 * USDC);
+    assert_eq!(try_register(&mut c, id, &accounts(5), 3_600_000), 0, "a newcomer has no no-shows");
+    assert_eq!(try_register(&mut c, id, &accounts(2), 3_600_000), 0);
+}
+
+#[test]
+fn ticket_attendance_counts() {
+    let (mut c, _) = setup(10);
+    ctx(&accounts(0), NearToken::from_near(5));
+    let t = c.create_event(meta(), U128(10 * USDC), 10, Some(EventMode::Ticket), None);
+    register(&mut c, t, &accounts(2));
+    ctx_ended(&accounts(0));
+    c.finalize(t, vec![accounts(2)]);
+    let id = gated(&mut c, rule(vec![t], 1, None, None));
+    assert_eq!(try_register(&mut c, id, &accounts(2), 3_600_000), 0);
+}
+
+#[test]
+fn intents_registration_obeys_the_rule() {
+    let Past { mut c, a, .. } = past_events();
+    let id = gated(&mut c, rule(vec![a], 1, None, None));
+    let msg = |g: &AccountId| format!(r#"{{"action":"register","event_id":{id},"guest":"{g}"}}"#);
+    assert_eq!(pay_at(&mut c, &intents(), 10 * USDC, &msg(&accounts(5)), 3_600_000), 10 * USDC);
+    assert_eq!(pay_at(&mut c, &intents(), 10 * USDC, &msg(&accounts(4)), 3_600_000), 0);
+    assert_eq!(c.get_guest_status(id, accounts(4)), Some(GuestStatus::Registered));
+}
+
+#[test]
+#[should_panic(expected = "Only regulars can register yet")]
+fn register_itself_enforces_the_rule() {
+    let Past { mut c, a, .. } = past_events();
+    let id = gated(&mut c, rule(vec![a], 1, None, None));
+    ctx_at(&usdc(), NearToken::from_yoctonear(0), 3_600_000 * 1_000_000);
+    c.register(id, accounts(5), accounts(5));
+}
+
+#[test]
+fn get_events_pages_through_every_event() {
+    let (mut c, _) = setup(10);
+    for _ in 0..4 {
+        ctx(&accounts(0), NearToken::from_near(5));
+        c.create_event(meta(), U128(10 * USDC), 10, None, None);
+    }
+    let ids = |page: Vec<EventView>| page.into_iter().map(|e| e.id).collect::<Vec<_>>();
+    assert_eq!(ids(c.get_events(None, None)), vec![0, 1, 2, 3, 4]);
+    assert_eq!(ids(c.get_events(Some(1), Some(2))), vec![1, 2]);
+    assert_eq!(ids(c.get_events(Some(4), Some(1000))), vec![4]);
+    assert!(c.get_events(Some(9), None).is_empty());
+    assert_eq!(c.get_events(Some(0), Some(1000)).len(), 5, "the page cap is 100");
+}
+
+#[test]
+fn events_without_a_rule_let_everyone_in() {
+    let Past { mut c, .. } = past_events();
+    let id = gated(&mut c, None);
+    assert!(c.get_event(id).unwrap().access.is_none());
+    assert_eq!(c.check_access(id, accounts(5)), AccessCheck { allowed: true, attended: 0, no_shows: 0 });
+    assert_eq!(try_register(&mut c, id, &accounts(5), 3_600_000), 0);
+}
+
+#[test]
+fn the_rule_is_part_of_the_event_view() {
+    let Past { mut c, a, .. } = past_events();
+    let r = rule(vec![a], 1, Some(1), Some(4_000_000));
+    let id = gated(&mut c, r.clone());
+    assert_eq!(c.get_event(id).unwrap().access, r);
+}
+
+#[test]
+fn intents_host_can_set_a_rule() {
+    // One past event, so the next one is still on the free tier (no NEAR via Intents).
+    let (mut c, a) = setup(10);
+    register(&mut c, a, &accounts(2));
+    ctx_ended(&accounts(0));
+    c.finalize(a, vec![accounts(2)]);
+    let msg = json!({
+        "action": "create_event", "metadata": later_meta(), "deposit": U128(10 * USDC), "capacity": 10,
+        "access": { "past_events": [a], "min_attended": 1 },
     });
-    let migrated = Contract::migrate();
-    let cfg = migrated.get_config();
-    assert_eq!(cfg.owner, self::owner());
-    assert!(!cfg.whitelist_mode && !cfg.sponsored_mode, "tp7's mode gated only the free tier; both start off");
-    assert!(migrated.is_whitelisted(accounts(1)));
-    assert_eq!(migrated.get_event(0).unwrap().capacity, 10);
-    assert_eq!(migrated.create_event_cost(accounts(0), 10, None).0, 0);
+    auth_at(&mut c, &accounts(0), msg, 3_500_000);
+    let id = u64::from(c.events.len()) - 1;
+    assert_eq!(c.get_event(id).unwrap().access, rule(vec![a], 1, None, None));
+}
+
+/// Each case runs on its own thread: the mocked chain is per thread, so every
+/// case starts from fresh storage.
+fn assert_rule_rejected(access: fn(&Past) -> Option<AccessRule>, expected: &str) {
+    let err = std::thread::spawn(move || {
+        let mut past = past_events();
+        let access = access(&past);
+        gated(&mut past.c, access);
+    })
+    .join()
+    .expect_err("the rule must be rejected");
+    let msg = err.downcast_ref::<String>().cloned().unwrap_or_default();
+    assert!(msg.contains(expected), "expected {expected:?}, got {msg:?}");
+}
+
+#[test]
+fn bad_rules_are_rejected() {
+    assert_rule_rejected(|_| rule(vec![], 0, Some(0), None), "1 to 10 past events");
+    assert_rule_rejected(|p| rule(vec![p.a; 11], 1, None, None), "1 to 10 past events");
+    assert_rule_rejected(|p| rule(vec![p.a, p.a], 1, None, None), "Past events repeat");
+    assert_rule_rejected(|_| rule(vec![99], 1, None, None), "Event not found");
+    assert_rule_rejected(|p| rule(vec![p.other], 1, None, None), "Past events must be your own");
+    assert_rule_rejected(|p| rule(vec![p.open], 1, None, None), "Past events must be finalized");
+    assert_rule_rejected(|p| rule(vec![p.a], 2, None, None), "more than its past events");
+    assert_rule_rejected(|p| rule(vec![p.a, p.b], 1, Some(3), None), "more than its past events");
+    assert_rule_rejected(|p| rule(vec![p.a], 0, None, None), "lets everyone in");
+    assert_rule_rejected(|p| rule(vec![p.a], 1, None, Some(later_meta().ends_at)), "before it ends");
 }
 
 #[test]
@@ -1560,7 +1768,7 @@ fn whitelist_mode_stops_unlisted_hosts_even_if_they_pay() {
     assert!(!c.can_create(accounts(1)));
     let cost = bytes_cost(EVENT_RECORD_BYTES + SEAT_BYTES * 10 + BALANCE_BYTES);
     ctx(&accounts(1), NearToken::from_yoctonear(cost));
-    c.create_event(meta(), U128(MIN_DEPOSIT), 10, None);
+    c.create_event(meta(), U128(MIN_DEPOSIT), 10, None, None);
 }
 
 #[test]
@@ -1588,7 +1796,7 @@ fn whitelisted_host_creates_while_the_mode_is_on() {
     c.add_to_whitelist(vec![accounts(1)]);
     assert!(c.can_create(accounts(1)));
     ctx(&accounts(1), NearToken::from_yoctonear(0));
-    let id = c.create_event(meta(), U128(MIN_DEPOSIT), 10, None);
+    let id = c.create_event(meta(), U128(MIN_DEPOSIT), 10, None, None);
     assert_eq!(c.get_event(id).unwrap().host, accounts(1));
     // The two lists are separate: whitelisted is not sponsored, and the free tier still applies.
     assert!(!c.is_sponsored(accounts(1)));
@@ -1610,7 +1818,7 @@ fn sponsored_mode_limits_the_free_tier_to_sponsored_hosts() {
     c.add_sponsored(vec![host.clone()]);
     assert_eq!(c.create_event_cost(host.clone(), 10, None).0, 0);
     ctx(&host, NearToken::from_yoctonear(0));
-    c.create_event(meta(), U128(MIN_DEPOSIT), 10, None);
+    c.create_event(meta(), U128(MIN_DEPOSIT), 10, None, None);
     // Sponsored hosts keep the other free-tier limits.
     assert!(c.create_event_cost(host.clone(), FREE_MAX_CAPACITY + 1, None).0 > 0);
     ctx(&owner(), one_yocto());
@@ -1628,7 +1836,7 @@ fn sponsored_mode_charges_other_hosts() {
     ctx(&owner(), one_yocto());
     c.set_sponsored_mode(true);
     ctx(&accounts(1), NearToken::from_yoctonear(0));
-    c.create_event(meta(), U128(MIN_DEPOSIT), 10, None);
+    c.create_event(meta(), U128(MIN_DEPOSIT), 10, None, None);
 }
 
 #[test]
@@ -1638,7 +1846,7 @@ fn unsponsored_host_can_still_pay_for_storage() {
     c.set_sponsored_mode(true);
     let cost = c.create_event_cost(accounts(1), 10, None).0;
     ctx(&accounts(1), NearToken::from_yoctonear(cost));
-    let id = c.create_event(meta(), U128(MIN_DEPOSIT), 10, None);
+    let id = c.create_event(meta(), U128(MIN_DEPOSIT), 10, None, None);
     assert_eq!(c.get_event(id).unwrap().host, accounts(1));
 }
 
@@ -1712,12 +1920,12 @@ fn free_events_must_end_within_60_days() {
     m.ends_at = now + FREE_MAX_HORIZON_MS;
     assert_eq!(c.create_event_cost(accounts(0), 10, Some(m.ends_at)).0, 0);
     ctx(&accounts(0), NearToken::from_yoctonear(0));
-    c.create_event(m.clone(), U128(MIN_DEPOSIT), 10, None);
+    c.create_event(m.clone(), U128(MIN_DEPOSIT), 10, None, None);
     m.ends_at += 1;
     let cost = c.create_event_cost(accounts(0), 10, Some(m.ends_at)).0;
     assert_eq!(cost, bytes_cost(EVENT_RECORD_BYTES + SEAT_BYTES * 10 + BALANCE_BYTES));
     ctx(&accounts(0), NearToken::from_yoctonear(cost));
-    let id = c.create_event(m, U128(MIN_DEPOSIT), 10, None);
+    let id = c.create_event(m, U128(MIN_DEPOSIT), 10, None, None);
     assert_eq!(c.get_event(id).unwrap().capacity, 10);
 }
 
@@ -1728,7 +1936,7 @@ fn free_event_ending_after_60_days_needs_storage() {
     let mut m = meta();
     m.ends_at = 1_000_000 + FREE_MAX_HORIZON_MS + 1;
     ctx(&accounts(0), NearToken::from_yoctonear(0));
-    c.create_event(m, U128(MIN_DEPOSIT), 10, None);
+    c.create_event(m, U128(MIN_DEPOSIT), 10, None, None);
 }
 
 #[test]
@@ -1736,7 +1944,7 @@ fn paid_event_returns_empty_seats_at_close() {
     let mut c = fresh(true);
     let cost = c.create_event_cost(accounts(0), 60, None).0;
     ctx(&accounts(0), NearToken::from_yoctonear(cost));
-    let id = c.create_event(meta(), U128(10 * USDC), 60, None);
+    let id = c.create_event(meta(), U128(10 * USDC), 60, None, None);
     register(&mut c, id, &accounts(2));
     register(&mut c, id, &accounts(3));
     ctx(&accounts(0), one_yocto());
@@ -1752,7 +1960,7 @@ fn empty_paid_event_keeps_only_the_record_cost() {
     let mut c = fresh(false);
     let cost = c.create_event_cost(accounts(0), 60, None).0;
     ctx(&accounts(0), NearToken::from_yoctonear(cost));
-    let id = c.create_event(meta(), U128(10 * USDC), 60, None);
+    let id = c.create_event(meta(), U128(10 * USDC), 60, None, None);
     ctx(&accounts(0), one_yocto());
     c.cancel(id);
     let (_, refund) = transfers()[0].clone();

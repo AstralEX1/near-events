@@ -12,6 +12,7 @@ import { NextSteps } from "@/components/EventParts";
 import { CashOut } from "@/components/CashOut";
 import { DepositRulesTooltip } from "@/components/DepositRulesTooltip";
 import { guestNamesApi } from "@/lib/guestNamesClient";
+import { ruleText, type AccessCheck } from "@/lib/access";
 
 function requireDisplayName(value: string): string {
   const name = value.trim().replace(/\s+/g, " ");
@@ -46,6 +47,8 @@ export function RegistrationCard({
   const [balanceAccountId, setBalanceAccountId] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [stage, setStage] = useState<string | null>(null);
+  // The escrow's verdict under the event's access rule; it refunds a refused registration.
+  const [access, setAccess] = useState<AccessCheck | null>(null);
   const paymentUrl = `/e/${event.id}/pay${embedReturnTo ? `?returnTo=${encodeURIComponent(embedReturnTo)}` : ""}`;
   const loadBalance = useCallback(async () => {
     if (!accountId) {
@@ -73,6 +76,17 @@ export function RegistrationCard({
   useEffect(() => {
     void loadBalance();
   }, [loadBalance]);
+
+  const rule = event.access ?? null;
+  useEffect(() => {
+    setAccess(null);
+    if (!accountId || !rule || myStatus) return;
+    let live = true;
+    events.checkAccess(event.id, accountId).then((c) => live && setAccess(c)).catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [accountId, event.id, rule, myStatus]);
 
   const balanceLoading = !accountId || balanceAccountId !== accountId || balanceState === "loading";
   const balanceError = balanceAccountId === accountId && balanceState === "error";
@@ -245,6 +259,14 @@ export function RegistrationCard({
     body = accountId
       ? <p className="text-sm">Registration is closed: the event has ended.</p>
       : <SignInFolded hint="Registration is closed. Registered? Sign in to see your pass." onDone={refreshAfterSignIn} />;
+  } else if (accountId && rule && access?.allowed === false) {
+    body = (
+      <p className="text-sm">
+        You can’t register yet. {ruleText(rule)} You came to {access.attended}{access.no_shows ? ` and skipped ${access.no_shows}` : ""}.
+      </p>
+    );
+  } else if (accountId && rule && !access) {
+    body = <p className="text-sm text-muted">Checking whether you can register…</p>;
   } else if (!accountId) {
     body = choosing ? (
       <div className="space-y-2">
@@ -312,6 +334,7 @@ export function RegistrationCard({
   const open = event.status === "Open" && !myStatus && event.guest_count < event.capacity && Date.now() < event.metadata.ends_at;
   return (
     <div className="space-y-3">
+      {open && rule && access?.allowed !== false && <p className="text-sm text-muted">{ruleText(rule)}</p>}
       {body}
       {error && (
           <p className="text-sm text-warn break-words">

@@ -18,6 +18,8 @@ import { guestNamesApi, type GuestNames } from "@/lib/guestNamesClient";
 import { attendedCounts } from "@/lib/reputation";
 import { hostedStats, type Reputation } from "@/lib/reputationShared";
 import { ReputationBadges } from "@/components/ReputationBadges";
+import { daoPolicy, hostAccounts, isDaoAccount } from "@/lib/daoHost";
+import { functionCallProposal } from "@/lib/daoShared";
 
 type Tab = "overview" | "event" | "guests" | "registration" | "integration";
 const TABS: { id: Tab; label: string }[] = [
@@ -49,6 +51,9 @@ function ManageEvent() {
   const [guests, setGuests] = useState<GuestView[]>([]);
   const [guestNames, setGuestNames] = useState<GuestNames>({});
   const [doorTeam, setDoorTeam] = useState<string[]>([]);
+  // The host, or the council when a DAO hosts.
+  const [hostTeam, setHostTeam] = useState<string[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -71,12 +76,14 @@ function ManageEvent() {
   const load = useCallback(async () => {
     const e = await events.get(id);
     if (!e) throw new Error("Event not found.");
-    const [g, team, names] = await Promise.all([
+    const [g, team, names, hosts] = await Promise.all([
       events.guests(id),
       cohostsApi.get(id).catch(() => null),
       guestNamesApi.list(id).catch(() => ({})),
+      hostAccounts(e.host).catch(() => [e.host]),
     ]);
     if (team) setDoorTeam(team);
+    setHostTeam(hosts);
     setGuestNames(names);
     // Door check-ins live on our server until finalize puts them on-chain.
     if (e.status === "Open") {
@@ -105,7 +112,7 @@ function ManageEvent() {
     if (tab !== "guests" || !guestIds) return;
     let live = true;
     const ids = guestIds.split(",");
-    Promise.all([attendedCounts(ids), events.list()])
+    Promise.all([attendedCounts(ids), events.all()])
       .then(([counts, all]) => live && setReps(Object.fromEntries(Object.entries(counts).map(([a, n]) => [a, { attended: n, ...hostedStats(all, a) }]))))
       .catch(() => {});
     return () => {
@@ -131,7 +138,9 @@ function ManageEvent() {
 
   if (!event) return <p className="text-muted px-1" role="status">{error ?? "Loading…"}</p>;
 
-  const isHost = accountId === event.host;
+  const isHost = !!accountId && hostTeam.includes(accountId);
+  // A DAO host acts through proposals its council votes on.
+  const daoHost = isDaoAccount(event.host);
   const isStaff = isHost || (!!accountId && doorTeam.includes(accountId));
   if (!isStaff) {
     return (
@@ -148,7 +157,26 @@ function ManageEvent() {
     if (confirmText && !(await confirmAction(confirmText, methodName === "cancel" ? "Cancel event" : "Close event"))) return;
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
+      if (daoHost) {
+        // The approving vote runs the call, so it carries the call's gas: ~0.7 Tgas per guest (300 guests: 196 Tgas).
+        const tgas = Math.min(250, 50 + Math.ceil(event.guest_count * 0.7));
+        const bond = BigInt((await daoPolicy(event.host)).proposal_bond ?? "0");
+        await send([{
+          receiverId: event.host,
+          methodName: "add_proposal",
+          args: functionCallProposal({
+            description: `Nearvent: ${methodName === "cancel" ? "cancel" : "close"} event #${id} "${event.metadata.title}"`
+              + ("attended" in args ? ` with ${(args as { attended: string[] }).attended.length} of ${event.guest_count} guests checked in` : ""),
+            receiverId: EVENTS_CONTRACT, method: methodName, args, deposit: "1", gas: `${tgas}000000000000`,
+          }),
+          gas: 100_000_000_000_000n,
+          deposit: bond,
+        }]);
+        setNotice(`Proposal created in ${event.host}. It runs once the council approves it (vote with at least ${tgas + 50} Tgas).`);
+        return;
+      }
       await send([{ receiverId: EVENTS_CONTRACT, methodName, args, gas: 300_000_000_000_000n, deposit: 1n }]);
       await load();
     } catch (e) {
@@ -279,6 +307,7 @@ function ManageEvent() {
       </nav>
 
       {error && <p className="text-sm text-warn break-words card p-3">{error}</p>}
+      {notice && <p className="text-sm break-words card p-3">{notice}</p>}
 
       {tab === "overview" && (
         <>

@@ -33,7 +33,7 @@ export function Timeline({ items, empty }: { items: EventView[]; empty: string }
                     <div className="text-sm pt-1">
                       {e.status === "Finalized" ? (
                         <span className="text-muted">
-                          {e.attended_count} of {e.guest_count} came{!isTicket(e) && ` · ${formatUsdc(e.payout_per_attendee)} USDC per checked-in guest`}
+                          {e.attended_count} of {e.guest_count} came{!isTicket(e) && e.attended_count > 0 && ` ·${formatUsdc(e.payout_per_attendee)} USDC per checked-in guest`}
                         </span>
                       ) : e.status === "Cancelled" ? (
                         <span className="text-muted">Cancelled</span>

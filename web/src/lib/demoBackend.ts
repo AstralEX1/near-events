@@ -299,6 +299,9 @@ function view(s: State, contract: string, method: string, a: Record<string, any>
   if (contract === EVENTS_CONTRACT) {
     switch (method) {
       case "get_recent_events": return [...s.events].sort((x, y) => y.id - x.id).slice(0, a.limit ?? 100);
+      case "get_events": return [...s.events].sort((x, y) => x.id - y.id).slice(a.from_index ?? 0, (a.from_index ?? 0) + Math.min(a.limit ?? 50, 100));
+      // Demo events have no access rules.
+      case "check_access": return { allowed: true, attended: 0, no_shows: 0 };
       case "get_event": return s.events.find((e) => e.id === a.event_id) ?? null;
       case "get_guests": return s.guests[a.event_id] ?? [];
       case "get_guest_status": return statusOf(s, a.event_id, a.account_id);

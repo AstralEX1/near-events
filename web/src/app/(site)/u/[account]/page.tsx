@@ -34,7 +34,7 @@ export default function Profile() {
 
   useEffect(() => {
     (async () => {
-      const all = await events.listPublic();
+      const all = await events.listPublic(true);
       const ids = all.map((e) => e.id);
       const [statuses, teams] = await Promise.all([
         events.guestStatuses(account, ids),
@@ -47,20 +47,24 @@ export default function Profile() {
 
   const closed = rows?.filter((r) => r.event.status === "Finalized") ?? [];
   const came = closed.filter((r) => r.status === "Attended");
+  const upcoming = hosting.filter((e) => e.status === "Open").sort((a, b) => a.metadata.starts_at - b.metadata.starts_at);
+  // Held = their own events closed with the guests who came, the same count as the badge; door-team help doesn't count.
+  const held = hosting.filter((e) => e.host === account && e.status === "Finalized").sort((a, b) => b.metadata.starts_at - a.metadata.starts_at);
 
   return (
     <div className="space-y-8">
       <ProfileCard account={account} profile={profile} reputation={reputation} showUp={{ came: came.length, of: closed.length }} />
 
-      {hosting.length > 0 && (
+      {upcoming.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold">Events by {shortAccount(account)}</h2>
-          <Timeline
-            items={[...hosting].sort((a, b) =>
-              a.status === b.status ? a.metadata.starts_at - b.metadata.starts_at : a.status === "Open" ? -1 : 1,
-            )}
-            empty=""
-          />
+          <h2 className="text-xl font-semibold">Upcoming by {shortAccount(account)}</h2>
+          <Timeline items={upcoming} empty="" />
+        </section>
+      )}
+      {held.length > 0 && (
+        <section className="space-y-4">
+          <h2 className="text-xl font-semibold">Held by {shortAccount(account)} · {held.length}</h2>
+          <Timeline items={held} empty="" />
         </section>
       )}
 

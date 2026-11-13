@@ -2,6 +2,7 @@ import { rateLimited } from "@/lib/ratelimit";
 import { getEventDetails, getPrivateEventIds, saveEventDetails } from "@/lib/eventDetails";
 import { locationProblem, type EventDetails } from "@/lib/eventImport";
 import { events } from "@/lib/near";
+import { hostAccounts } from "@/lib/daoHost";
 import { readStaffToken } from "@/lib/staff";
 
 export async function GET(req: Request) {
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
   try {
     const event = await events.get(body.eventId!);
     if (!event) return Response.json({ error: "Event not found" }, { status: 404 });
-    if (event.host !== accountId) return Response.json({ error: "Only the event host can save details" }, { status: 403 });
+    if (!(await hostAccounts(event.host)).includes(accountId)) return Response.json({ error: "Only the event host can save details" }, { status: 403 });
     const details = body.details as EventDetails;
     const existing = await getEventDetails(body.eventId!);
     const locationIssue = locationProblem(details.location);

@@ -1,4 +1,5 @@
 import { EVENTS_CONTRACT, RPC_URL, USDC_CONTRACT, USDC_DECIMALS } from "./config";
+import type { AccessCheck, AccessRule } from "./access";
 
 export type EventStatus = "Open" | "Finalized" | "Cancelled";
 export type GuestStatus = "Registered" | "Attended";
@@ -30,6 +31,8 @@ export interface EventView {
   created_at: number;
   /** When the event was finalized or cancelled; 0 while open. */
   closed_at: number;
+  /** Who may register; null lets everyone in. */
+  access?: AccessRule | null;
 }
 
 export interface GuestView {
@@ -68,10 +71,10 @@ export const RECENT_LIMIT = 100;
 export const events = {
   /** The newest events first, up to 100. */
   list: () => view<EventView[]>("get_recent_events", { limit: RECENT_LIMIT }),
-  /** Browser only: recent events without the ones their hosts made Private (link only). */
-  listPublic: async () => {
+  /** Browser only: recent events (or with `everything`, all of them) without the ones their hosts made Private (link only). */
+  listPublic: async (everything = false) => {
     const [all, hidden] = await Promise.all([
-      events.list(),
+      everything ? events.all() : events.list(),
       // shortcut: if the private list is unavailable, listings show every event; fine while Private means unlisted, not secret.
       fetch("/api/event-details?private=1", { cache: "no-store" }).then((r) => r.json()).then((j) => new Set<number>(j.ids ?? [])).catch(() => new Set<number>()),
     ]);
@@ -81,10 +84,14 @@ export const events = {
   guests: (id: number) => view<GuestView[]>("get_guests", { event_id: id, from_index: 0, limit: MAX_CAPACITY }),
   guestStatus: (id: number, account: string) =>
     view<GuestStatus | null>("get_guest_status", { event_id: id, account_id: account }),
-  /** One call for up to 100 events, in the order of `ids`. */
-  guestStatuses: (account: string, ids: number[]) => ids.length === 0
-    ? Promise.resolve([] as (GuestStatus | null)[])
-    : view<(GuestStatus | null)[]>("get_guest_statuses", { account_id: account, event_ids: ids.slice(0, RECENT_LIMIT) }),
+  /** In the order of `ids`, one call per 100 events. */
+  guestStatuses: async (account: string, ids: number[]) => {
+    const out: (GuestStatus | null)[] = [];
+    for (let i = 0; i < ids.length; i += RECENT_LIMIT) {
+      out.push(...await view<(GuestStatus | null)[]>("get_guest_statuses", { account_id: account, event_ids: ids.slice(i, i + RECENT_LIMIT) }));
+    }
+    return out;
+  },
   balance: (account: string) => view<string>("balance_of", { account_id: account }),
   /** False while the whitelist mode is on and `host` is not on the list. */
   canCreate: (host: string) => view<boolean>("can_create", { host }),
@@ -93,6 +100,17 @@ export const events = {
     view<string>("create_event_cost", { host, capacity, ends_at: endsAt ?? null }),
   /** Finalized events the account was checked in at. */
   attendedCount: (account: string) => view<number>("get_attended_count", { account_id: account }),
+  /** Every event in creation order, paged through `get_events`. */
+  all: async () => {
+    const out: EventView[] = [];
+    for (;;) {
+      const page = await view<EventView[]>("get_events", { from_index: out.length, limit: RECENT_LIMIT });
+      out.push(...page);
+      if (page.length < RECENT_LIMIT) return out;
+    }
+  },
+  /** Whether `account` may register under the event's access rule now. */
+  checkAccess: (id: number, account: string) => view<AccessCheck>("check_access", { event_id: id, account_id: account }),
 };
 
 /** Mirrors the escrow: free tier and the technical seat cap. */

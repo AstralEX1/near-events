@@ -634,9 +634,67 @@ async fn sandbox_ticket_cycle() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// An event with an access rule: a guest who came to the host's last event
+/// registers, a newcomer's USDC comes back through the real token resolver.
+#[tokio::test]
+async fn sandbox_access_rule() -> anyhow::Result<()> {
+    let worker = near_workspaces::sandbox().await?;
+    let usdc = worker.dev_deploy_tla(wasm("test-usdc")).await?;
+    usdc.call("new").transact().await?.into_result()?;
+    let events = worker.dev_deploy(wasm("near-events")).await?;
+    events.call("new")
+        .args_json(json!({ "usdc": usdc.id(), "intents": null, "relayer": null, "owner": "owner.test.near" }))
+        .transact().await?.into_result()?;
+    storage_deposit(&usdc, events.as_account(), events.id()).await?;
+    let host = worker.dev_create_account().await?;
+    let regular = worker.dev_create_account().await?;
+    let newcomer = worker.dev_create_account().await?;
+    for guest in [&regular, &newcomer] {
+        mint(&usdc, guest, guest.id(), 20_000_000).await?;
+    }
+    let create = |title: &str, ends_at: u64, access: Value| {
+        host.call(events.id(), "create_event")
+            .args_json(json!({
+                "metadata": { "title": title, "starts_at": ends_at - 1_000, "ends_at": ends_at },
+                "deposit": "10000000", "capacity": 10, "access": access
+            }))
+            .transact()
+    };
+    let register = |event_id: u64| json!({ "action": "register", "event_id": event_id });
+
+    let now = worker.view_block().await?.timestamp() / 1_000_000;
+    create("Last meetup", now + 5_000, Value::Null).await?.into_result()?;
+    transfer_call(&regular, usdc.id(), events.id(), 10_000_000, register(0)).await?.into_result()?;
+    wait_until(&worker, now + 5_000).await?;
+    host.call(events.id(), "finalize")
+        .args_json(json!({ "event_id": 0, "attended": [regular.id()] }))
+        .deposit(yocto(1))
+        .transact().await?.into_result()?;
+
+    let now = worker.view_block().await?.timestamp() / 1_000_000;
+    create("Regulars first", now + 600_000, json!({ "past_events": [0], "min_attended": 1 })).await?.into_result()?;
+    transfer_call(&regular, usdc.id(), events.id(), 10_000_000, register(1)).await?.into_result()?;
+    let before = token_balance(&usdc, newcomer.id()).await?;
+    transfer_call(&newcomer, usdc.id(), events.id(), 10_000_000, register(1)).await?.into_result()?;
+    assert_eq!(token_balance(&usdc, newcomer.id()).await?, before, "the newcomer's USDC came back");
+
+    let status = |account: &Account| {
+        events.view("get_guest_status").args_json(json!({ "event_id": 1, "account_id": account.id() }))
+    };
+    assert_eq!(status(&regular).await?.json::<Value>()?, json!("Registered"));
+    assert_eq!(status(&newcomer).await?.json::<Value>()?, Value::Null);
+    let check: Value = events.view("check_access")
+        .args_json(json!({ "event_id": 1, "account_id": newcomer.id() }))
+        .await?.json()?;
+    assert_eq!(check, json!({ "allowed": false, "attended": 0, "no_shows": 0 }));
+    let event: Value = events.view("get_event").args_json(json!({ "event_id": 1 })).await?.json()?;
+    assert_eq!(event["access"]["past_events"], json!([0]));
+    Ok(())
+}
+
 /// The owner upgrades the code through the contract itself, with no access
-/// key left on the escrow account; a broken upgrade changes nothing; after
-/// `freeze` nobody can upgrade.
+/// key left on the escrow account; a broken upgrade or a refused migrate
+/// changes nothing; after `freeze` nobody can upgrade.
 #[tokio::test]
 async fn sandbox_upgrade_and_freeze() -> anyhow::Result<()> {
     let worker = near_workspaces::sandbox().await?;
@@ -655,12 +713,9 @@ async fn sandbox_upgrade_and_freeze() -> anyhow::Result<()> {
         .delete_key(events.as_account().secret_key().public_key())
         .transact().await?.into_result()?;
 
-    let now = worker.view_block().await?.timestamp() / 1_000_000;
-    host.call(events.id(), "create_event")
-        .args_json(json!({
-            "metadata": { "title": "Before upgrade", "starts_at": now, "ends_at": now + 60_000 },
-            "deposit": "1000000", "capacity": 10
-        }))
+    owner.call(events.id(), "add_to_whitelist")
+        .args_json(json!({ "accounts": [host.id()] }))
+        .deposit(yocto(1))
         .transact().await?.into_result()?;
 
     let upgrade = |caller: &Account, code: Vec<u8>| {
@@ -668,8 +723,21 @@ async fn sandbox_upgrade_and_freeze() -> anyhow::Result<()> {
     };
     expect_reject(&upgrade(&stranger, events_wasm.to_vec()).await?, "Only the owner");
     upgrade(&owner, events_wasm.to_vec()).await?.into_result()?;
+    let kept: bool = events.view("is_whitelisted").args_json(json!({ "account_id": host.id() })).await?.json()?;
+    assert!(kept, "state did not survive the upgrade");
+
+    // This release migrates only an escrow without events: with one, migrate
+    // panics and the deploy in the same receipt is rolled back.
+    let now = worker.view_block().await?.timestamp() / 1_000_000;
+    host.call(events.id(), "create_event")
+        .args_json(json!({
+            "metadata": { "title": "Before upgrade", "starts_at": now, "ends_at": now + 60_000 },
+            "deposit": "1000000", "capacity": 10
+        }))
+        .transact().await?.into_result()?;
+    expect_reject(&upgrade(&owner, events_wasm.to_vec()).await?, "Events exist");
     let event: Value = events.view("get_event").args_json(json!({ "event_id": 0 })).await?.json()?;
-    assert_eq!(event["metadata"]["title"], "Before upgrade", "state did not survive the upgrade");
+    assert_eq!(event["metadata"]["title"], "Before upgrade", "the refused upgrade changed the state");
 
     // Not a contract: the batch fails and the old code keeps working.
     let broken = upgrade(&owner, b"not a wasm module".to_vec()).await?;
