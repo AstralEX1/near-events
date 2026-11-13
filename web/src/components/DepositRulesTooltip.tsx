@@ -4,11 +4,12 @@
  * `oracle`: a v3 Deposit event with a court (published list, disputes); without one the host's list is final.
  * `perSeat`: the host bond ("2 deposits per seat"); none when the court asks for no bond.
  * Durations come as text from `hoursText` ("12 hours", "3 days").
+ * `closesAtStart`: registration closes at the start (v3 Deposit), not at the end.
  */
-type Props = { ticket: boolean; amount: string; oracle?: boolean; disputeWindow?: string; submit?: string; resolve?: string; perSeat?: string };
+type Props = { ticket: boolean; amount: string; oracle?: boolean; disputeWindow?: string; submit?: string; resolve?: string; perSeat?: string; closesAtStart?: boolean };
 
 /** Secondary payment details; the key commitment stays visible beside registration. */
-export function DepositRulesTooltip({ ticket, amount, oracle, disputeWindow = "12 hours", submit = "3 days", resolve = "7 days", perSeat }: Props) {
+export function DepositRulesTooltip({ ticket, amount, oracle, disputeWindow = "12 hours", submit = "3 days", resolve = "7 days", perSeat, closesAtStart }: Props) {
   return (
     <details className="gc-fold text-sm">
       <summary className="text-accent">{ticket ? "Ticket details" : "Deposit details"}</summary>
@@ -32,7 +33,7 @@ export function DepositRulesTooltip({ ticket, amount, oracle, disputeWindow = "1
           </>
         ) : (
           <>
-            <p>Your {amount} deposit is held in a NEAR smart contract. You can’t cancel your registration. After the event the host publishes who came, and guests on the list split the pool in their Nearvent balances right away. The host’s list is final.</p>
+            <p>Your {amount} deposit is held in a NEAR smart contract. You can’t cancel your registration.{closesAtStart ? " Registration closes when the event starts." : ""} After the event the host publishes who came, and guests on the list split the pool in their Nearvent balances right away. The host’s list is final.</p>
             <p>If the host cancels, every deposit goes back to your Nearvent balance. If the host publishes no list within {submit} after the end, anyone can refund every guest.</p>
           </>
         )}

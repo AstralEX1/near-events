@@ -372,6 +372,7 @@ export function RegistrationCard({
             submit={hoursText(event.rules?.submit_hours ?? 72)}
             resolve={hoursText(event.rules?.resolve_hours ?? 168)}
             perSeat={event.rules?.bond_per_seat ? bondPerSeatText(event) : undefined}
+            closesAtStart={registrationEndsAt(event) === event.metadata.starts_at}
           />
         </div>
       )}

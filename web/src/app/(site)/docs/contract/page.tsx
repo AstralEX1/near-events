@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { EVENTS_CONTRACT, EXPLORER_URL, NETWORK, RPC_URL, USDC_CONTRACT } from "@/lib/config";
+import { hoursText } from "@/lib/near";
+import { escrowRules } from "../escrowRules";
 import { Code, Ext, Mono, Next, Section, Stack, Table, Title } from "../parts";
 
 export const metadata: Metadata = { title: "Smart Contract · Nearvent" };
@@ -33,6 +35,11 @@ async function codeHash(): Promise<string> {
 }
 
 export default async function ContractDocs() {
+  const rules = await escrowRules();
+  const court = !!rules?.dao;
+  const submit = hoursText(rules?.submit_hours ?? 72);
+  const disputeWindow = hoursText(rules?.challenge_hours ?? 12);
+  const resolve = hoursText(rules?.resolve_hours ?? 168);
   return (
     <>
       <Title lead="One Rust contract on NEAR holds every deposit and pays out by fixed rules.">Smart Contract</Title>
@@ -57,11 +64,15 @@ export default async function ContractDocs() {
           items={[
             { title: "Deposit", text: "Guests who came split the whole pool. Nobody came: full refund." },
             { title: "Ticket", text: "The price goes to the host when a guest registers." },
-            { title: "Publish", text: "Within 3 days after the end (by default), the host publishes who came. Nothing is paid yet." },
-            { title: "Disputes", text: "For 12 hours (by default) any guest can dispute one record by locking one deposit. A council of 5 decides through a Sputnik DAO vote (3 of 5) within 7 days after the window (by default). A dispute it doesn’t decide in time expires: the list stands and the deposit goes back." },
-            { title: "Payout", text: "Then anyone can settle. A wrong dispute loses its deposit: half to the treasury, half to the guests who came." },
+            { title: "Publish", text: `Within ${submit} after the end, the host publishes who came. ${court ? "Nothing is paid yet." : "The list is final and pays out at once."}` },
+            ...(court ? [
+              { title: "Disputes", text: `For ${disputeWindow} any guest can dispute one record by locking one deposit. A council of 5 decides through a Sputnik DAO vote (3 of 5) within ${resolve} after the window. A dispute it doesn’t decide in time expires: the list stands and the deposit goes back.` },
+              { title: "Payout", text: "Then anyone can settle. A wrong dispute loses its deposit: half to the treasury, half to the guests who came." },
+            ] : []),
             { title: "Cancel", text: "The host can cancel a deposit event until it publishes the list. Everyone is refunded. Cancelling a ticket event refunds nothing." },
-            { title: "No list", text: "3 days after the end (by default) without a list, anyone can start the refund. The list then counts as empty, and guests who came have the dispute window to prove it. If nobody does, everyone gets the deposit back. If someone does, the guests who proved it split the pool." },
+            { title: "No list", text: court
+              ? `${submit} after the end without a list, anyone can start the refund. The list then counts as empty, and guests who came have the dispute window to prove it. If nobody does, everyone gets the deposit back. If someone does, the guests who proved it split the pool.`
+              : `${submit} after the end without a list, anyone can refund every guest.` },
           ]}
         />
       </Section>
@@ -70,12 +81,12 @@ export default async function ContractDocs() {
         <ul className="list-disc pl-5 space-y-1">
           <li>Take the deposits.</li>
           <li>Publish the list before the event ends. Before the start, the only way out is a full refund.</li>
-          <li>Have the last word: any guest can dispute the list, and the council decides.</li>
+          {court && <li>Have the last word: any guest can dispute the list, and the council decides.</li>}
           <li>Mark someone who didn’t register.</li>
           <li>Touch anyone’s balance.</li>
         </ul>
         <p className="text-sm text-muted">
-          The host publishes who came, and any guest can dispute a record before the council. Deposit events close registration when they start (ticket events when they end), so the host cannot add guests after seeing who came.
+          {court ? "The host publishes who came, and any guest can dispute a record before the council." : "The host publishes who came, and the list is final. Every host’s past events are public on chain."} Deposit events close registration when they start (ticket events when they end), so the host cannot add guests after seeing who came.
         </p>
         <p className="text-sm text-muted">
           Check-ins stay off-chain, so 300 guests cost nothing. Only the final list goes on-chain. The contract account
