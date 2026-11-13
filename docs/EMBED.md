@@ -59,7 +59,7 @@ The element supports these optional settings for existing integrations:
 | Attribute | Values | Default |
 |---|---|---|
 | `theme` | `light`, `dark`, `auto` | `light` |
-| `accent` | any hex color, e.g. `#ff401f` | Nearvent purple |
+| `accent` | any hex color, e.g. `#ff401f` | Nearvent pink `#d61f69` |
 | `font` | `geist`, `poppins`, `system` | `geist` |
 | `display` | `serif` for an event title | same font |
 | `radius` | corner radius in px, 0 to 32 | 16 |
@@ -132,8 +132,9 @@ your event page ── button ──► Nearvent checkout window
 1. Start at **Integrate** (`/widget`) with your event link, or at `/create`. Add the door person to the door team.
 2. Copy the button code, AI prompt or checkout link from that event’s Manage → Integration tab. Integrate takes you there after signing.
 3. Add it to your event page.
-4. Manage registrations and check-in in Nearvent. Close the event there; eligible
-   guests can then claim their payout from the same checkout page.
+4. Manage registrations and check-in in Nearvent. After the event, publish who came
+   there (ticket events: close the event); eligible guests can then claim their
+   payout from the same checkout page.
 
 The snippet needs a public HTTPS host for the web app (see
 [`DEPLOY.md`](DEPLOY.md)). `localhost` only works on your own machine. On

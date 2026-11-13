@@ -139,7 +139,8 @@ The escrow holds the deposits; the host only says who came.
   need it.
 - **Deadlines.** Registration for deposit events closes at the start. The host
   publishes who came within 72 hours after the end; if not, anyone can call
-  `refund`, and everyone gets the deposit back unless guests prove they came.
+  `refund`, and everyone gets the deposit back (with a court, guests who came
+  can still prove it and split the pool).
   The host can cancel and refund everyone while the event is open.
 - **Limits.** Free for hosts up to 50 seats, 2 events per 30 days, ending
   within 60 days; bigger events pay a little NEAR for storage. Up to 300 seats,
@@ -217,8 +218,8 @@ the escrow, USDC, and USDC leaving NEAR Intents.
 |---|---|---|
 | `create_event(metadata, deposit, capacity, mode, access?)` | anyone (caller = host) | `metadata` = `{title, starts_at, ends_at}`; `access` = optional Regulars rule. Payable. Whitelist mode on: listed hosts only. Free tier (≤ 50 seats, 2 per host in 30 days, ending within 60 days, sponsored hosts when that mode is on): the contract pays storage, attached NEAR is returned. Otherwise attach ≥ `create_event_cost`, the excess is returned. Capacity ≤ 300 (finalize gas), deposit ≥ 0.1 USDC. Title and times cannot be changed later |
 | `ft_transfer_call` → `ft_on_transfer` | guest / verifier | `{"action":"register","event_id":N}`; `guest` only from the Intents verifier (from anyone else it must equal the sender, otherwise the whole amount is returned). With the oracle on, also `host_bond` and `dispute` |
-| `finalize(event_id, attended)` | host (+1 yocto), after `ends_at`, within 72 h | `attended` = guests checked in at the door. Deposit without the oracle: pool ÷ attendees at once, remainder to host, empty list → full refund; with the oracle it opens the 12-hour dispute window. Ticket: only closes; the host was paid at registration |
-| `refund(event_id)` | anyone, when no list came within 72 h | publishes an empty list in the host's place; guests who came can still prove it |
+| `finalize(event_id, attended)` | host (+1 yocto), after `ends_at` (Deposit: within 72 h) | `attended` = guests checked in at the door. Deposit without the oracle: pool ÷ attendees at once, remainder to host, empty list → full refund; with the oracle it opens the 12-hour dispute window. Ticket: only closes; the host was paid at registration |
+| `refund(event_id)` | anyone, when no list came within 72 h (Deposit) | publishes an empty list in the host's place: without a court every guest is refunded at once; with one, guests who came can still prove it |
 | `settle(event_id)` | anyone | oracle on: pays out once the dispute window is over and the council has decided |
 | `resolve_dispute(event_id, target, upheld)` | the event's court DAO, through an approved proposal | decides one dispute |
 | `void_event(event_id)` | the event's court DAO, through an approved proposal, after the list is published | calls the event off: every deposit, dispute deposit and host bond goes back; nothing to the treasury |
