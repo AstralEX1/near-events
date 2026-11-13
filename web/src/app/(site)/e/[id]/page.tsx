@@ -20,6 +20,7 @@ import { EventPageBackground } from "@/components/EventVisual";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 import { hostAccounts, isDaoAccount } from "@/lib/daoHost";
 import { hostedStats } from "@/lib/reputationShared";
+import { OraclePanel } from "@/components/OraclePanel";
 
 /**
  * The hosted event page, laid out like Luma so hosts and guests feel at home.
@@ -37,7 +38,7 @@ export default function EventPage() {
   const [doorTeam, setDoorTeam] = useState<string[]>([]);
   // The host, or the council when a DAO hosts.
   const [hostTeam, setHostTeam] = useState<string[]>([]);
-  const [hostRecord, setHostRecord] = useState<{ hosted: number; guestsCame: number } | null>(null);
+  const [hostRecord, setHostRecord] = useState<{ hosted: number; guestsCame: number; abandoned: number } | null>(null);
   const [names, setNames] = useState<GuestNames>({});
   const visual = useEventVisual(id, event?.metadata.title ?? "");
 
@@ -63,7 +64,9 @@ export default function EventPage() {
     if (e) {
       setHostTeam([e.host]);
       void hostAccounts(e.host).then(setHostTeam).catch(() => {});
-      void events.all().then((all) => setHostRecord(hostedStats(all, e.host))).catch(() => {});
+      void events.all()
+        .then((all) => setHostRecord({ ...hostedStats(all, e.host), abandoned: all.filter((x) => x.host === e.host && x.abandoned).length }))
+        .catch(() => {});
       void team.then(setDoorTeam);
       void guestNames.then(setNames);
       void publicDetails.then((d) => {
@@ -109,9 +112,13 @@ export default function EventPage() {
               ))}
               {hostRecord && (
                 <p className="text-xs text-muted">
-                  {hostRecord.hosted === 0
+                  {hostRecord.hosted === 0 && hostRecord.abandoned === 0
                     ? "First event on Nearvent"
-                    : `Held ${hostRecord.hosted} event${hostRecord.hosted === 1 ? "" : "s"} · ${hostRecord.guestsCame} guest${hostRecord.guestsCame === 1 ? "" : "s"} came`}
+                    : [
+                        hostRecord.hosted > 0 && `Held ${hostRecord.hosted} event${hostRecord.hosted === 1 ? "" : "s"} · ${hostRecord.guestsCame} guest${hostRecord.guestsCame === 1 ? "" : "s"} came`,
+                        // An event without the host's list is not "held", but it is not a first event either.
+                        hostRecord.abandoned > 0 && `No list published for ${hostRecord.abandoned} event${hostRecord.abandoned === 1 ? "" : "s"}`,
+                      ].filter(Boolean).join(" · ")}
                 </p>
               )}
             </div>
@@ -167,10 +174,12 @@ export default function EventPage() {
               <RegistrationCard event={event} myStatus={null} onChange={load} explain={false} />
             </RegisterBox>
           ) : (
-            <RegisterBox head={event.status === "Cancelled" ? "Cancelled" : "Event ended"}>
+            <RegisterBox head={event.status === "Cancelled" ? "Cancelled" : event.status === "Refunded" ? "Refunded" : "Event ended"}>
               <RegistrationCard event={event} myStatus={null} onChange={load} explain={false} />
             </RegisterBox>
           )}
+
+          <OraclePanel event={event} guests={guests} hostTeam={hostTeam} onChange={load} />
 
           {details?.description && (
             <Section label="About event"><PublicText value={details.description} /></Section>

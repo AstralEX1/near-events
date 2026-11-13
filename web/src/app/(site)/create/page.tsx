@@ -531,7 +531,7 @@ function CreateEvent() {
                 help={
                   form.mode === "Ticket"
                     ? "Each guest pays this for a ticket. It goes to your balance as soon as they register. Tickets are not refunded if you cancel."
-                    : "Each guest puts this down. People who come get it back plus a share of the no-shows."
+                    : `Each guest puts this down. People who come get it back plus a share of the no-shows. To open registration you lock a bond of 5 deposits (${validAmount(form.deposit) ? `${Number(form.deposit) * 5} USDC` : "5×"}); it comes back after the event unless a guest proves your list wrong.`
                 }
               >
                 <SlAmount value={form.deposit} onChange={set("deposit")} label={form.mode === "Ticket" ? "Ticket price" : "Deposit"} />

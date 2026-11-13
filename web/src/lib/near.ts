@@ -1,7 +1,8 @@
 import { EVENTS_CONTRACT, RPC_URL, USDC_CONTRACT, USDC_DECIMALS } from "./config";
 import type { AccessCheck, AccessRule } from "./access";
 
-export type EventStatus = "Open" | "Finalized" | "Cancelled";
+/** Deposit events: Open → (host publishes the list) Submitted → (window, disputes) Finalized; or Cancelled / Refunded. */
+export type EventStatus = "Open" | "Submitted" | "Finalized" | "Cancelled" | "Refunded";
 export type GuestStatus = "Registered" | "Attended";
 /** Deposit: show-ups split the no-shows' deposits. Ticket: a paid ticket, money to the host at registration. Never both. */
 export type EventMode = "Deposit" | "Ticket";
@@ -33,13 +34,53 @@ export interface EventView {
   closed_at: number;
   /** Who may register; null lets everyone in. */
   access?: AccessRule | null;
+  /** Deposit events (v3 escrow): the DAO that decides disputes; null for tickets. */
+  dao?: string | null;
+  /** Deposit events: receives the treasury share of lost bonds, fixed at creation. */
+  treasury?: string | null;
+  /** USDC locked by the host; registration opens once it is `HOST_BOND_MULTIPLIER` deposits. */
+  host_bond?: string;
+  /** When the host published the list; 0 before. */
+  submitted_at?: number;
+  /** Disputes are accepted until this time (exclusive); 0 before the list. */
+  challenge_ends_at?: number;
+  /** DAO verdicts until this time (exclusive); later, open disputes expire. */
+  resolve_by?: number;
+  /** The host must publish the list by this time (inclusive); after it, anyone refunds. */
+  submit_by?: number;
+  open_disputes?: number;
+  upheld_disputes?: number;
+  dismissed_disputes?: number;
+  /** The host published no list in time; `refund` published an empty one in their place. */
+  abandoned?: boolean;
 }
 
 export interface GuestView {
   account_id: string;
+  /** Final once the event is Finalized; Deposit events show the host's claim in `listed` before that. */
   status: GuestStatus;
   registered_at: number;
+  /** Deposit: on the host's published list. */
+  listed?: boolean;
 }
+
+export interface DisputeView {
+  target: string;
+  challenger: string;
+  /** The claim: the target came (true) or did not (false). */
+  attended: boolean;
+  created_at: number;
+  /** Paid through NEAR Intents, so the challenger's name is unproven. */
+  via_intents: boolean;
+  /** The DAO's verdict: true = the challenger is right; null = not decided (expires at `resolve_by`). */
+  upheld: boolean | null;
+}
+
+/** Mirrors the escrow (v3). */
+export const HOST_BOND_MULTIPLIER = 5n;
+export const hostBondFor = (e: { deposit: string }) => (BigInt(e.deposit) * HOST_BOND_MULTIPLIER).toString();
+/** Deposit events that still need the host bond before guests can register. */
+export const needsBond = (e: EventView) => !!e.dao && !isTicket(e) && e.status === "Open" && BigInt(e.host_bond ?? "0") === 0n;
 
 /** Read-only contract call over JSON-RPC. */
 export async function view<T>(method: string, args: object = {}, contractId = EVENTS_CONTRACT): Promise<T> {
@@ -82,6 +123,8 @@ export const events = {
   },
   get: (id: number) => view<EventView | null>("get_event", { event_id: id }),
   guests: (id: number) => view<GuestView[]>("get_guests", { event_id: id, from_index: 0, limit: MAX_CAPACITY }),
+  /** Disputes about the event's records, in registration order. */
+  disputes: (id: number) => view<DisputeView[]>("get_disputes", { event_id: id, from_index: 0, limit: MAX_CAPACITY }),
   guestStatus: (id: number, account: string) =>
     view<GuestStatus | null>("get_guest_status", { event_id: id, account_id: account }),
   /** In the order of `ids`, one call per 100 events. */
@@ -98,8 +141,6 @@ export const events = {
   /** yoctoNEAR the host must attach to create this event now; "0" on the free tier. */
   createCost: (host: string, capacity: number, endsAt?: number) =>
     view<string>("create_event_cost", { host, capacity, ends_at: endsAt ?? null }),
-  /** Finalized events the account was checked in at. */
-  attendedCount: (account: string) => view<number>("get_attended_count", { account_id: account }),
   /** Every event in creation order, paged through `get_events`. */
   all: async () => {
     const out: EventView[] = [];

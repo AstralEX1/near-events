@@ -36,7 +36,8 @@ export default function DocsHome() {
             Guests show their QR. The host or door team marks them in.
           </Shot>
           <Shot n={4} title="Get paid" images={[{ src: "/docs/payout.png", w: 1304, h: 1030, alt: "Payout ready to withdraw" }]}>
-            The host closes the event. Everyone who came gets their deposit back plus a share of the no-shows.
+            The host publishes who came. After 24 hours for disputes, everyone who came gets their deposit back plus a
+            share of the no-shows.
           </Shot>
         </div>
       </Section>
@@ -83,10 +84,10 @@ export default function DocsHome() {
         <Faq
           items={[
             ["Who holds the money?", "A smart contract. Not Nearvent, not the host."],
-            ["Can the host keep the deposits?", "No. The host only says who came."],
+            ["Can the host keep the deposits?", "No. The host only says who came, and guests can dispute it."],
             ["Nobody showed up?", "Everyone gets their deposit back."],
-            ["The host never closes the event?", "30 days after it ends, anyone can refund everyone."],
-            ["I came but wasn’t checked in.", "Ask the host before they close the event."],
+            ["The host never publishes who came?", "3 days after the end, anyone can start the refund. Guests who came have 24 hours to prove it; everyone else gets the deposit back plus a share of the host’s bond."],
+            ["I came but was marked absent.", "Open a dispute on the event page within 24 hours after the host publishes the list. It locks one deposit, and a council of 5 decides. If it agrees, you get your share, your deposit and part of the host’s bond."],
             ["Fees?", "None from Nearvent."],
           ]}
         />

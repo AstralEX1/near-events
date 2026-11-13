@@ -35,8 +35,10 @@ export function Timeline({ items, empty }: { items: EventView[]; empty: string }
                         <span className="text-muted">
                           {e.attended_count} of {e.guest_count} came{!isTicket(e) && e.attended_count > 0 && ` ·${formatUsdc(e.payout_per_attendee)} USDC per checked-in guest`}
                         </span>
-                      ) : e.status === "Cancelled" ? (
-                        <span className="text-muted">Cancelled</span>
+                      ) : e.status === "Cancelled" || e.status === "Refunded" ? (
+                        <span className="text-muted">{e.status}</span>
+                      ) : e.status === "Submitted" ? (
+                        <span className="text-muted">List published · payouts after the dispute window</span>
                       ) : (
                         <>
                           <span className="inline-block px-2 py-0.5 rounded-full bg-accent-soft text-accent text-xs font-medium mr-2">

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { events, formatUsdc, usdc, type EventView, type GuestStatus, isTicket } from "@/lib/near";
+import { events, formatUsdc, hostBondFor, needsBond, usdc, type EventView, type GuestStatus, isTicket } from "@/lib/near";
 import { EVENTS_CONTRACT, HAS_FAUCET, TEST_EVM_FAUCET_LIMIT, USDC_CONTRACT } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
 import { SignInOptions } from "@/components/SignIn";
@@ -181,10 +181,20 @@ export function RegistrationCard({
   let body;
   if (event.status === "Cancelled" && ticket) {
     body = <p className="text-sm">This event was cancelled. Tickets are not refunded.</p>;
-  } else if (event.status === "Cancelled") {
+  } else if (event.status === "Submitted") {
+    body = myStatus ? (
+      <p className="text-sm">The host published who came. Payouts follow the 24-hour dispute window; see below.</p>
+    ) : (
+      <p className="text-sm">This event is over. The host published who came; payouts follow the dispute window.</p>
+    );
+  } else if (event.status === "Cancelled" || event.status === "Refunded") {
     body = (
       <div className="space-y-2">
-        <p className="text-sm">This event was cancelled. Refunds were credited to guests’ Nearvent balances.</p>
+        <p className="text-sm">
+          {event.status === "Refunded"
+            ? "The host did not publish who came in time, so every deposit was refunded with a share of the host bond."
+            : "This event was cancelled. Refunds were credited to guests’ Nearvent balances."}
+        </p>
         {!accountId ? (
           <SignInFolded hint="Registered? Sign in to see your refund." onDone={refreshAfterSignIn} />
         ) : balanceLoading ? (
@@ -259,6 +269,10 @@ export function RegistrationCard({
     body = accountId
       ? <p className="text-sm">Registration is closed: the event has ended.</p>
       : <SignInFolded hint="Registration is closed. Registered? Sign in to see your pass." onDone={refreshAfterSignIn} />;
+  } else if (accountId === event.host) {
+    body = <p className="text-sm">You’re the host. Hosts can’t take a seat at their own event.</p>;
+  } else if (needsBond(event)) {
+    body = <p className="text-sm text-muted">Registration opens once the host locks a {formatUsdc(hostBondFor(event))} USDC bond.</p>;
   } else if (accountId && rule && access?.allowed === false) {
     body = (
       <p className="text-sm">
@@ -331,7 +345,7 @@ export function RegistrationCard({
     );
   }
 
-  const open = event.status === "Open" && !myStatus && event.guest_count < event.capacity && Date.now() < event.metadata.ends_at;
+  const open = event.status === "Open" && !myStatus && event.guest_count < event.capacity && Date.now() < event.metadata.ends_at && !needsBond(event);
   return (
     <div className="space-y-3">
       {open && rule && access?.allowed !== false && <p className="text-sm text-muted">{ruleText(rule)}</p>}
@@ -343,8 +357,8 @@ export function RegistrationCard({
         )}
       {open && (
         <div className="space-y-1.5 text-sm text-muted leading-relaxed">
-          {explain && <p>{ticket ? "A paid ticket. The money goes to the host when you register; tickets are not refunded." : "Get checked in and receive your deposit plus a share of no-shows after the host closes the event. Miss it, and your deposit goes to the guests who came."}</p>}
-          <DepositRulesTooltip ticket={ticket} amount={price} />
+          {explain && <p>{ticket ? "A paid ticket. The money goes to the host when you register; tickets are not refunded." : "Get checked in and receive your deposit plus a share of no-shows once the host’s list has stood for 24 hours. Miss it, and your deposit goes to the guests who came. Marked absent by mistake? Dispute it."}</p>}
+          <DepositRulesTooltip ticket={ticket} amount={price} oracle={!!event.dao} />
         </div>
       )}
     </div>

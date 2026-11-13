@@ -73,6 +73,18 @@ if (ESCROW) {
     if (wrong.length) throw new Error(wrong.join("; "));
     return `owner ${c.owner}, relayer ${c.relayer}, frozen ${c.frozen}, whitelist ${c.whitelist_mode ? "on" : "off"}`;
   });
+  // Escrow v3: a release build, a dispute DAO, and a DAO the factory cannot rewrite.
+  await check("escrow v3 disputes", async () => {
+    const c = await view(ESCROW, "get_config");
+    if (!("challenge_window_ms" in c)) return "v2 escrow (no disputes)";
+    if (mainnet && c.challenge_window_ms !== 86_400_000) throw new Error(`dispute window ${c.challenge_window_ms} ms: a testnet rehearsal build`);
+    if (!c.dao) throw new Error("no dispute DAO: Deposit events cannot be created (configure_disputes)");
+    const info = await view(c.dao, "get_factory_info");
+    if (info.auto_update) throw new Error(`${c.dao} still lets ${info.factory_id} replace its code (FactoryInfoUpdate auto_update=false)`);
+    const policy = await view(c.dao, "get_policy");
+    const council = policy.roles.find((r) => r.name === "council")?.kind?.Group ?? [];
+    return `DAO ${c.dao}, council ${council.length}, treasury ${c.treasury}, dispute window ${c.challenge_window_ms / 60_000} min`;
+  });
   await check("escrow holds USDC storage", async () => !!(await view(USDC, "storage_balance_of", { account_id: ESCROW })));
   await check("escrow responds", async () => `${(await view(ESCROW, "get_recent_events", { limit: 100 })).length} recent events`);
 } else {

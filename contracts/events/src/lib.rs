@@ -1,59 +1,77 @@
-//! Near Events — Kickback-style event escrow.
+//! Near Events — Kickback-style event escrow, v3: optimistic attendance.
 //!
 //! Guests register by sending an equal USDC deposit with `ft_transfer_call`.
-//! Check-in at the door happens off-chain (the host, the door team the host
-//! keeps on the Near Events server, or the Telegram bot mark guests there).
-//! The host then calls `finalize` once with the list of guests who came, and
-//! the whole pool of deposits is split equally between them. No platform fee.
+//! Check-in at the door happens off-chain (the host or the door team the host
+//! keeps on the Near Events server mark guests there).
 //!
-//! Payouts land on an internal balance that the guest can withdraw to any
-//! NEAR account, into their NEAR Intents balance (`intents.near`, from where
+//! An event runs in one of two modes, never both. `Ticket` is a plain paid
+//! ticket: the price is credited to the host's balance right at registration;
+//! `finalize` and `cancel` only close the event and refund nothing.
+//! `Deposit` (the default) is the Kickback pool, guarded by an optimistic
+//! oracle (see "Deposit events" below). The amount a guest pays lives in
+//! `deposit` in both modes.
+//!
+//! Deposit events:
+//! 1. The host (or anyone for them) locks a bond of `HOST_BOND_MULTIPLIER` × the
+//!    deposit (`host_bond` message). Registration opens only after that, and the
+//!    host can never take a seat.
+//! 2. After `ends_at` the host publishes who came (`finalize`, within
+//!    `SUBMIT_DEADLINE_MS`). Nothing is paid yet: the event is `Submitted`.
+//! 3. For `CHALLENGE_WINDOW_MS` any guest may dispute one record by locking a
+//!    bond equal to the deposit (`dispute` message): "I came" only for oneself,
+//!    "X did not come" only about another guest. One dispute per record.
+//! 4. The event's DAO (a Sputnik DAO whose council votes on proposals) calls
+//!    `resolve_dispute` itself. A dispute it does not decide within
+//!    `RESOLVE_GRACE_MS` after the window expires: the host's record stands and
+//!    the challenger gets the bond back.
+//! 5. Anyone calls `settle` once the window is over and no dispute is waiting.
+//!    Money (all on internal balances): the pool is split by the final list;
+//!    the host bond goes back to the host, or, if any dispute was upheld,
+//!    `HOST_TREASURY_BPS` of it to the treasury and the rest to the winners;
+//!    a dismissed challenger bond goes `CHALLENGER_TREASURY_BPS` to the treasury
+//!    and the rest to the people who came. Every unit that comes in is paid out.
+//! 6. A host who publishes no list in time loses the bond: anyone calls
+//!    `refund`, which publishes an empty list in the host's place and opens the
+//!    dispute window. Guests who came can still prove it ("I came"); everyone
+//!    else gets the deposit back. The bond goes to the winners and the treasury,
+//!    or, with no winner, to all guests and the treasury. So abandoning never
+//!    beats publishing an honest list. The host may `cancel` only before
+//!    `starts_at` (or before the bond).
+//!
+//! Payouts land on an internal balance that the owner can withdraw to any
+//! NEAR account or into their NEAR Intents balance (`intents.near`, from where
 //! 1Click takes it to any chain).
 //!
-//! Intents registrations withdraw from the guest's own verifier balance.
-//! The token resolver returns unused USDC to the sender, and the verifier
-//! credits its original withdrawal owner. Never send solver-owned swaps
-//! directly to the escrow.
-//!
-//! An event runs in one of two modes, never both. `Deposit` (the default) is
-//! the Kickback pool above. `Ticket` is a plain paid ticket: the price is
-//! credited to the host's balance right at registration; `finalize` and
-//! `cancel` only close the event and refund nothing. The amount a guest pays
-//! lives in `deposit` in both modes.
-//!
-//! A guest always pays for their own seat. Only the NEAR Intents verifier
-//! names a guest other than the sender.
+//! Intents payments withdraw from the payer's own verifier balance. The token
+//! resolver returns unused USDC to the sender, and the verifier credits its
+//! original withdrawal owner. Never send solver-owned swaps directly to the
+//! escrow. Only the NEAR Intents verifier names a guest other than the sender.
 //!
 //! Free tier: an event of up to `FREE_MAX_CAPACITY` seats that ends within
 //! `FREE_MAX_HORIZON_MS` is free, up to `FREE_MAX_EVENTS` free events per host
 //! in any `FREE_WINDOW_MS` (closing one early does not give its slot back).
 //! With the sponsored mode on, only sponsored hosts get the free tier. The
 //! contract pays for storage from its own NEAR balance, which the operator
-//! keeps topped up. Anything else the host pays
-//! for: `create_event` takes the storage cost (`create_event_cost`) as
-//! attached NEAR, returns the excess, and gives back the share of empty seats
-//! when the event closes. The deposit has a floor so seats always cost guests
-//! something.
+//! keeps topped up. Anything else the host pays for: `create_event` takes the
+//! storage cost (`create_event_cost`) as attached NEAR, returns the excess, and
+//! gives back the share nobody used when the event closes. The deposit has a
+//! floor so seats always cost guests something.
 //!
 //! Accounts that live in NEAR Intents (EVM, Solana, passkey wallets) act as
 //! hosts through the verifier's `auth_call` intent, which calls `on_auth`.
 //!
-//! Host trust: the contract cannot see who came, so it trusts the host's
-//! attendance list. With the whitelist mode on, only whitelisted (vetted)
-//! hosts can create events at all. The host can close with `finalize` only
-//! after `ends_at`; before that, only `cancel`, which refunds every deposit.
-//! Registration closes at `ends_at`.
-//!
 //! The owner can replace the code (`upgrade`) until `freeze`, which is one-way.
 //! The escrow account keeps no access keys, so after `freeze` nobody can
-//! change the code. The owner also runs both host lists (whitelist, sponsored).
-//!
-//! Each guest's finalized attendances are counted (`get_attended_count`).
+//! change the code. The owner also runs both host lists (whitelist, sponsored)
+//! and picks the DAO and treasury for future events (`configure_disputes`).
 //!
 //! Access rule (optional, set at creation): only guests with a history at the
 //! same host's earlier finalized events may register — at least `min_attended`
 //! visits and at most `max_no_shows` no-shows among `past_events` — until
 //! `open_to_all_at`, if given. `check_access` shows the result for any account.
+//!
+//! Reputation counters and the score are computed off-chain from these
+//! records (`get_events`, `get_guests`, `get_disputes`).
 
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use near_sdk::json_types::U128;
@@ -65,26 +83,28 @@ use near_sdk::{
 };
 
 // Sizes below are the measured worst case (64-char accounts, 120-char title)
-// plus ~25%: event with the largest access rule 428 B, registration 247 B,
-// balance entry 141 B, attendance counter 113 B, whitelist entry 109 B, free log 125 B.
-// `tests.rs` checks real storage stays under them.
+// plus ~25%: see `storage_reserves_cover_the_measured_worst_case` in `tests.rs`,
+// which checks real storage stays under them. Open events reserved storage with
+// these numbers: an upgrade must not change them while events are open.
 /// Storage for one registration and its indexes. Each seat also reserves
-/// a separate balance entry and an attendance counter for settlement.
+/// a separate balance entry and a possible dispute for settlement.
 pub const STORAGE_BYTES_PER_GUEST: u64 = 310;
 const BALANCE_BYTES: u64 = 176;
-/// One entry in `attended_events`.
-const ATTENDED_BYTES: u64 = 144;
+/// A dispute, kept inside the disputed guest's registration.
+const DISPUTE_BYTES: u64 = 110;
 /// One entry in `whitelist`.
 const WHITELIST_BYTES: u64 = 140;
 /// A host's free-tier log (creation times of the last free events).
 const FREE_LOG_BYTES: u64 = 160;
-/// Written per guest at settlement: their balance and attendance counter.
-const SETTLE_BYTES: u64 = BALANCE_BYTES + ATTENDED_BYTES;
+/// Reserved per taken seat until the event closes: the guest's balance entry and a dispute.
+const SETTLE_BYTES: u64 = BALANCE_BYTES + DISPUTE_BYTES;
 const SEAT_BYTES: u64 = STORAGE_BYTES_PER_GUEST + SETTLE_BYTES;
+/// Per event: the balance entries of the host and of the treasury.
+const EVENT_BALANCES_BYTES: u64 = 2 * BALANCE_BYTES;
 const MAX_VIEW_PAGE: u32 = 100;
 /// Upper bound for one event record: max-length title, the largest access
-/// rule and the vector slot.
-const EVENT_RECORD_BYTES: u64 = 540;
+/// rule, the DAO and treasury accounts, the dispute counters and the vector slot.
+const EVENT_RECORD_BYTES: u64 = 760;
 /// Most past events an access rule may look at.
 pub const MAX_RULE_EVENTS: usize = 10;
 /// Largest event the contract pays storage for.
@@ -92,21 +112,42 @@ pub const FREE_MAX_CAPACITY: u32 = 50;
 /// The free tier gives a host this many events...
 pub const FREE_MAX_EVENTS: usize = 2;
 /// ...in any window of this length, counted at creation.
-pub const FREE_WINDOW_MS: u64 = 30 * 24 * 60 * 60 * 1000;
+pub const FREE_WINDOW_MS: u64 = 30 * DAY_MS;
 /// A free event must end within this time, so spam reservations expire fast.
-pub const FREE_MAX_HORIZON_MS: u64 = 60 * 24 * 60 * 60 * 1000;
+pub const FREE_MAX_HORIZON_MS: u64 = 60 * DAY_MS;
 /// Smallest deposit: 0.1 USDC (6 decimals). Stops events with a dust deposit
 /// where seats cost us storage but cost guests nothing.
 pub const MIN_DEPOSIT: u128 = 100_000;
-/// `finalize` walks every guest in one call: 300 guests use ~198 Tgas, well
-/// under the 1000 Tgas transaction limit. Sandbox exercises this capacity.
+/// `settle` walks every guest in one call; the sandbox measures the gas at
+/// this capacity with a dispute on every record.
 pub const MAX_CAPACITY: u32 = 300;
-/// After `ends_at` + this grace period, anyone can `cancel` an unfinalized event.
-pub const ABANDON_GRACE_MS: u64 = 30 * 24 * 60 * 60 * 1000;
+/// Ticket events: after `ends_at` + this grace period, anyone can `cancel` an unclosed event.
+pub const ABANDON_GRACE_MS: u64 = 30 * DAY_MS;
 
+/// Deposit events: the host bond is this many deposits.
+pub const HOST_BOND_MULTIPLIER: u128 = 5;
+/// One hour of the oracle's deadlines. Testnet rehearsal builds
+/// (`--features short-windows`, refused outside testnet and sandbox) make it
+/// 10 seconds, so a whole dispute cycle fits in minutes.
+const ORACLE_HOUR_MS: u64 = if cfg!(feature = "short-windows") { 10_000 } else { HOUR_MS };
+/// Disputes are accepted for this long after the host publishes the list.
+pub const CHALLENGE_WINDOW_MS: u64 = 24 * ORACLE_HOUR_MS;
+/// The host must publish the list within this time after `ends_at`.
+pub const SUBMIT_DEADLINE_MS: u64 = 72 * ORACLE_HOUR_MS;
+/// The DAO decides within this time after the window; later, open disputes expire.
+pub const RESOLVE_GRACE_MS: u64 = 7 * 24 * ORACLE_HOUR_MS;
+/// Share of a lost host bond that goes to the treasury (the rest to the winners).
+/// 5000 keeps a lying host from winning its own bond back through a sock-puppet dispute.
+pub const HOST_TREASURY_BPS: u128 = 5_000;
+/// Share of a dismissed challenger bond that goes to the treasury (the rest to the people who came).
+pub const CHALLENGER_TREASURY_BPS: u128 = 5_000;
+const BPS: u128 = 10_000;
+
+const HOUR_MS: u64 = 60 * 60 * 1000;
+const DAY_MS: u64 = 24 * HOUR_MS;
 const MAX_TITLE_LEN: usize = 120;
-/// Events must end within a year, so the abandoned-event refund is always reachable.
-const MAX_EVENT_HORIZON_MS: u64 = 365 * 24 * 60 * 60 * 1000;
+/// Events must end within a year, so every deadline is always reachable.
+const MAX_EVENT_HORIZON_MS: u64 = 365 * DAY_MS;
 const MAX_WHITELIST_BATCH: usize = 100;
 
 const GAS_FT_TRANSFER: Gas = Gas::from_tgas(10);
@@ -123,18 +164,26 @@ enum StorageKey {
     Balances,
     /// tp7's open-event counter, no longer used; kept so later prefixes don't shift.
     OpenEvents,
+    /// v2's attendance counter, no longer used (the score lives off-chain).
     AttendedEvents,
     Whitelist,
     Sponsored,
     FreeLog,
 }
 
+/// Variants keep their Borsh order; new ones are appended.
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EventStatus {
     Open,
+    /// Paid out (`Deposit`: settled; `Ticket`: closed by the host).
     Finalized,
     Cancelled,
+    /// Deposit: the host published the list; disputes, then `settle`.
+    Submitted,
+    /// Deposit: the host published no list in time and nobody registered; the bond went back.
+    /// (With guests an abandoned event goes to `Submitted` with an empty list.)
+    Refunded,
 }
 
 /// How the money of an event works. One or the other, never mixed.
@@ -152,6 +201,7 @@ pub enum EventMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GuestStatus {
     Registered,
+    /// Final: set by `settle` (Deposit) or `finalize` (Ticket).
     Attended,
 }
 
@@ -174,15 +224,29 @@ pub struct Event {
     pub capacity: u32,
     pub status: EventStatus,
     pub guest_count: u32,
+    /// Deposit: the host's list adjusted by upheld disputes; final once settled.
     pub attended_count: u32,
     pub payout_per_attendee: u128,
     pub created_at: u64,
-    /// When the event was finalized or cancelled; 0 while open.
+    /// When the event was finalized, cancelled or refunded; 0 before.
     pub closed_at: u64,
     /// NEAR (yocto) the host paid for storage; 0 on the free tier.
     storage_paid: u128,
     /// Who may register; `None` lets everyone in.
     pub access: Option<AccessRule>,
+    /// Deposit: the DAO that decides this event's disputes, fixed at creation.
+    pub dao: Option<AccountId>,
+    /// Deposit: who receives the treasury share of this event's lost bonds, fixed at creation.
+    pub treasury: Option<AccountId>,
+    /// Deposit: USDC locked by the host; 0 until the `host_bond` message.
+    pub host_bond: u128,
+    /// Deposit: when the host published the list; 0 before.
+    pub submitted_at: u64,
+    pub open_disputes: u32,
+    pub upheld_disputes: u32,
+    pub dismissed_disputes: u32,
+    /// Deposit: the host published no list; `refund` published an empty one.
+    pub abandoned: bool,
 }
 
 /// Registration limited to guests with a history at the same host's earlier events.
@@ -226,6 +290,22 @@ pub struct EventView {
     pub created_at: u64,
     pub closed_at: u64,
     pub access: Option<AccessRule>,
+    pub dao: Option<AccountId>,
+    pub treasury: Option<AccountId>,
+    /// Locked host bond; registration needs `HOST_BOND_MULTIPLIER` × deposit here.
+    pub host_bond: U128,
+    pub submitted_at: u64,
+    /// Disputes are accepted until this time (exclusive); 0 before the list.
+    pub challenge_ends_at: u64,
+    /// The DAO's verdicts are accepted until this time (exclusive); 0 before the list.
+    pub resolve_by: u64,
+    /// The host must publish the list by this time (inclusive), Deposit only.
+    pub submit_by: u64,
+    pub open_disputes: u32,
+    pub upheld_disputes: u32,
+    pub dismissed_disputes: u32,
+    /// The host published no list in time; the empty list was published for them.
+    pub abandoned: bool,
 }
 
 #[near(serializers = [json])]
@@ -233,12 +313,41 @@ pub struct GuestView {
     pub account_id: AccountId,
     pub status: GuestStatus,
     pub registered_at: u64,
+    /// Deposit: on the host's published list.
+    pub listed: bool,
 }
 
 #[near(serializers = [borsh])]
 pub struct GuestRecord {
     pub status: GuestStatus,
     pub registered_at: u64,
+    /// Deposit: the host's published list marks this guest as came.
+    pub listed: bool,
+    /// The dispute about this record, if any.
+    pub dispute: Option<Dispute>,
+}
+
+#[near(serializers = [borsh])]
+#[derive(Clone)]
+pub struct Dispute {
+    pub challenger: AccountId,
+    /// The claim: the guest came (`true`) or did not (`false`).
+    pub attended: bool,
+    pub created_at: u64,
+    /// Paid through NEAR Intents, which names the challenger without proof.
+    pub via_intents: bool,
+    /// The DAO's verdict: `true` = the challenger is right.
+    pub upheld: Option<bool>,
+}
+
+#[near(serializers = [json])]
+pub struct DisputeView {
+    pub target: AccountId,
+    pub challenger: AccountId,
+    pub attended: bool,
+    pub created_at: u64,
+    pub via_intents: bool,
+    pub upheld: Option<bool>,
 }
 
 #[near(serializers = [json])]
@@ -253,6 +362,12 @@ pub struct ConfigView {
     pub whitelist_mode: bool,
     /// On: only sponsored hosts get the free tier.
     pub sponsored_mode: bool,
+    /// The DAO new Deposit events get; `None`: Deposit events cannot be created.
+    pub dao: Option<AccountId>,
+    /// Receives the treasury share of lost bonds.
+    pub treasury: AccountId,
+    /// 86 400 000 (24 h) in a release build; less only in a testnet rehearsal build.
+    pub challenge_window_ms: u64,
 }
 
 /// `msg` accepted by `ft_on_transfer`.
@@ -262,6 +377,11 @@ pub enum TransferMsg {
     /// Take a seat for the sender. `guest` is only for payments relayed by
     /// NEAR Intents; from anyone else it must be absent or equal the sender.
     Register { event_id: u64, guest: Option<AccountId> },
+    /// Lock the host bond of a Deposit event; anyone may pay it, it belongs to the host.
+    HostBond { event_id: u64 },
+    /// Dispute the host's record of `target`, claiming `attended`. The
+    /// challenger is the sender, or `guest` for NEAR Intents payments.
+    Dispute { event_id: u64, target: AccountId, attended: bool, guest: Option<AccountId> },
 }
 
 /// `msg` accepted by `on_auth`: the same actions as the direct methods, done
@@ -323,11 +443,9 @@ pub struct Contract {
     guest_index: LookupMap<(u64, u32), AccountId>,
     balances: LookupMap<AccountId, Balance>,
     reserved_bytes: u64,
-    /// Finalized events each guest was checked in at.
-    attended_events: LookupMap<AccountId, u32>,
     /// Optional account allowed to call `payout_to_intents` for other users (web relayer).
     relayer: Option<AccountId>,
-    /// Upgrades the code until `frozen`, and runs both host lists.
+    /// Upgrades the code until `frozen`, runs both host lists and the dispute settings.
     owner: AccountId,
     frozen: bool,
     /// When on, only whitelisted hosts can create events.
@@ -338,13 +456,19 @@ pub struct Contract {
     sponsored: LookupSet<AccountId>,
     /// Creation times of each host's last `FREE_MAX_EVENTS` free events, oldest first.
     free_log: LookupMap<AccountId, [u64; FREE_MAX_EVENTS]>,
+    /// The DAO new Deposit events get.
+    dao: Option<AccountId>,
+    /// Receives the treasury share of lost bonds.
+    treasury: AccountId,
 }
 
 #[near]
 impl Contract {
+    /// Deposit events need a DAO: call `configure_disputes` before the first one.
     #[init]
     #[private]
     pub fn new(usdc: AccountId, intents: Option<AccountId>, relayer: Option<AccountId>, owner: AccountId) -> Self {
+        require_rehearsal_network();
         Self {
             usdc,
             intents,
@@ -352,9 +476,9 @@ impl Contract {
             guests: LookupMap::new(StorageKey::Guests),
             guest_index: LookupMap::new(StorageKey::GuestIndex),
             balances: LookupMap::new(StorageKey::Balances),
-            attended_events: LookupMap::new(StorageKey::AttendedEvents),
             relayer,
             reserved_bytes: 0,
+            treasury: owner.clone(),
             owner,
             frozen: false,
             whitelist_mode: false,
@@ -362,6 +486,7 @@ impl Contract {
             sponsored_mode: false,
             sponsored: LookupSet::new(StorageKey::Sponsored),
             free_log: LookupMap::new(StorageKey::FreeLog),
+            dao: None,
         }
     }
 
@@ -370,7 +495,8 @@ impl Contract {
     /// Creates an event hosted by the caller. Free tier (see the crate docs):
     /// the contract pays for storage and any attached NEAR is returned.
     /// Otherwise the caller attaches at least `create_event_cost` and gets
-    /// the excess back.
+    /// the excess back. A Deposit event opens for registration once its host
+    /// bond is paid.
     #[payable]
     pub fn create_event(
         &mut self,
@@ -384,11 +510,11 @@ impl Contract {
         self.create_event_for(env::predecessor_account_id(), metadata, deposit, capacity, mode, access, attached)
     }
 
-    /// Closes the event with the guests who came (`attended`, checked in at
-    /// the door off-chain). Host only, once `ends_at` has passed. Unknown
-    /// accounts fail the call, duplicates count once.
-    /// `Deposit`: the pool is split equally between them, the rounding
-    /// remainder goes to the host; an empty list returns every deposit.
+    /// Host only, once `ends_at` has passed, with the guests who came
+    /// (`attended`, checked in at the door off-chain). Unknown accounts fail
+    /// the call, duplicates count once.
+    /// `Deposit`: publishes the list (within `SUBMIT_DEADLINE_MS`) and opens the
+    /// dispute window; `settle` pays out later. With no guests it closes at once.
     /// `Ticket`: just closes the event; the host was paid at registration.
     #[payable]
     pub fn finalize(&mut self, event_id: u64, attended: Vec<AccountId>) {
@@ -396,11 +522,11 @@ impl Contract {
         self.finalize_by(&env::predecessor_account_id(), event_id, attended);
     }
 
-    /// Cancels the event and refunds every guest deposit (`Ticket` mode refunds
-    /// nothing: the host already has the money). The host can do it
-    /// at any time while the event is open. As a safety valve for a host who
-    /// never closes the event, anyone else can do it once `ABANDON_GRACE_MS`
-    /// has passed after `ends_at`.
+    /// Cancels the event and refunds every guest deposit and the host bond
+    /// (`Ticket` mode refunds nothing: the host already has the money).
+    /// `Deposit`: the host only, before `starts_at` (any time before the bond).
+    /// `Ticket`: the host any time while open; anyone else once
+    /// `ABANDON_GRACE_MS` has passed after `ends_at`.
     #[payable]
     pub fn cancel(&mut self, event_id: u64) {
         near_sdk::assert_one_yocto();
@@ -432,7 +558,98 @@ impl Contract {
         PromiseOrValue::Value(())
     }
 
+    // ------------------------------------------------------------- disputes
+
+    /// The event's DAO only (`dao` in `get_event`), through an approved
+    /// proposal. `upheld = true`: the challenger is right. Before
+    /// `resolve_by`, once per dispute; anything else panics, so the proposal
+    /// fails and nothing changes.
+    pub fn resolve_dispute(&mut self, event_id: u64, target: AccountId, upheld: bool) {
+        let event = self.event(event_id);
+        require!(event.dao.as_ref() == Some(&env::predecessor_account_id()), "Only this event's DAO");
+        require!(event.status == EventStatus::Submitted, "Event is closed");
+        require!(env::block_timestamp_ms() < resolve_by(event), "Too late: the dispute has expired");
+        let record = self
+            .guests
+            .get_mut(&(event_id, target.clone()))
+            .unwrap_or_else(|| env::panic_str("Not a guest of this event"));
+        let dispute = record.dispute.as_mut().unwrap_or_else(|| env::panic_str("No dispute about this guest"));
+        require!(dispute.upheld.is_none(), "This dispute is already resolved");
+        dispute.upheld = Some(upheld);
+        let (claim, challenger) = (dispute.attended, dispute.challenger.clone());
+        let event = self.event_mut(event_id);
+        event.open_disputes -= 1;
+        if upheld {
+            event.upheld_disputes += 1;
+            if claim {
+                event.attended_count += 1;
+            } else {
+                event.attended_count -= 1;
+            }
+        } else {
+            event.dismissed_disputes += 1;
+        }
+        emit(
+            "dispute_resolved",
+            json!({ "event_id": event_id, "target": target, "challenger": challenger, "upheld": upheld }),
+        );
+    }
+
+    /// Pays out a Deposit event once the dispute window is over and no
+    /// dispute is waiting for the DAO (or `resolve_by` has passed). Anyone may call it.
+    pub fn settle(&mut self, event_id: u64) {
+        let now = env::block_timestamp_ms();
+        let event = self.event(event_id);
+        require!(event.status == EventStatus::Submitted, "Nothing to settle");
+        require!(now >= challenge_ends_at(event), "The dispute window is still open");
+        require!(event.open_disputes == 0 || now >= resolve_by(event), "Disputes are waiting for the DAO");
+        self.settle_money(event_id);
+    }
+
+    /// For a Deposit event whose host published no list by `submit_by`: anyone
+    /// publishes an empty list in the host's place and opens the dispute window
+    /// (then `settle`; the host bond is lost, see the crate docs). With no
+    /// guests the event just closes (`Refunded`) and the bond goes back.
+    pub fn refund(&mut self, event_id: u64) {
+        let event = self.event(event_id);
+        require!(event.mode == EventMode::Deposit, "Only Deposit events are refunded");
+        require!(event.status == EventStatus::Open, "Nothing to refund");
+        require!(env::block_timestamp_ms() > submit_by(event), "The host can still publish the list");
+        let (host, n, bond) = (event.host.clone(), event.guest_count, event.host_bond);
+        if n == 0 {
+            self.credit(&host, bond);
+            self.mark_closed(event_id, EventStatus::Refunded);
+            emit("refunded", json!({ "event_id": event_id, "reason": "no_guests", "host": U128(bond) }));
+            return;
+        }
+        // Without a list a host's sybils and its no-shows could all walk away
+        // refunded; an empty list keeps the attendees' claims alive.
+        let event = self.event_mut(event_id);
+        event.status = EventStatus::Submitted;
+        event.submitted_at = env::block_timestamp_ms();
+        event.abandoned = true;
+        let challenge_ends = challenge_ends_at(event);
+        emit(
+            "attendance_submitted",
+            json!({ "event_id": event_id, "attended": 0, "guests": n, "challenge_ends_at": challenge_ends, "abandoned": true }),
+        );
+    }
+
     // --------------------------------------------------------------- owner
+
+    /// The DAO that decides disputes and the treasury that receives its share of
+    /// lost bonds, for events created from now on: each event keeps both, so
+    /// running events (also after `freeze`) cannot be redirected. `dao = None`
+    /// stops new Deposit events. The court cannot be the treasury. Owner only.
+    #[payable]
+    pub fn configure_disputes(&mut self, dao: Option<AccountId>, treasury: AccountId) {
+        near_sdk::assert_one_yocto();
+        self.require_owner(&env::predecessor_account_id());
+        require!(dao.as_ref() != Some(&treasury), "The court cannot receive the lost bonds it decides");
+        self.dao = dao;
+        self.treasury = treasury;
+        emit("disputes_configured", json!({ "dao": self.dao, "treasury": self.treasury }));
+    }
 
     /// Whitelist mode on: only whitelisted hosts can create events. Owner only.
     #[payable]
@@ -492,21 +709,21 @@ impl Contract {
             .as_return()
     }
 
-    /// Run by `upgrade` on the new code. The state root keeps its layout.
+    /// Run by `upgrade` on the new code. Accepts only a v3 state root, so an
+    /// older escrow (its records do not decode as v3) refuses this code and
+    /// keeps its own: v3 starts on a new account.
     #[private]
     #[init(ignore_state)]
     pub fn migrate() -> Self {
+        // An `upgrade` to a rehearsal build would shrink the deadlines of running events.
+        require_rehearsal_network();
         let raw = env::storage_read(b"STATE").unwrap_or_else(|| env::panic_str("No state to migrate"));
-        let state: Self =
-            near_sdk::borsh::from_slice(&raw).unwrap_or_else(|_| env::panic_str("Unknown state layout"));
-        // shortcut: `Event` gained `access`, so records written by the old code would not decode;
-        // this release upgrades only an escrow without events. Drop the check in the next release.
-        require!(state.events.len() == 0, "Events exist: their records need a migration");
-        state
+        near_sdk::borsh::from_slice(&raw)
+            .unwrap_or_else(|_| env::panic_str("Unknown state layout: deploy v3 to a new account"))
     }
 
     /// Makes the code permanent: `upgrade` stops working for good. One-way.
-    /// The owner keeps running both host lists.
+    /// The owner keeps running both host lists and the dispute settings.
     #[payable]
     pub fn freeze(&mut self) {
         near_sdk::assert_one_yocto();
@@ -596,14 +813,29 @@ impl Contract {
     }
 
     pub fn get_guests(&self, event_id: u64, from_index: Option<u32>, limit: Option<u32>) -> Vec<GuestView> {
-        let count = self.event(event_id).guest_count;
-        let from = from_index.unwrap_or(0);
-        let limit = limit.unwrap_or(100).min(MAX_CAPACITY);
-        (from..(from.saturating_add(limit)).min(count))
-            .map(|i| {
-                let account = self.guest_index[&(event_id, i)].clone();
-                let record = &self.guests[&(event_id, account.clone())];
-                GuestView { account_id: account, status: record.status, registered_at: record.registered_at }
+        self.guest_page(event_id, from_index, limit)
+            .map(|(account, record)| GuestView {
+                account_id: account,
+                status: record.status,
+                registered_at: record.registered_at,
+                listed: record.listed,
+            })
+            .collect()
+    }
+
+    /// Disputes among the guests at indexes `from_index..from_index + limit`
+    /// (registration order), so pages line up with `get_guests`.
+    pub fn get_disputes(&self, event_id: u64, from_index: Option<u32>, limit: Option<u32>) -> Vec<DisputeView> {
+        self.guest_page(event_id, from_index, limit)
+            .filter_map(|(target, record)| {
+                record.dispute.as_ref().map(|d| DisputeView {
+                    target,
+                    challenger: d.challenger.clone(),
+                    attended: d.attended,
+                    created_at: d.created_at,
+                    via_intents: d.via_intents,
+                    upheld: d.upheld,
+                })
             })
             .collect()
     }
@@ -619,11 +851,6 @@ impl Contract {
 
     pub fn balance_of(&self, account_id: AccountId) -> U128 {
         U128(self.balance(&account_id))
-    }
-
-    /// Finalized events the account was checked in at.
-    pub fn get_attended_count(&self, account_id: AccountId) -> u32 {
-        self.attended_events.get(&account_id).copied().unwrap_or(0)
     }
 
     /// Whether `account_id` may register under the event's access rule right
@@ -661,38 +888,45 @@ impl Contract {
             frozen: self.frozen,
             whitelist_mode: self.whitelist_mode,
             sponsored_mode: self.sponsored_mode,
+            dao: self.dao.clone(),
+            treasury: self.treasury.clone(),
+            challenge_window_ms: CHALLENGE_WINDOW_MS,
         }
     }
 }
 
 #[near]
 impl FungibleTokenReceiver for Contract {
-    /// Returns the unused amount to the token resolver.
+    /// Returns the unused amount to the token resolver. A `host_bond` or
+    /// `dispute` that the escrow refuses panics, so the resolver returns all of it.
     fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128> {
         require!(env::predecessor_account_id() == self.usdc, "Only USDC is accepted");
         let msg: TransferMsg =
             serde_json::from_str(&msg).unwrap_or_else(|_| env::panic_str("Invalid msg"));
         match msg {
             TransferMsg::Register { event_id, guest } => {
-                // A relayed payment from the verifier must name the guest,
-                // otherwise the relay itself would take the seat.
-                // Any Intents balance owner can still name any guest this way.
-                let via_intents = Some(&sender_id) == self.intents.as_ref();
-                if via_intents {
-                    require!(guest.is_some(), "Payments via NEAR Intents must name the guest");
-                }
+                let named = guest.clone().unwrap_or_else(|| sender_id.clone());
                 // Everyone else registers only themselves; paying for another guest is refused.
-                let for_self = via_intents || guest.as_ref().map_or(true, |g| *g == sender_id);
-                let guest = guest.unwrap_or_else(|| sender_id.clone());
-                let deposit = self.get_event_deposit(event_id);
-                if let Some(deposit) = deposit {
-                    if for_self && amount.0 >= deposit && self.can_register(event_id, &guest) {
-                        self.register(event_id, guest, sender_id);
-                        return PromiseOrValue::Value(U128(amount.0 - deposit));
+                if let (Some(guest), _) = self.payer(&sender_id, guest) {
+                    if let Some(deposit) = self.get_event_deposit(event_id) {
+                        if amount.0 >= deposit && self.can_register(event_id, &guest) {
+                            self.register(event_id, guest, sender_id);
+                            return PromiseOrValue::Value(U128(amount.0 - deposit));
+                        }
                     }
                 }
-                emit("register_failed", json!({ "event_id": event_id, "guest": guest, "amount": amount }));
+                emit("register_failed", json!({ "event_id": event_id, "guest": named, "amount": amount }));
                 PromiseOrValue::Value(amount)
+            }
+            TransferMsg::HostBond { event_id } => {
+                let bond = self.lock_host_bond(event_id, amount.0, &sender_id);
+                PromiseOrValue::Value(U128(amount.0 - bond))
+            }
+            TransferMsg::Dispute { event_id, target, attended, guest } => {
+                let (challenger, via_intents) = self.payer(&sender_id, guest);
+                let challenger = challenger.unwrap_or_else(|| env::panic_str("Dispute only in your own name"));
+                let bond = self.open_dispute(event_id, challenger, via_intents, target, attended, amount.0);
+                PromiseOrValue::Value(U128(amount.0 - bond))
             }
         }
     }
@@ -716,9 +950,22 @@ impl Contract {
             self.validate_access(&host, &metadata, rule);
         }
         require!(deposit.0 >= MIN_DEPOSIT, "Deposit must be at least 0.1 USDC");
+        // The host bond and every pool sum must fit in u128: the largest is
+        // 300 dismissed bonds × CHALLENGER_TREASURY_BPS in `split_lost` (1.5e6 deposits).
+        require!(deposit.0 <= u128::MAX / 1_000_000_000, "Deposit is too large");
         require!(capacity > 0 && capacity <= MAX_CAPACITY, "Capacity out of range");
+        let dao = match mode {
+            EventMode::Deposit => Some(self.dao.clone().unwrap_or_else(|| {
+                env::panic_str("Deposit events are paused: no dispute DAO is configured")
+            })),
+            EventMode::Ticket => None,
+        };
+        require!(dao.as_ref() != Some(&host), "The dispute DAO cannot host a Deposit event it would judge");
+        // A host who is the treasury would win back its own lost bond.
+        require!(mode == EventMode::Ticket || self.treasury != host, "The treasury cannot host a Deposit event");
+        let treasury = dao.as_ref().map(|_| self.treasury.clone());
         // The whole event, full house included, must be paid for up front.
-        let reserve = SEAT_BYTES * u64::from(capacity) + BALANCE_BYTES;
+        let reserve = SEAT_BYTES * u64::from(capacity) + EVENT_BALANCES_BYTES;
         let cost = self.event_cost(&host, capacity, Some(metadata.ends_at));
         if cost == 0 {
             self.require_storage_pool(EVENT_RECORD_BYTES + reserve + FREE_LOG_BYTES);
@@ -758,9 +1005,17 @@ impl Contract {
             closed_at: 0,
             storage_paid: cost,
             access,
+            dao: dao.clone(),
+            treasury,
+            host_bond: 0,
+            submitted_at: 0,
+            open_disputes: 0,
+            upheld_disputes: 0,
+            dismissed_disputes: 0,
+            abandoned: false,
         });
 
-        emit("event_created", json!({ "event_id": id, "host": host, "deposit": deposit, "mode": mode }));
+        emit("event_created", json!({ "event_id": id, "host": host, "deposit": deposit, "mode": mode, "dao": dao }));
         id
     }
 
@@ -770,8 +1025,13 @@ impl Contract {
         require!(event.status == EventStatus::Open, "Event is closed");
         // Before the end the host can only cancel, which refunds everyone.
         require!(env::block_timestamp_ms() >= event.metadata.ends_at, "The event has not ended yet");
+        let ticket = event.mode == EventMode::Ticket;
+        require!(
+            ticket || env::block_timestamp_ms() <= submit_by(event),
+            "Too late to publish the list: the event can only be refunded"
+        );
         require!(attended.len() <= MAX_CAPACITY as usize, "Too many accounts");
-        let (host, deposit, guest_count, mode) = (event.host.clone(), event.deposit, event.guest_count, event.mode);
+        let (guest_count, host, bond) = (event.guest_count, event.host.clone(), event.host_bond);
 
         let mut came = 0u32;
         for account in &attended {
@@ -779,51 +1039,190 @@ impl Contract {
                 .guests
                 .get_mut(&(event_id, account.clone()))
                 .unwrap_or_else(|| env::panic_str(&format!("{} is not registered", account)));
-            if record.status == GuestStatus::Registered {
-                record.status = GuestStatus::Attended;
+            // Ticket: the final status now. Deposit: the host's claim, final at `settle`.
+            let first = if ticket { record.status == GuestStatus::Registered } else { !record.listed };
+            if first {
+                if ticket {
+                    record.status = GuestStatus::Attended;
+                } else {
+                    record.listed = true;
+                }
                 came += 1;
-                *self.attended_events.entry(account.clone()).or_insert(0) += 1;
             }
         }
         self.event_mut(event_id).attended_count = came;
-        if mode == EventMode::Ticket {
+        if ticket {
             return self.finalize_tickets(event_id);
         }
-        if came == 0 {
-            return self.close_with_refunds(event_id, EventStatus::Finalized);
+        if guest_count == 0 {
+            self.credit(&host, bond);
+            self.mark_closed(event_id, EventStatus::Finalized);
+            emit("settled", json!({ "event_id": event_id, "attended": 0, "host": U128(bond) }));
+            return;
         }
-
-        let pool = deposit * guest_count as u128;
-        let share = pool / came as u128;
-        let remainder = pool - share * came as u128;
-        for i in 0..guest_count {
-            let account = self.guest_index[&(event_id, i)].clone();
-            if self.guests[&(event_id, account.clone())].status == GuestStatus::Attended {
-                self.credit(&account, share);
-            }
-        }
-        if remainder > 0 {
-            self.credit(&host, remainder);
-        }
-
-        self.event_mut(event_id).payout_per_attendee = share;
-        self.mark_closed(event_id, EventStatus::Finalized);
+        let event = self.event_mut(event_id);
+        event.status = EventStatus::Submitted;
+        event.submitted_at = env::block_timestamp_ms();
+        let challenge_ends = challenge_ends_at(event);
         emit(
-            "finalized",
-            json!({ "event_id": event_id, "mode": EventMode::Deposit, "attended": came, "payout_per_attendee": U128(share) }),
+            "attendance_submitted",
+            json!({ "event_id": event_id, "attended": came, "guests": guest_count, "challenge_ends_at": challenge_ends }),
         );
     }
 
     fn cancel_by(&mut self, caller: &AccountId, event_id: u64) {
         let event = self.event(event_id);
         require!(event.status == EventStatus::Open, "Event is closed");
-        if *caller != event.host {
+        if event.mode == EventMode::Deposit {
+            require!(*caller == event.host, "Only the host can cancel");
+            require!(
+                event.host_bond == 0 || env::block_timestamp_ms() < event.metadata.starts_at,
+                "The event has started: publish the list instead (everyone on it gets their deposit back)"
+            );
+        } else if *caller != event.host {
             require!(
                 env::block_timestamp_ms() > event.metadata.ends_at + ABANDON_GRACE_MS,
                 "Only the host can cancel before 30 days after the event ends"
             );
         }
         self.close_with_refunds(event_id, EventStatus::Cancelled);
+    }
+
+    /// Takes the host bond for a Deposit event that has none yet; returns the
+    /// amount kept (exactly the bond). Panics otherwise, so all of it comes back.
+    fn lock_host_bond(&mut self, event_id: u64, amount: u128, payer: &AccountId) -> u128 {
+        let event = self.event(event_id);
+        require!(event.mode == EventMode::Deposit, "Only Deposit events take a host bond");
+        require!(event.status == EventStatus::Open, "Event is closed");
+        require!(env::block_timestamp_ms() < event.metadata.ends_at, "The event has ended");
+        require!(event.host_bond == 0, "The host bond is already paid");
+        let bond = event.deposit * HOST_BOND_MULTIPLIER;
+        require!(amount >= bond, format!("The host bond is {} (5 deposits)", bond));
+        let host = event.host.clone();
+        self.event_mut(event_id).host_bond = bond;
+        emit("host_bond_paid", json!({ "event_id": event_id, "host": host, "paid_by": payer, "amount": U128(bond) }));
+        bond
+    }
+
+    /// Records a dispute; returns the bond kept (exactly the deposit). Panics
+    /// on any broken rule, so the whole payment comes back.
+    fn open_dispute(
+        &mut self,
+        event_id: u64,
+        challenger: AccountId,
+        via_intents: bool,
+        target: AccountId,
+        attended: bool,
+        amount: u128,
+    ) -> u128 {
+        let now = env::block_timestamp_ms();
+        let event = self.event(event_id);
+        require!(event.status == EventStatus::Submitted, "Disputes open once the host publishes the list");
+        require!(now < challenge_ends_at(event), "The dispute window is over");
+        let bond = event.deposit;
+        require!(amount >= bond, format!("The dispute bond is {} (one deposit)", bond));
+        require!(self.guests.contains_key(&(event_id, challenger.clone())), "Only guests of this event can dispute");
+        if attended {
+            require!(challenger == target, "Only the guest can claim they came");
+        } else {
+            require!(challenger != target, "Nobody disputes their own presence");
+        }
+        let record = self
+            .guests
+            .get_mut(&(event_id, target.clone()))
+            .unwrap_or_else(|| env::panic_str("Not a guest of this event"));
+        require!(record.dispute.is_none(), "This record is already disputed");
+        require!(record.listed != attended, "The host's list already says so");
+        record.dispute = Some(Dispute { challenger: challenger.clone(), attended, created_at: now, via_intents, upheld: None });
+        self.event_mut(event_id).open_disputes += 1;
+        self.reserved_bytes -= DISPUTE_BYTES;
+        emit(
+            "dispute_opened",
+            json!({ "event_id": event_id, "target": target, "challenger": challenger, "attended": attended, "via_intents": via_intents, "bond": U128(bond) }),
+        );
+        bond
+    }
+
+    /// The settlement of a Deposit event in one pass over its guests. Every
+    /// unit in (pool + host bond + challenger bonds) is credited to someone.
+    fn settle_money(&mut self, event_id: u64) {
+        let e = self.event(event_id);
+        let (host, d, n, a, w) = (e.host.clone(), e.deposit, e.guest_count, e.attended_count, e.upheld_disputes);
+        let (bond, lost, dismissed, abandoned) = (e.host_bond, d * u128::from(e.dismissed_disputes), e.dismissed_disputes, e.abandoned);
+        let pool = d * u128::from(n);
+        // Nobody came: everyone gets the deposit back.
+        let share = if a > 0 { pool / u128::from(a) } else { d };
+        let (lost_part, mut treasury_total) = split_lost(lost, CHALLENGER_TREASURY_BPS, if a > 0 { a } else { n });
+        let mut host_total = if a > 0 { pool - share * u128::from(a) } else { 0 };
+        // The bond: to the winners if any record was proven wrong; an abandoned
+        // event loses it anyway, to every guest; otherwise back to the host.
+        let (mut win_part, mut guest_part) = (0, 0);
+        if w > 0 || abandoned {
+            let (part, rest) = split_lost(bond, HOST_TREASURY_BPS, if w > 0 { w } else { n });
+            treasury_total += rest;
+            if w > 0 { win_part = part } else { guest_part = part }
+        } else {
+            host_total += bond;
+        }
+        let mut expired = 0u32;
+        for i in 0..n {
+            let account = self.guest_index[&(event_id, i)].clone();
+            let record = &self.guests[&(event_id, account.clone())];
+            let came = match &record.dispute {
+                Some(dispute) if dispute.upheld == Some(true) => dispute.attended,
+                _ => record.listed,
+            };
+            // Upheld: bond back plus a share of the host bond. Undecided by
+            // `resolve_by`: expired, the host's record stands, bond back.
+            let payback = record.dispute.as_ref().and_then(|dispute| match dispute.upheld {
+                Some(true) => Some((dispute.challenger.clone(), d + win_part, false)),
+                None => Some((dispute.challenger.clone(), d, true)),
+                Some(false) => None,
+            });
+            if a == 0 || came {
+                self.credit(&account, share + lost_part);
+            }
+            self.credit(&account, guest_part);
+            if came {
+                self.guests.get_mut(&(event_id, account)).unwrap().status = GuestStatus::Attended;
+            }
+            if let Some((challenger, amount, was_expired)) = payback {
+                expired += u32::from(was_expired);
+                self.credit(&challenger, amount);
+            }
+        }
+        self.credit(&host, host_total);
+        let treasury = self.event(event_id).treasury.clone().expect("Deposit events have a treasury");
+        self.credit(&treasury, treasury_total);
+        let share = if a > 0 { share } else { 0 };
+        self.event_mut(event_id).payout_per_attendee = share;
+        self.mark_closed(event_id, EventStatus::Finalized);
+        emit(
+            "settled",
+            json!({
+                "event_id": event_id, "attended": a, "payout_per_attendee": U128(share),
+                "upheld": w, "dismissed": dismissed, "expired": expired,
+                "host": U128(host_total), "treasury": U128(treasury_total),
+                "per_winner": U128(win_part), "per_taker_from_lost_bonds": U128(lost_part),
+                "abandoned": abandoned, "bond_per_guest": U128(guest_part),
+            }),
+        );
+    }
+
+    /// Who a payment is for and whether NEAR Intents relayed it. Only the
+    /// verifier may name another account (and must name one); from anyone
+    /// else a different name gives `None`. Any Intents balance owner can name
+    /// any account this way, so the name is unproven (`via_intents`).
+    fn payer(&self, sender: &AccountId, named: Option<AccountId>) -> (Option<AccountId>, bool) {
+        if Some(sender) == self.intents.as_ref() {
+            // Otherwise the relay itself would take the seat or the dispute.
+            require!(named.is_some(), "Payments via NEAR Intents must name the guest");
+            return (named, true);
+        }
+        match named {
+            Some(name) if name != *sender => (None, false),
+            _ => (Some(sender.clone()), false),
+        }
     }
 
     fn require_owner(&self, caller: &AccountId) {
@@ -880,7 +1279,7 @@ impl Contract {
         if free {
             0
         } else {
-            bytes_cost(EVENT_RECORD_BYTES + SEAT_BYTES * u64::from(capacity) + BALANCE_BYTES)
+            bytes_cost(EVENT_RECORD_BYTES + SEAT_BYTES * u64::from(capacity) + EVENT_BALANCES_BYTES)
         }
     }
 
@@ -939,6 +1338,22 @@ impl Contract {
         self.events.get(u32::try_from(event_id).ok()?).map(|event| event.deposit)
     }
 
+    fn guest_page(
+        &self,
+        event_id: u64,
+        from_index: Option<u32>,
+        limit: Option<u32>,
+    ) -> impl Iterator<Item = (AccountId, &GuestRecord)> + '_ {
+        let count = self.event(event_id).guest_count;
+        let from = from_index.unwrap_or(0);
+        let limit = limit.unwrap_or(100).min(MAX_CAPACITY);
+        (from..(from.saturating_add(limit)).min(count)).map(move |i| {
+            let account = self.guest_index[&(event_id, i)].clone();
+            let record = &self.guests[&(event_id, account.clone())];
+            (account, record)
+        })
+    }
+
     fn unreserved_storage(&self) -> u128 {
         free_storage_balance().saturating_sub(bytes_cost(self.reserved_bytes))
     }
@@ -951,16 +1366,20 @@ impl Contract {
     }
 
     /// Releases the event's unused reservation. A host who paid for storage
-    /// gets back the share of seats nobody took; the event record stays paid.
+    /// gets back the share nobody used (empty seats, disputes never filed);
+    /// the event record stays paid.
     fn mark_closed(&mut self, event_id: u64, status: EventStatus) {
         let event = self.event_mut(event_id);
         event.status = status;
         event.closed_at = env::block_timestamp_ms();
         let host = event.host.clone();
         let empty = u64::from(event.capacity - event.guest_count);
-        let release = SEAT_BYTES * empty + SETTLE_BYTES * u64::from(event.guest_count) + BALANCE_BYTES;
-        let refund = bytes_cost(SEAT_BYTES * empty)
-            .min(event.storage_paid.saturating_sub(bytes_cost(EVENT_RECORD_BYTES + BALANCE_BYTES)));
+        let filed = u64::from(event.open_disputes + event.upheld_disputes + event.dismissed_disputes);
+        let unused_disputes = u64::from(event.guest_count) - filed;
+        let release = SEAT_BYTES * empty + SETTLE_BYTES * u64::from(event.guest_count) - DISPUTE_BYTES * filed
+            + EVENT_BALANCES_BYTES;
+        let refund = bytes_cost(SEAT_BYTES * empty + DISPUTE_BYTES * unused_disputes)
+            .min(event.storage_paid.saturating_sub(bytes_cost(EVENT_RECORD_BYTES + EVENT_BALANCES_BYTES)));
         self.reserved_bytes -= release;
         if refund > 0 {
             emit("storage_refund", json!({ "event_id": event_id, "host": host, "amount": U128(refund) }));
@@ -1017,11 +1436,17 @@ impl Contract {
             || (self.intents.is_some() && self.relayer.is_some())
     }
 
+    /// Deposit events open once the host bond is in, and never seat the host.
+    fn seats_open(event: &Event, guest: &AccountId) -> bool {
+        (event.mode == EventMode::Ticket || event.host_bond > 0) && *guest != event.host
+    }
+
     fn can_register(&self, event_id: u64, guest: &AccountId) -> bool {
         let event = self.event(event_id);
         event.status == EventStatus::Open
             && env::block_timestamp_ms() < event.metadata.ends_at
             && event.guest_count < event.capacity
+            && Self::seats_open(event, guest)
             && self.keyless_ok(guest)
             && !self.guests.contains_key(&(event_id, guest.clone()))
             && self.access_check(event_id, guest).allowed
@@ -1034,6 +1459,7 @@ impl Contract {
         require!(event.status == EventStatus::Open, "Event is closed");
         require!(env::block_timestamp_ms() < event.metadata.ends_at, "The event has ended");
         require!(event.guest_count < event.capacity, "Event is full");
+        require!(Self::seats_open(event, &guest), "Registration needs the host bond, and the host cannot take a seat");
         require!(!self.guests.contains_key(&(event_id, guest.clone())), "Already registered");
         require!(self.keyless_ok(&guest), "Keyless registration requires Intents and a relayer");
         require!(self.access_check(event_id, &guest).allowed, "Only regulars can register yet");
@@ -1041,7 +1467,7 @@ impl Contract {
         self.reserved_bytes -= STORAGE_BYTES_PER_GUEST;
         self.guests.insert(
             (event_id, guest.clone()),
-            GuestRecord { status: GuestStatus::Registered, registered_at: env::block_timestamp_ms() },
+            GuestRecord { status: GuestStatus::Registered, registered_at: env::block_timestamp_ms(), listed: false, dispute: None },
         );
         self.guest_index.insert((event_id, index), guest.clone());
         let event = self.event_mut(event_id);
@@ -1049,22 +1475,24 @@ impl Contract {
 
         let (mode, host, deposit) = (event.mode, event.host.clone(), event.deposit);
         if mode == EventMode::Ticket {
-            // The host's balance entry is already reserved (+BALANCE_BYTES per event).
+            // The host's balance entry is already reserved (EVENT_BALANCES_BYTES per event).
             self.credit(&host, deposit);
         }
 
         emit("register", json!({ "event_id": event_id, "guest": guest, "paid_by": paid_by }));
     }
 
+    /// Cancel: every deposit and the host bond come back.
     fn close_with_refunds(&mut self, event_id: u64, status: EventStatus) {
         let event = self.event(event_id);
-        let (deposit, guest_count) = (event.deposit, event.guest_count);
+        let (deposit, guest_count, host, bond) = (event.deposit, event.guest_count, event.host.clone(), event.host_bond);
         // Ticket money went to the host at registration; nothing to refund.
         let guest_count = if event.mode == EventMode::Ticket { 0 } else { guest_count };
         for i in 0..guest_count {
             let account = self.guest_index[&(event_id, i)].clone();
             self.credit(&account, deposit);
         }
+        self.credit(&host, bond);
         self.mark_closed(event_id, status);
         emit("closed", json!({ "event_id": event_id, "status": status }));
     }
@@ -1078,6 +1506,37 @@ impl Contract {
             self.balances.entry(account.clone()).or_default().available += amount;
         }
     }
+}
+
+/// A lost bond split: `bps` of it plus the rounding remainder go to the
+/// treasury, the rest equally to `takers`. Returns (per taker, treasury).
+fn split_lost(amount: u128, bps: u128, takers: u32) -> (u128, u128) {
+    if takers == 0 {
+        return (0, amount);
+    }
+    let part = (amount - amount * bps / BPS) / u128::from(takers);
+    (part, amount - part * u128::from(takers))
+}
+
+/// A `short-windows` build only on testnet or in the sandbox, at init and at upgrade.
+fn require_rehearsal_network() {
+    let account = env::current_account_id();
+    require!(
+        !cfg!(feature = "short-windows") || account.as_str().ends_with(".testnet") || account.as_str().ends_with(".test.near"),
+        "A short-windows build runs on testnet only"
+    );
+}
+
+fn challenge_ends_at(e: &Event) -> u64 {
+    e.submitted_at + CHALLENGE_WINDOW_MS
+}
+
+fn resolve_by(e: &Event) -> u64 {
+    challenge_ends_at(e) + RESOLVE_GRACE_MS
+}
+
+fn submit_by(e: &Event) -> u64 {
+    e.metadata.ends_at + SUBMIT_DEADLINE_MS
 }
 
 fn bytes_cost(bytes: u64) -> u128 {
@@ -1103,6 +1562,7 @@ fn validate_metadata(m: &EventMetadata) {
 }
 
 fn view_event(id: u64, e: &Event) -> EventView {
+    let submitted = e.submitted_at > 0;
     EventView {
         id,
         host: e.host.clone(),
@@ -1120,6 +1580,17 @@ fn view_event(id: u64, e: &Event) -> EventView {
         created_at: e.created_at,
         closed_at: e.closed_at,
         access: e.access.clone(),
+        dao: e.dao.clone(),
+        treasury: e.treasury.clone(),
+        host_bond: U128(e.host_bond),
+        submitted_at: e.submitted_at,
+        challenge_ends_at: if submitted { challenge_ends_at(e) } else { 0 },
+        resolve_by: if submitted { resolve_by(e) } else { 0 },
+        submit_by: if e.mode == EventMode::Deposit { submit_by(e) } else { 0 },
+        open_disputes: e.open_disputes,
+        upheld_disputes: e.upheld_disputes,
+        dismissed_disputes: e.dismissed_disputes,
+        abandoned: e.abandoned,
     }
 }
 
@@ -1127,7 +1598,7 @@ fn view_event(id: u64, e: &Event) -> EventView {
 fn emit(event: &str, data: serde_json::Value) {
     env::log_str(&format!(
         "EVENT_JSON:{}",
-        json!({ "standard": "near-events", "version": "1.0.0", "event": event, "data": [data] })
+        json!({ "standard": "near-events", "version": "3.0.0", "event": event, "data": [data] })
     ));
 }
 

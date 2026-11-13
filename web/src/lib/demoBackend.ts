@@ -11,6 +11,7 @@ import { freeEventProblem, type FreeEvent, type FreeEventInput } from "./freeEve
 import { cleanProfile, type Profile } from "./profilesShared";
 import { normalizeCohosts } from "./cohostsShared";
 import type { Call } from "./wallet";
+import { reputationIndex, emptyReputation } from "./reputationShared";
 
 export const DEMO_ACCOUNT = "you.demo";
 const KEY = "nearvent:demo";
@@ -117,6 +118,8 @@ function load(): State {
       memory = JSON.parse(localStorage.getItem(KEY) ?? "null");
     } catch {}
     memory ??= seed();
+    // The demo has no dispute council: its host bond is pretend, so registration is open.
+    for (const e of memory.events) e.host_bond ??= (BigInt(e.deposit) * 5n).toString();
   }
   return memory;
 }
@@ -207,6 +210,7 @@ export async function demoSend(call: Call): Promise<void> {
       s.events.push({
         id, host: me, metadata: a.metadata, deposit: a.deposit, mode: a.mode, capacity: a.capacity, status: "Open",
         guest_count: 0, attended_count: 0, total_pool: "0", payout_per_attendee: "0", created_at: Date.now(), closed_at: 0,
+        host_bond: (BigInt(a.deposit) * 5n).toString(),
       });
       s.guests[id] = [];
       break;
@@ -309,7 +313,8 @@ function view(s: State, contract: string, method: string, a: Record<string, any>
       case "balance_of": return s.escrow[a.account_id] ?? "0";
       case "can_create": return true;
       case "create_event_cost": return "0";
-      case "get_attended_count": return s.events.filter((e) => e.status === "Finalized" && statusOf(s, e.id, a.account_id) === "Attended").length;
+      // Demo events close at once (no dispute window), so there are never disputes.
+      case "get_disputes": return [];
     }
   }
   if (contract === USDC_CONTRACT && method === "ft_balance_of") return s.usdc[a.account_id] ?? "0";
@@ -427,6 +432,16 @@ async function api(req: Request, url: URL): Promise<Response> {
 
     case "/api/telegram/link":
       return reply({ bot: null });
+
+    case "/api/keeper/event":
+      return reply({ results: [] });
+
+    case "/api/reputation": {
+      const facts = { events: s.events, guests: s.guests, disputes: {} };
+      const index = reputationIndex(facts, []);
+      const accounts = (q.get("a") ?? "").split(",").filter(Boolean);
+      return reply({ version: 1, accounts: Object.fromEntries(accounts.map((a) => [a, index.get(a) ?? emptyReputation(facts, a)])) });
+    }
   }
   return fail("This is not part of the demo", 404);
 }

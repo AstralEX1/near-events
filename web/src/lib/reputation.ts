@@ -1,18 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { events } from "./near";
-import { hostedStats, type Reputation } from "./reputationShared";
+import type { Reputation } from "./reputationShared";
 
-/** Attended (on-chain counter) and hosted numbers for one account; null while loading or if the chain is unreachable. */
+/** Counters and the score from `/api/reputation`, 50 accounts per request. */
+export async function fetchReputation(accounts: string[]): Promise<Record<string, Reputation>> {
+  const out: Record<string, Reputation> = {};
+  for (let i = 0; i < accounts.length; i += 50) {
+    const chunk = accounts.slice(i, i + 50);
+    const res = await fetch(`/api/reputation?a=${chunk.map(encodeURIComponent).join(",")}`);
+    if (!res.ok) throw new Error("Reputation is unavailable");
+    Object.assign(out, (await res.json()).accounts);
+  }
+  return out;
+}
+
+/** Reputation of one account; null while loading or if the chain is unreachable. */
 export function useReputation(account: string | null): Reputation | null {
   const [rep, setRep] = useState<Reputation | null>(null);
   useEffect(() => {
     if (!account) return;
     let live = true;
     setRep(null);
-    Promise.all([events.attendedCount(account), events.all()])
-      .then(([attended, all]) => live && setRep({ attended, ...hostedStats(all, account) }))
+    fetchReputation([account])
+      .then((all) => live && setRep(all[account] ?? null))
       .catch(() => live && setRep(null));
     return () => {
       live = false;
@@ -21,15 +32,8 @@ export function useReputation(account: string | null): Reputation | null {
   return rep;
 }
 
-/** On-chain attended counts for a guest list, ten RPC views at a time; accounts that fail are left out. */
+/** Attended counts for a guest list; accounts that fail are left out. */
 export async function attendedCounts(accounts: string[]): Promise<Record<string, number>> {
-  const out: Record<string, number> = {};
-  for (let i = 0; i < accounts.length; i += 10) {
-    const chunk = accounts.slice(i, i + 10);
-    const counts = await Promise.all(chunk.map((a) => events.attendedCount(a).catch(() => null)));
-    chunk.forEach((a, j) => {
-      if (counts[j] !== null) out[a] = counts[j];
-    });
-  }
-  return out;
+  const all = await fetchReputation(accounts).catch(() => ({} as Record<string, Reputation>));
+  return Object.fromEntries(Object.entries(all).map(([a, r]) => [a, r.attended]));
 }

@@ -436,3 +436,25 @@ anything was sent. `storageFor` registered USDC storage for a fresh account
 and sent nothing. Earlier runs found that NEP-366 bills inner deposits to the
 relayer; that is why deposits above 1 yocto are refused. Events 10 and 11 are
 cancelled leftovers of those runs.
+
+## Escrow v3 (optimistic attendance oracle) — rehearsal and release (2026-11-13, Claude)
+
+Branch `claude/v3-oracle-05271c`, not committed. Design and audit: `docs/oracle-upgrade/SPEC.ru.md`, `docs/oracle-upgrade/AUDIT-v3.ru.md`.
+
+**v3 goes to a new escrow account.** `migrate` accepts only a v3 state root, so `upgrade` of a v2 escrow (mainnet `escrow.lold.near`) is rolled back (sandbox: `sandbox_upgrade_and_freeze` with the real mainnet code `7nrLLgzc…`). The regulars release can keep using `escrow.lold.near`; its events stay there.
+
+**Status: roadmap only, no mainnet release planned (Alex, 2026-11-13).** Release blockers: `docs/oracle-upgrade/SPEC-v3-as-built.md` section 18.
+
+Release steps for later (mainnet needs Alex's command; real funds):
+1. Reproducible build without features (`cargo near build reproducible-wasm`), two equal hashes. Never deploy a `--features short-windows` WASM outside testnet: `new` refuses unless the account ends with `.testnet`/`.test.near`, and `check-release.mjs` fails on mainnet unless `challenge_window_ms` is 86 400 000.
+2. `WASM=… DEPLOYER=… RELAYER_ACCOUNT=event_relayer.near NETWORK=mainnet CONFIRM_MAINNET=yes node web/scripts/deploy-escrow.mjs` (new account, init, key deleted, USDC storage).
+3. Create the court DAO (SPEC F5): `sputnik-dao.near.create` with `docs/oracle-upgrade/evidence/dao-init-args.example.json` (5 real council accounts, bot `event_relayer.near`), then a council `FactoryInfoUpdate {auto_update:false}` with 3 votes.
+4. Owner: `configure_disputes({"dao":"<court>.sputnik-dao.near","treasury":"<wallet>"})`, 1 yocto. Until then only Ticket events can be created.
+5. Vercel: `NEXT_PUBLIC_EVENTS_CONTRACT=<new escrow>`, `CRON_SECRET=<random>`, and an Upstash QStash schedule every 10 minutes: `POST https://www.nearvent.site/api/keeper/tick` with header `Upstash-Forward-Authorization: Bearer <CRON_SECRET>` (or Vercel Cron, which sends the same header). Keep `event_relayer.near` funded: it pays gas for `settle`/`refund` and the DAO proposals.
+6. `NETWORK=mainnet EVENTS_CONTRACT=… RELAYER_ACCOUNT=… OWNER=… node web/scripts/check-release.mjs` → all green, including "escrow v3 disputes".
+
+Testnet rehearsal (short-windows build: one oracle hour = 10 s, window 4 min, publish deadline 12 min, council deadline 28 min after the window):
+- Escrow `oracle-v3.atia-nv1109.testnet`, code `F5j8tDTnr1K3ApzueiMmz27tyKSS7oQijt7JwehjHFv1` (cargo near, `--features short-windows`), owner/treasury `atia-nv1109.testnet`, relayer `relayer-nearevents-11022103.testnet`, Tidepool USDC/verifier.
+- Second escrow `oracle-v3b.atia-nv1109.testnet`, final code `B83mF66SLihnQkKxwsAq6jBaivt1gHgzfeEWp6Y5LEDH`: the abandoned-event path (empty list, "I came" upheld, settle).
+- DAO `nearvent-court-v3.sputnikv2.testnet` (Sputnik 2.3.1, council steve/chawki/jacqueline-nv1109, tp6guest1/tp6host-nv1110, bot = relayer), `auto_update` turned off by 3 votes.
+- Script: `web/scripts/smoke-v3-testnet.mjs` (steps dao | events | publish | disputes | votes | late | check); the keeper ran with `web/scripts/keeper-once.mjs` (same code as `/api/keeper/tick`). Every transaction: `docs/oracle-upgrade/evidence/v3-testnet.jsonl`, keeper output: `docs/oracle-upgrade/evidence/v3-keeper.log`.

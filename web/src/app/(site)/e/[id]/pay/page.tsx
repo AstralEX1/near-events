@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { events, formatUsdc, isTicket, type EventView } from "@/lib/near";
+import { events, formatUsdc, isTicket, needsBond, type EventView } from "@/lib/near";
 import { ruleText, type AccessCheck } from "@/lib/access";
 import { EVENTS_CONTRACT, LIVE_EVENT_SWAPS } from "@/lib/config";
 import { useWallet } from "@/lib/wallet";
@@ -108,7 +108,8 @@ export default function PayFromAnyChain() {
   if (event === undefined) return <p className="text-muted">Loading…</p>;
   if (!event) return <p>Event not found.</p>;
   const notAllowed = !!event.access && access?.allowed === false;
-  const canRegister = event.status === "Open" && event.guest_count < event.capacity && !registered && !notAllowed;
+  // A Deposit event takes guests only after the host bond (escrow v3): no swap into a refused seat.
+  const canRegister = event.status === "Open" && event.guest_count < event.capacity && !registered && !notAllowed && !needsBond(event);
 
   const finishRegistration = async () => {
     if (!accountId || !canRegister) return;

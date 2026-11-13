@@ -89,10 +89,14 @@ export function DateBadge({ ms }: { ms: number }) {
 
 const STATUS_STYLE: Record<EventStatus, string> = {
   Open: "bg-accent-soft text-accent",
+  Submitted: "bg-accent-soft text-accent",
   Finalized: "bg-good/15 text-good",
   Cancelled: "bg-warn/15 text-warn",
+  Refunded: "bg-warn/15 text-warn",
 };
-const STATUS_LABEL: Record<EventStatus, string> = { Open: "Open", Finalized: "Paid out", Cancelled: "Cancelled" };
+const STATUS_LABEL: Record<EventStatus, string> = {
+  Open: "Open", Submitted: "List published", Finalized: "Paid out", Cancelled: "Cancelled", Refunded: "Refunded",
+};
 
 export function StatusPill({ status }: { status: EventStatus }) {
   return (

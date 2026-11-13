@@ -47,15 +47,31 @@ export function RulesBox({ event }: { event: EventView }) {
             The host checks you in at the door. Deposits of people who don’t come are <b>split equally among those who
             came</b>.
           </li>
-          <li>After the host closes the event, your deposit and share are credited to your Nearvent balance. You can then withdraw.</li>
+          {event.dao ? (
+            <li>
+              After the event the host publishes who came. Guests have 24 hours to dispute it, and a council of 5 decides.
+              Then your deposit and share are credited to your Nearvent balance. You can then withdraw.
+            </li>
+          ) : (
+            <li>After the host closes the event, your deposit and share are credited to your Nearvent balance. You can then withdraw.</li>
+          )}
         </ul>
       </div>
       <div>
         <div className="font-semibold text-accent">Good to know</div>
         <ul className="list-disc pl-5 mt-1 space-y-0.5">
           <li>You can’t cancel once you’re registered.</li>
-          <li>Only a check-in by the host or their door team counts.</li>
-          <li>If the host cancels, refunds go to your Nearvent balance. If the event stays open for 30 days, a refund can be requested.</li>
+          {event.dao ? (
+            <>
+              <li>The host’s list counts unless a guest disputes it. Marked absent by mistake? Open a dispute within 24 hours.</li>
+              <li>The host locks a bond of 5 deposits and loses it if proven wrong. If the host cancels before the start or publishes no list within 3 days, you get your deposit back.</li>
+            </>
+          ) : (
+            <>
+              <li>Only a check-in by the host or their door team counts.</li>
+              <li>If the host cancels, refunds go to your Nearvent balance. If the event stays open for 30 days, a refund can be requested.</li>
+            </>
+          )}
           <li>The money is held by a NEAR smart contract, not the organizer. No platform fee.</li>
         </ul>
       </div>
@@ -65,7 +81,8 @@ export function RulesBox({ event }: { event: EventView }) {
 
 /** Under each guest after the event: what they made, or that they didn't come. Nothing before. */
 function note(event: EventView, g: GuestView): { text: string; dim: boolean } | null {
-  if (event.status === "Cancelled") return isTicket(event) ? null : { text: "refunded", dim: false };
+  if (event.status === "Cancelled" || event.status === "Refunded") return isTicket(event) ? null : { text: "refunded", dim: false };
+  if (event.status === "Submitted") return g.listed || event.abandoned ? null : { text: "marked absent", dim: true };
   if (event.status !== "Finalized") return null;
   if (isTicket(event)) return g.status === "Attended" ? { text: "came", dim: false } : null;
   if (g.status !== "Attended") return { text: "no-show", dim: true };

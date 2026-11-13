@@ -16,6 +16,7 @@ import { PublicDetailsEditor } from "./PublicDetailsEditor";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 import { guestNamesApi, type GuestNames } from "@/lib/guestNamesClient";
 import { attendedCounts } from "@/lib/reputation";
+import { OraclePanel } from "@/components/OraclePanel";
 import { hostedStats, type Reputation } from "@/lib/reputationShared";
 import { ReputationBadges } from "@/components/ReputationBadges";
 import { daoPolicy, hostAccounts, isDaoAccount } from "@/lib/daoHost";
@@ -256,8 +257,8 @@ function ManageEvent() {
       const confirmation = ticket
         ? `Close the event?\n\n${fresh.guest_count} tickets · ${formatUsdc(currentPool)} USDC is already in your balance.\n\nThis cannot be undone.`
         : attended.length === 0
-          ? "Nobody was checked in, so every deposit goes back to its guest. Close the event?"
-          : `Close the event and pay out?\n\n${attended.length} of ${fresh.guest_count} came.\nPool: ${formatUsdc(currentPool)} USDC.\nEach attendee gets ${formatUsdc(currentPool / BigInt(attended.length))} USDC.\n\nThis cannot be undone.`;
+          ? "Publish the list with nobody checked in?\n\nGuests can dispute it for 24 hours. If nobody came, every deposit goes back to its guest.\n\nThis cannot be undone."
+          : `Publish who came?\n\n${attended.length} of ${fresh.guest_count} checked in.\nPool: ${formatUsdc(currentPool)} USDC, ${formatUsdc(currentPool / BigInt(attended.length))} USDC each if nobody disputes.\n\nGuests can dispute any record for 24 hours; the council decides. A record they prove wrong costs you half of your bond. Then anyone settles the payouts.\n\nThis cannot be undone.`;
       await run("finalize", { event_id: id, attended }, confirmation);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -311,6 +312,7 @@ function ManageEvent() {
 
       {tab === "overview" && (
         <>
+          <OraclePanel event={event} guests={guests} hostTeam={hostTeam} onChange={load} />
           <Overview
             event={event}
             guests={guests}
@@ -584,7 +586,7 @@ function GuestsTab({
             data-tooltip={ended ? undefined : "Available once the event ends"}
             onClick={onFinalize}
           >
-            {ticket ? "Close event & get paid" : "Close event & pay out"}
+            {ticket ? "Close event & get paid" : "Publish who came"}
           </button>
         </div>
       )}
@@ -613,7 +615,7 @@ function RegistrationTab({
         <StatusCard
           icon="🎟️"
           label="Registration"
-          value={open ? "Open" : event.status === "Finalized" ? "Closed" : "Cancelled"}
+          value={open ? "Open" : event.status === "Finalized" ? "Closed" : event.status === "Submitted" ? "List published" : event.status}
           good={open}
         />
         <StatusCard icon="↑" label="Capacity" value={`${event.guest_count} / ${event.capacity}`} />
