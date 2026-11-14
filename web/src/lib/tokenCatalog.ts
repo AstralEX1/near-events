@@ -27,9 +27,15 @@ const catalog = data as Catalog;
 const bySymbol = new Map<string, string>();
 for (const a of Object.values(catalog.assets)) if (a.icon && !bySymbol.has(a.symbol.toUpperCase())) bySymbol.set(a.symbol.toUpperCase(), a.icon);
 
-export const chainName = (chain: string): string => CHAINS[chain]?.[0] ?? chain.charAt(0).toUpperCase() + chain.slice(1);
+/** Not a 1Click asset: "keep the USDC in a NEAR Intents account" in the cash-out picker. */
+export const INTENTS_TOKEN: OneClickToken = { assetId: "intents", symbol: "USDC", blockchain: "intents", decimals: 6 };
+
+export const chainName = (chain: string): string =>
+  chain === "intents" ? "NEAR Intents" : CHAINS[chain]?.[0] ?? chain.charAt(0).toUpperCase() + chain.slice(1);
 
 export function chainIcon(chain: string): string | undefined {
+  // NEAR Intents mark from the Aurora Intents Swap Widget (MIT).
+  if (chain === "intents") return "/icons/near-intents.svg";
   const folder = CHAINS[chain]?.[1];
   return folder ? TW(folder) : catalog.chains[chain]?.icon ?? undefined;
 }
