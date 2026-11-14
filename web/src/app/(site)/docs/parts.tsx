@@ -77,12 +77,12 @@ export function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
 
 type Img = { src: string; w: number; h: number; alt: string };
 
-/** One step: number and a line on the left, real screenshots from the site on the right. */
-export function Shot({ n, title, images, children }: { n: number; title: string; images: Img[]; children: ReactNode }) {
+/** One step: number (optional) and a line on the left, real screenshots from the site on the right. */
+export function Shot({ n, title, images, children }: { n?: number; title: string; images: Img[]; children: ReactNode }) {
   return (
     <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:gap-8 md:items-center">
       <div className="flex gap-3">
-        <span className="w-8 h-8 shrink-0 rounded-full bg-accent-soft text-accent font-semibold flex items-center justify-center">{n}</span>
+        {n !== undefined && <span className="w-8 h-8 shrink-0 rounded-full bg-accent-soft text-accent font-semibold flex items-center justify-center">{n}</span>}
         <div>
           <div className="font-semibold text-lg leading-snug">{title}</div>
           <div className="text-sm text-muted mt-1">{children}</div>
