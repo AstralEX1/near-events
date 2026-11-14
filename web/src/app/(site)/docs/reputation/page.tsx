@@ -9,7 +9,7 @@ export default function ReputationDocs() {
       <Title lead="Your record is the events you showed up for, checked in at the door and kept on NEAR.">Reputation</Title>
 
       <Section id="badges" title="Next to every name">
-        <Shot title="Hosts see it before the door opens" images={[{ src: "/docs/badges.png", w: 1320, h: 746, alt: "Guest list with 1 attended and 1 missed badges" }]}>
+        <Shot title="Hosts see it before the door opens" images={[{ src: "/docs/badges.png", w: 1320, h: 746, alt: "Guest list with ✓ attended, ✕ missed and ⚑ hosted badges next to each name" }]}>
           In guest lists, Going and on profiles. Tap a badge for the details.
         </Shot>
         <Stack
