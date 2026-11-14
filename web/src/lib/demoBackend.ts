@@ -13,6 +13,7 @@ import { normalizeCohosts } from "./cohostsShared";
 import type { Call } from "./wallet";
 import { reputationIndex, emptyReputation } from "./reputationShared";
 import type { AccessCheck, AccessRule } from "./access";
+import { mayRemove, momentProblem, type Moment } from "./momentsShared";
 
 export const DEMO_ACCOUNT = "you.demo";
 /** A made-up EVM wallet that the demo profile can link (Profile → Wallets). */
@@ -41,6 +42,8 @@ interface State {
   free: Record<string, Free>;
   /** Wallets linked to the demo profile (Profile → Wallets). */
   linked: string[];
+  /** Photos from past events, by `e=<id>` / `f=<id>`; missing in demos saved before it. */
+  moments?: Record<string, Moment[]>;
 }
 
 // ------------------------------------------------------------------ seed
@@ -392,6 +395,7 @@ async function api(req: Request, url: URL): Promise<Response> {
   const q = url.searchParams;
   const post = req.method === "POST";
   if (url.pathname === "/api/covers" && post) return reply({ url: await asDataUrl(await req.blob()) }); // the photo stays in this browser
+  if (url.pathname === "/api/moments") return moments(s, req, q);
   const body: Record<string, any> = req.method === "GET" ? {} : await req.json().catch(() => ({}));
   const ids = (q.get("ids") ?? q.get("e") ?? "").split(",").filter(Boolean).map(Number);
   const done = (out: unknown = { ok: true }) => (save(), reply(out));
@@ -510,6 +514,36 @@ async function api(req: Request, url: URL): Promise<Response> {
     }
   }
   return fail("This is not part of the demo", 404);
+}
+
+// Photos stay in this browser as data: URLs, like covers.
+async function moments(s: State, req: Request, q: URLSearchParams): Promise<Response> {
+  const me = DEMO_ACCOUNT;
+  const f = q.get("f");
+  const scope = f !== null ? `f=${f}` : `e=${Number(q.get("e"))}`;
+  const list = ((s.moments ??= {})[scope] ??= []);
+  if (req.method === "GET") return reply({ moments: list });
+  let place;
+  if (f !== null) {
+    const e = s.free[f];
+    if (!e) return fail("Event not found", 404);
+    place = { ended: e.ends_at < Date.now(), host: e.host === me, guest: e.guests.includes(me) };
+  } else {
+    const e = eventOf(s, Number(q.get("e")));
+    place = { ended: e.metadata.ends_at < Date.now(), host: e.host === me || (s.cohosts[e.id] ?? []).includes(me), guest: !!statusOf(s, e.id, me) };
+  }
+  if (req.method === "DELETE") {
+    const m = list.find((x) => x.id === q.get("m"));
+    if (!m) return fail("Photo not found", 404);
+    if (!mayRemove(m, me, place.host)) return fail("Only the person who added this photo or the host can remove it", 403);
+    s.moments[scope] = list.filter((x) => x !== m);
+  } else {
+    const problem = momentProblem(place);
+    if (problem) return fail(problem, 403);
+    list.push({ id: crypto.randomUUID().replace(/-/g, ""), url: await asDataUrl(await req.blob()), by: me, at: Date.now() });
+  }
+  save();
+  return reply({ ok: true });
 }
 
 function freeEvents(s: State, q: URLSearchParams, post: boolean, body: Record<string, any>, done: (out?: unknown) => Response): Response {

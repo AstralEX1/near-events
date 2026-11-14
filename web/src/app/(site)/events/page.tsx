@@ -9,14 +9,12 @@ import { Icon } from "@/components/EventSections";
 
 const CALENDAR_PLUS = ["M8 2v4", "M16 2v4", "M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8", "M3 10h18", "M16 19h6", "M19 16v6"];
 
-type Tab = "upcoming" | "past";
 type Kind = "all" | Item["kind"];
 
 /** Public events feed, laid out like Luma Discover and BaliSquad: search, filters, a grid of cover cards. */
 export default function Events() {
   const [items, setItems] = useState<Item[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("upcoming");
   const [kind, setKind] = useState<Kind>("all");
   const [query, setQuery] = useState("");
 
@@ -38,10 +36,11 @@ export default function Events() {
 
   const q = query.trim().toLowerCase();
   const shown = (items ?? [])
-    .filter((i) => i.past === (tab === "past") && (kind === "all" || i.kind === kind) && (!q || i.title.toLowerCase().includes(q)))
-    .sort((a, b) => (tab === "upcoming" ? a.startsAt - b.startsAt : b.startsAt - a.startsAt));
+    .filter((i) => (kind === "all" || i.kind === kind) && (!q || i.title.toLowerCase().includes(q)))
+    // One list: upcoming first (soonest on top), then past (latest on top).
+    .sort((a, b) => Number(a.past) - Number(b.past) || (a.past ? b.startsAt - a.startsAt : a.startsAt - b.startsAt));
 
-  const invite = !!items && tab === "upcoming" && !q && kind === "all" && shown.length < 3;
+  const invite = !!items && !q && kind === "all" && shown.length < 3;
   const pill = (active: boolean) => `px-3.5 py-1.5 rounded-full text-sm border ${active ? "bg-text text-bg border-text" : "border-border text-muted hover:text-text"}`;
 
   return (
@@ -55,14 +54,6 @@ export default function Events() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-1 rounded-full p-1 bg-border/40" role="group" aria-label="When">
-          {(["upcoming", "past"] as const).map((t) => (
-            <button key={t} type="button" aria-pressed={tab === t} onClick={() => setTab(t)}
-              className={`px-4 py-1.5 rounded-full text-sm ${tab === t ? "bg-surface font-semibold shadow-sm" : "text-muted"}`}>
-              {t === "upcoming" ? "Upcoming" : "Past"}
-            </button>
-          ))}
-        </div>
         <input
           type="search"
           className="lu-field flex-1 min-w-48 px-3 py-2 text-sm"
@@ -95,7 +86,7 @@ export default function Events() {
         </div>
       )}
       {items && shown.length === 0 && !invite && (
-        <p className="text-muted">{q || kind !== "all" ? "Nothing matches. Try another search or filter." : "No past events yet."}</p>
+        <p className="text-muted">{q || kind !== "all" ? "Nothing matches. Try another search or filter." : "No events yet."}</p>
       )}
       {(shown.length > 0 || invite) && (
         <div className="grid gap-5 grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3">

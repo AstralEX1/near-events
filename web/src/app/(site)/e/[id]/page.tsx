@@ -23,6 +23,7 @@ import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 import { hostAccounts, isDaoAccount } from "@/lib/daoHost";
 import { hostedStats } from "@/lib/reputationShared";
 import { OraclePanel } from "@/components/OraclePanel";
+import { Moments } from "@/components/Moments";
 
 /**
  * The hosted event page, laid out like Luma so hosts and guests feel at home.
@@ -182,6 +183,7 @@ export default function EventPage() {
           )}
 
           <OraclePanel event={event} guests={guests} hostTeam={hostTeam} onChange={load} />
+          {Date.now() > event.metadata.ends_at && <Moments query={`e=${id}`} canAdd={!!me || isStaff} isHost={isStaff} />}
 
           {details?.description && (
             <Section label="About event"><PublicText value={details.description} /></Section>
