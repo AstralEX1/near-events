@@ -338,6 +338,7 @@ footer a { text-decoration: none; } /* plain gray links, like the app footer */
       </div>
     </div>
     <div class="strip reveal" tabindex="0" role="region" aria-label="BaliSquad meetup gallery">
+      <img src="/landing/meetup/balisquad-presenters.webp" alt="Alex and Alexander next to the Nearvent events page on a big screen, Grok Bot Workshop, 14 November" width="1600" height="1200" loading="lazy" decoding="async">
       <video class="pitch" data-src="/landing/meetup/balisquad-pitch.d5e234acd0c4.mp4" poster="/landing/meetup/balisquad-pitch.webp" aria-label="Alex and Alexander present Nearvent to a full room at the Grok Bot Workshop, 14 November" width="1080" height="810" preload="none" muted playsinline loop></video>
       <video class="conversation" data-src="/landing/meetup/balisquad-table-chat.e9d3a37a4d87.mp4" poster="/landing/meetup/balisquad-table-chat.webp" aria-label="Two participants talking across the meetup table" width="1440" height="1080" preload="none" muted playsinline loop></video>
       <video data-src="/landing/meetup/balisquad-room-pan.bc56678e4548.mp4" poster="/landing/meetup/balisquad-room-pan.webp" aria-label="Camera moves from the Nearvent laptop to participants around the meetup table" width="1920" height="1080" preload="none" muted playsinline loop></video>
@@ -347,7 +348,6 @@ footer a { text-decoration: none; } /* plain gray links, like the app footer */
         <video data-src="/landing/meetup/balisquad-qr-demo.a445be2ca406.mp4" poster="/landing/meetup/balisquad-qr-demo.webp" aria-label="Sachin, founder of BaliSquad, shows his QR pass at the meetup" width="1920" height="1080" preload="none" muted playsinline loop></video>
         <figcaption><a href="https://x.com/sachin_anatta" target="_blank" rel="noreferrer">Sachin, founder of BaliSquad ↗</a></figcaption>
       </figure>
-      <img src="/landing/meetup/balisquad-presenters.webp" alt="Alex and Alexander next to the Nearvent events page on a big screen, Grok Bot Workshop, 14 November" width="1600" height="1200" loading="lazy" decoding="async">
     </div>
     <script>
       (() => {
@@ -391,7 +391,8 @@ footer a { text-decoration: none; } /* plain gray links, like the app footer */
           if (canAnimate) {
             const center = strip.scrollLeft + strip.clientWidth / 2;
             const distance = card => Math.abs(card.offsetLeft + card.offsetWidth / 2 - center);
-            const focused = cards.reduce((closest, card) => distance(card) < distance(closest) ? card : closest);
+            // A photo has nothing to play, so the video nearest the center plays.
+            const focused = cards.filter(clip).reduce((closest, card) => distance(card) < distance(closest) ? card : closest);
             setPlayback(clip(focused) || null);
             if (!playing) warm(nextClip(focused));
           } else {
