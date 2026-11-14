@@ -6,7 +6,7 @@
 // The creator's key comes from ~/.near-credentials/<NETWORK>/<CREATOR>.json or a hidden prompt
 // (private key or seed phrase; never printed or saved). Mainnet asks for a typed "yes".
 // Env: CREATOR, COUNCIL (3–5 accounts, comma-separated; Alex picked 4 on 2026-11-14), optional NETWORK (testnet | mainnet),
-// NAME (default nearvent-court), DEPOSIT in NEAR (default 1 on mainnet, where the DAO code is a
+// NAME (default nearvent-court), DEPOSIT in NEAR (default 0.1 on mainnet, where the DAO code is a
 // global contract; 6 on testnet, where the 555 KB code is stored on the account).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -24,7 +24,7 @@ if (!CREATOR || !/^[a-z0-9-]{2,40}$/.test(NAME) || COUNCIL.length < 3 || COUNCIL
 if (COUNCIL.length === 3) console.warn("With 3 members every one must vote; add a 4th later (add_member_to_role, 3 votes).");
 if (COUNCIL.includes(BOT)) fail(`${BOT} is the dispute bot; it cannot sit on the council`);
 const DAO = `${NAME}.${FACTORY}`;
-const deposit = BigInt(parseNearAmount(process.env.DEPOSIT ?? (mainnet ? "1" : "6")) ?? fail("Bad DEPOSIT"));
+const deposit = BigInt(parseNearAmount(process.env.DEPOSIT ?? (mainnet ? "0.1" : "6")) ?? fail("Bad DEPOSIT"));
 const provider = new JsonRpcProvider({ url: mainnet ? "https://rpc.mainnet.fastnear.com" : "https://test.rpc.fastnear.com" });
 const TGAS = 1_000_000_000_000n;
 

@@ -478,9 +478,9 @@ Later, optional: a court
 3. **Court DAO (Alex signs and funds; a council of 4–5 existing NEAR accounts, 3 votes decide; Alex picked 4 on 2026-11-14):**
    - `create-court.mjs` takes the policy from `docs/oracle-upgrade/evidence/dao-init-args.example.json`, puts the accounts on the council and `event_relayer.near` in `dispute_bot` (it can only propose). The key is asked at a hidden prompt; on mainnet you type "yes" first:
      ```bash
-     cd web && NETWORK=mainnet CREATOR=lold.near COUNCIL=a.near,b.near,c.near,d.near DEPOSIT=1.5 node scripts/create-court.mjs
+     cd web && NETWORK=mainnet CREATOR=lold.near COUNCIL=a.near,b.near,c.near,d.near DEPOSIT=0.1 node scripts/create-court.mjs
      ```
-   - Cost: on mainnet `sputnik-dao.near` uses a global contract, so the DAO stores only ~2–4 KB and the whole deposit stays as its balance (on testnet the 555 KB code costs ~5.6 NEAR). Each dispute's proposal pair stores about 0.03 NEAR, and the keeper pauses below 0.3 NEAR available, so 1.5 NEAR covers about 40 disputes; top up later.
+   - Cost: on mainnet `sputnik-dao.near` uses a global contract, so the DAO stores only ~2–4 KB and the whole deposit stays as its balance (on testnet the 555 KB code costs ~5.6 NEAR). The court state with one proposal and its votes is ~2.6 KB (~0.026 NEAR). Each dispute's proposal pair stores about 0.03 NEAR, and the keeper opens none while the DAO has under 0.3 NEAR available (`DAO_LOW_BALANCE`). Alex (2026-11-14): start with 0.1 NEAR and top the DAO up to about 0.5 NEAR when the first dispute comes; until then a dispute waits as "waiting for the council".
    - When the creator is on the council the script also proposes `FactoryInfoUpdate {auto_update: false}`; otherwise a council member proposes it. 3 members approve it at [sputnik-dao.trezu.org](https://sputnik-dao.trezu.org) (open `nearvent-court.sputnik-dao.near`). Rehearsed on testnet 2026-11-14: `nearvent-court-t1114.sputnikv2.testnet`, create `8KbqsK83…`, 3 votes → Approved, `auto_update: false`.
 4. **Rules (Alex signs):**
     ```bash
