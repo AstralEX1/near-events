@@ -10,7 +10,7 @@ The current local photos are interim assets. Alex's event shoot will replace the
 
 ## BaliSquad gallery on `/about`
 
-Five silent clips from the meetup are in the gallery. The four earlier clips use Apple's VideoToolbox super-resolution. The laptop-to-people pan from the camera original preserves the source H.264 video packets, 1920×1080 resolution, colour metadata and frame timing without re-encoding; audio and camera metadata are omitted. The MP4s and their WebP posters live in `meetup/`.
+A photo and six silent clips are in the gallery: the first two are from the Grok Bot Workshop (14 November, Nearvent presented on stage), the other five from the AI Coworking Meetup (9 November). The four earlier clips use Apple's VideoToolbox super-resolution. The laptop-to-people pan from the camera original preserves the source H.264 video packets, 1920×1080 resolution, colour metadata and frame timing without re-encoding; audio and camera metadata are omitted. The MP4s and their WebP posters live in `meetup/`.
 
 Only the clip closest to the center loops. The gallery advances every 15 seconds and returns to the start at the end. Playback and auto-advance pause when the gallery leaves view, the tab is hidden, or the user prefers reduced motion.
 
@@ -20,13 +20,15 @@ MP4 names end in the first 12 characters of the file's SHA-256 digest. When repl
 
 | Clip | Source (media pack or camera original) | Cut within the source |
 | --- | --- | --- |
+| Presenters photo (`balisquad-presenters.webp`, 1600×1200) | `IMG_0935.HEIC` (Alex, 14 Nov) | whole frame, sRGB WebP, no EXIF |
+| Nearvent pitch to the room | `IMG_7185.mov` (Alex, 14 Nov; portrait HLG HDR) | 2.5–10.5 s, 4:3 crop 1080×810 at y=400, tone-mapped to SDR (hable), H.264 |
 | Two people talking at the table | `06_Previous_Selections/09_Organizer_conversation.mp4` | 3.90–5.87 s |
 | Laptop-to-people pan | `IMG_2282.mov` (camera original) | 1.935–9.935 s, 8 s |
 | Discussion | `01_New_Video_Landing/05_Audience_Interaction.mp4` | 1.10–6.30 s |
 | Speaker, close-up | `02_New_Video_Pitch/01_Speaker_Explaining.mp4` | 0.20–2.75 s |
 | QR pass handoff | `02_New_Video_Pitch/04_Real_QR_CheckIn.mp4` | 3.00–7.80 s |
 
-Gallery order: two-person conversation → laptop-to-people pan → discussion → speaker close-up → QR handoff. Only the pan shows Alex seated at a laptop; the two standalone laptop clips and room still are excluded. (2026-11-11, Codex)
+Gallery order: presenters photo → pitch clip → two-person conversation → laptop-to-people pan → discussion → speaker close-up → QR handoff. The photo is first because on wide screens the card nearest the centre plays and the first card never reaches it; when a photo is nearest, the nearest video plays (2026-11-14, Claude). Before that: conversation → pan → discussion → speaker close-up → QR handoff. Only the pan shows Alex seated at a laptop; the two standalone laptop clips and room still are excluded. (2026-11-11, Codex)
 
 Selection updated at Alex’s request (2026-11-11): removed the room still, the close laptop/organizer clip from `IMG_2289.mov`, and the older meetup/laptop clip that repeated the new pan. The laptop-to-people pan remains.
 
