@@ -13,6 +13,7 @@ import { EventPageBackground, EventPoster } from "@/components/EventVisual";
 import { PublicText } from "@/components/PublicText";
 import { GoingList, ICONS, LocationRow, LocationSection, PersonLink, RegisterBox, Section } from "@/components/EventSections";
 import { SignInOptions } from "@/components/SignIn";
+import { Moments } from "@/components/Moments";
 
 /** A free event: same Luma layout as /e/<id>, but RSVP is a click, with nothing on chain. */
 export default function FreeEventPage() {
@@ -124,6 +125,7 @@ export default function FreeEventPage() {
 
           {action}
           {error && <p className="text-sm text-warn break-words">{error}</p>}
+          {ended && <Moments query={`f=${encodeURIComponent(id)}`} canAdd={going || isHost} isHost={isHost} />}
 
 
           {event.description && <Section label="About event"><PublicText value={event.description} /></Section>}
