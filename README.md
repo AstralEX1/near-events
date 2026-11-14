@@ -11,8 +11,10 @@
 ## For judges
 
 - **Track: Social Money.** Reputation-based access, a Sputnik DAO as the
-  event host, an optional Sputnik DAO dispute council (votes in Trezu; rehearsed
-  on testnet, off on mainnet for now), named accounts as identity; see
+  event host, a Sputnik DAO dispute council (on mainnet since 2026-11-14:
+  [`nearvent-court.sputnik-dao.near`](https://nearblocks.io/address/nearvent-court.sputnik-dao.near),
+  [proposals and votes in Trezu](https://sputnik-dao.trezu.org/nearvent-court.sputnik-dao.near)),
+  named accounts as identity; see
   [Social Money](#social-money-dao-reputation-named-accounts).
   Already got our first client, BaliSquad (90% of Bali's meetup market):
   [our first event with them](https://balisquad.com/event/bukitsocial-z3CmSN),
@@ -136,11 +138,20 @@ The escrow holds the deposits; the host only says who came.
   so the host's list is final and pays out at once, as in Kickback. Hosts'
   records are public, and with the whitelist mode on (off now) only verified
   hosts can create events.
-- **Optional dispute oracle.** For communities that want a check, the owner
-  turns on a Sputnik DAO court (`set_rules`); on mainnet it is off for now
-  (`get_config` shows `rules.dao: null`), so the host's list is final there. After the host publishes who
+- **Dispute oracle.** The owner turns on a Sputnik DAO court with `set_rules`.
+  On mainnet it is on since 2026-11-14 for events created from then on:
+  - court [`nearvent-court.sputnik-dao.near`](https://nearblocks.io/address/nearvent-court.sputnik-dao.near),
+    created in [`4F5SXh7m…`](https://nearblocks.io/txns/4F5SXh7m6Do7ivYqYoLnNugrESndF9RL1D24ymtLjsED)
+    and set in the escrow in [`Hc6nm3tY…`](https://nearblocks.io/txns/Hc6nm3tY4WokTzjkCqbz5i7dcuehbLuQGTjxhBATBfuw);
+  - council `astralex.near`, `aterex.near`, `lold.near`, `sachin_bs.near`;
+    3 votes decide; our keeper (`event_relayer.near`) may only propose;
+  - proposals and votes: [Trezu](https://sputnik-dao.trezu.org/nearvent-court.sputnik-dao.near);
+    the Sputnik factory's code auto-update is still on;
+  - events 0–3 were created before, so their host's list is final.
+
+  After the host publishes who
   came, guests have 12 hours to dispute one record by locking one deposit. Our
-  keeper bot opens a proposal; when 3 of the 5 council members approve, it calls
+  keeper bot opens a proposal; when 3 of the 4 council members approve, it calls
   `resolve_dispute`. Then anyone calls `settle`. If a published list is broken
   as a whole, the council can instead call the event off (`void_event`):
   everyone gets their deposit back. Nobody votes unless someone disputes, and a
