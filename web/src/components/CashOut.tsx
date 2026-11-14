@@ -7,9 +7,11 @@ import { useWallet } from "@/lib/wallet";
 import { intentsUsdcBalance, pushPayoutToIntents, transferFromIntents, withdrawIntentsCall } from "@/lib/intents";
 import { oneClickQuote, oneClickTokens, registerUsdcFor, USDC_ASSET, waitForSwap, type Quote } from "@/lib/oneclickClient";
 import type { OneClickToken } from "@/lib/oneclick";
+import { chainName, INTENTS_TOKEN } from "@/lib/tokenCatalog";
+import { TokenButton, TokenPicker } from "@/components/TokenPicker";
 
 /** Pseudo-asset: keep USDC inside NEAR Intents (near.com and other Intents wallets). */
-const INTENTS_ACCOUNT = "intents";
+const INTENTS_ACCOUNT = INTENTS_TOKEN.assetId;
 
 /**
  * The one way money leaves Nearvent: payouts and refunds go out through
@@ -48,18 +50,17 @@ export function CashOut({
   const evm = kind === "evm";
   const [submitted, setSubmitted] = useState(false);
   const [pushed, setPushed] = useState(false);
+  const [picking, setPicking] = useState(false);
 
   useEffect(() => {
     if (!open || tokens.length) return;
-    oneClickTokens()
-      .then((t) => setTokens([...t].sort((a, b) => a.symbol.localeCompare(b.symbol) || a.blockchain.localeCompare(b.blockchain))))
-      .catch((e) => setError(e.message));
+    oneClickTokens().then(setTokens).catch((e) => setError(e.message));
   }, [open, tokens.length]);
 
-  const token = useMemo(() => tokens.find((t) => t.assetId === assetId), [tokens, assetId]);
   const toIntents = assetId === INTENTS_ACCOUNT;
+  const token = useMemo(() => (toIntents ? INTENTS_TOKEN : tokens.find((t) => t.assetId === assetId)), [tokens, assetId, toIntents]);
   const units = amount ? BigInt(toUnits(amount)) : balance;
-  const where = toIntents ? "NEAR Intents account" : `${token?.blockchain ?? ""} address`;
+  const where = toIntents ? "NEAR Intents account" : `${token ? chainName(token.blockchain) : ""} address`;
 
   const step = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -184,7 +185,7 @@ export function CashOut({
         throw new Error(`${error instanceof Error ? error.message : error} Check your Intents balance in My account before retrying.`);
       }
       try { sessionStorage.removeItem(`near-me:cashout:${accountId}`); } catch { /* Optional. */ }
-      await finish(`Sent ${quote.amountOutFormatted} ${token?.symbol} on ${token?.blockchain} to ${recipient.trim()}.`);
+      await finish(`Sent ${quote.amountOutFormatted} ${token?.symbol} on ${token ? chainName(token.blockchain) : ""} to ${recipient.trim()}.`);
     });
 
   if (!open)
@@ -207,23 +208,22 @@ export function CashOut({
         disabled={busy || submitted || pushed}
         onChange={(e) => (setAmount(e.target.value), setQuote(null))}
       />
-      <select
-        className="input"
-        disabled={busy || submitted || pushed}
-        value={assetId}
-        onChange={(e) => {
-          setAssetId(e.target.value);
-          setQuote(null);
-          setRecipient(e.target.value === INTENTS_ACCOUNT || (evm && e.target.value.includes("0x")) ? accountId : "");
-        }}
-      >
-        <option value={INTENTS_ACCOUNT}>USDC in NEAR Intents (near.com and other Intents wallets)</option>
-        {tokens.map((t) => (
-          <option key={t.assetId} value={t.assetId}>
-            {t.symbol} on {t.blockchain}
-          </option>
-        ))}
-      </select>
+      <TokenButton token={token} disabled={busy || submitted || pushed} onClick={() => setPicking(true)} />
+      {picking && (
+        <TokenPicker
+          intents
+          tokens={tokens}
+          selected={assetId}
+          hint="USDC on NEAR Intents stays in a NEAR Intents account (near.com and other Intents wallets). Any other token is swapped and sent on its network."
+          onPick={(t) => {
+            setPicking(false);
+            setAssetId(t.assetId);
+            setQuote(null);
+            setRecipient(t.assetId === INTENTS_ACCOUNT || (evm && t.assetId.includes("0x")) ? accountId : "");
+          }}
+          onClose={() => setPicking(false)}
+        />
+      )}
       <input
         className="input font-mono text-sm"
         placeholder={`Your ${where}`}
@@ -244,7 +244,7 @@ export function CashOut({
           <div className="rounded-lg bg-bg p-3 text-sm flex justify-between gap-2">
             <span className="text-muted">You receive</span>
             <b className="text-right">
-              {quote.amountOutFormatted} {token?.symbol} on {token?.blockchain}
+              {quote.amountOutFormatted} {token?.symbol} on {token && chainName(token.blockchain)}
             </b>
           </div>
           <button className="btn btn-primary w-full" disabled={busy} onClick={confirm}>
