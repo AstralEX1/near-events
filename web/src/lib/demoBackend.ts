@@ -4,7 +4,8 @@
 // Nothing reaches our server or the blockchain: window.fetch answers chain views
 // (RPC) and /api/* from local state, and wallet calls change that state.
 import { EVENTS_CONTRACT, INTENTS_CONTRACT, RPC_URL, USDC_CONTRACT } from "./config";
-import { formatUsdc, registrationEndsAt, toUnits, type EventMetadata, type EventMode, type EventView, type GuestStatus, type GuestView } from "./near";
+import { formatUsdc, registrationEndsAt, toUnits, type EventMetadata, type DisputeView, type EventMode, type EventView, type GuestStatus, type GuestView } from "./near";
+import type { CheckInEntry } from "./checkinsClient";
 import type { EventDetails } from "./eventImport";
 import type { EventVisualConfig } from "./event-visuals";
 import { freeEventProblem, type FreeEvent, type FreeEventInput } from "./freeEventsShared";
@@ -20,7 +21,7 @@ export const DEMO_ACCOUNT = "you.demo";
 export const DEMO_EVM = "0xde30de30de30de30de30de30de30de30de30de30";
 const KEY = "nearvent:demo";
 /** Bump when the seed changes: a demo saved by an older version starts over. */
-const VERSION = 3;
+const VERSION = 4;
 
 type Free = FreeEventInput & { id: string; host: string; created_at: number; guests: string[]; requests: string[] };
 
@@ -44,6 +45,9 @@ interface State {
   linked: string[];
   /** Photos from past events, by `e=<id>` / `f=<id>`; missing in demos saved before it. */
   moments?: Record<string, Moment[]>;
+  /** The court event's disputes and its frozen door log (escrow `get_disputes`, `/api/checkin?log=1`). */
+  disputes?: Record<number, DisputeView[]>;
+  logs?: Record<number, CheckInEntry[]>;
 }
 
 // ------------------------------------------------------------------ seed
@@ -64,13 +68,15 @@ const map = (place: string) => `https://www.google.com/maps/search/?api=1&query=
 // Real BaliSquad AI events (titles, posters, venues; used with BaliSquad's permission, 2026-11-13; Alex: AI and crypto only, none crypto found). Posters live in public/demo.
 // They use the Paradise theme: nearvent-style themes print the title over the poster, which has its own text.
 const poster = (name: string) => new URL(`/demo/balisquad-${name}.jpg`, location.origin).href;
-const HOSTS = { bstc: "Bali Startup & Tech", spacexai: "SpaceXAI Bali", nebula: "Nebula Coworking", aialliance: "Bali AI Alliance" };
+const HOSTS = { bstc: "Bali Startup & Tech", spacexai: "SpaceXAI Bali", nebula: "Nebula Coworking", aialliance: "Bali AI Alliance", balisquad: "BaliSquad" };
+/** A made-up court: the one demo event with disputes names it. */
+const COURT = "court.demo";
 
 function seed(): State {
   const now = Date.now();
   const s: State = {
     v: VERSION, nextId: 1, events: [], guests: {}, escrow: {}, usdc: { [DEMO_ACCOUNT]: toUnits(50) }, intents: {},
-    details: {}, visuals: {}, checkins: {}, cohosts: {}, names: {}, profiles: {}, free: {}, linked: [],
+    details: {}, visuals: {}, checkins: {}, cohosts: {}, names: {}, profiles: {}, free: {}, linked: [], disputes: {}, logs: {},
   };
   PEOPLE.forEach((name, i) => {
     s.profiles[acct(name)] = { username: name.toLowerCase(), first_name: name, last_name: "", avatar_url: null, avatar_seed: 7919 * (i + 1), links: {} };
@@ -131,6 +137,24 @@ function seed(): State {
     about: "The next night of the series. Everyone who came to the last one gets in first; the rest can join once it opens to all.", theme: "paradise", cover: "how-i-ai",
     access: { past_events: [past], min_attended: 1, max_no_shows: 0, open_to_all_at: now + 2 * D },
   });
+
+  // With the court on: the host forgot you on the published list, though the door log shows your check-in.
+  // You can open a dispute; Leo already reports Omar, who is on the list with no check-in.
+  const court = add({
+    host: acct("balisquad"), title: "AI Coworking Meetup - Free AI Credits", starts: now - 4 * H, hours: 2, usdc: 5, mode: "Deposit", capacity: 20,
+    guests: [DEMO_ACCOUNT, ...PEOPLE.slice(0, 8).map(acct)], place: "Bukit Hub Coworking, Bali",
+    about: "Cowork together, meet builders and pick up free AI credits.", theme: "paradise", cover: "",
+  });
+  const c = eventOf(s, court), listed = PEOPLE.slice(0, 6).map(acct), published = now - H;
+  s.details[court].cover_url = null; // no poster: the theme prints the title
+  Object.assign(c, {
+    status: "Submitted", dao: COURT, rules: { ...RULES, dao: COURT }, attended_count: listed.length, submitted_at: published,
+    challenge_ends_at: published + RULES.challenge_hours * H, resolve_by: published + (RULES.challenge_hours + RULES.resolve_hours) * H, open_disputes: 1,
+  });
+  s.guests[court].forEach((g) => (g.listed = listed.includes(g.account_id)));
+  s.disputes![court] = [{ target: acct("Omar"), challenger: acct("Leo"), attended: false, created_at: published + H / 2, via_intents: false, upheld: null }];
+  const door = (account: string, mins: number, on = true) => ({ account, on, at: c.metadata.starts_at + mins * 60_000, by: c.host });
+  s.logs![court] = [door(acct("Maya"), 2), door(acct("Leo"), 4), door(DEMO_ACCOUNT, 5), door(acct("Nina"), 9), door(acct("Sara"), 12), door(acct("Ivan"), 15), door(acct("Ivan"), 16, false), door(acct("Kai"), 31)];
 
   s.free.demoAiCoffee = {
     id: "demoAiCoffee", host: acct("aialliance"), created_at: now - 2 * D, title: "Bali AI Alliance: Coffee & Connections",
@@ -224,6 +248,21 @@ function finalize(s: State, id: number, attended: string[]) {
   e.closed_at = Date.now();
 }
 
+/** The escrow's `dispute` checks, in its order; the made-up council never votes, so it stays open. */
+function dispute(s: State, e: EventView, me: string, target: string, attended: boolean, amount: string) {
+  const list = ((s.disputes ??= {})[e.id] ??= []);
+  if (e.status !== "Submitted" || Date.now() >= (e.challenge_ends_at ?? 0)) throw new Error("The dispute window is closed");
+  if (BigInt(amount) < BigInt(e.deposit)) throw new Error("A dispute locks one deposit");
+  if (!statusOf(s, e.id, me)) throw new Error("Only guests can dispute");
+  if (attended ? target !== me : target === me) throw new Error("Say you came for yourself, or that another guest didn't");
+  if (!attended && list.some((d) => d.challenger === me && !d.attended)) throw new Error("You already reported one guest as absent here");
+  if (list.some((d) => d.target === target)) throw new Error("This record is already disputed");
+  if (s.guests[e.id].find((g) => g.account_id === target)?.listed === attended) throw new Error("The host's list already says that");
+  move(s.usdc, me, -BigInt(e.deposit));
+  list.push({ target, challenger: me, attended, created_at: Date.now(), via_intents: false, upheld: null });
+  e.open_disputes = (e.open_disputes ?? 0) + 1;
+}
+
 // ---------------------------------------------------------------- wallet
 
 /** The demo account if demo mode is on in this browser. */
@@ -268,6 +307,10 @@ export async function demoSend(call: Call): Promise<void> {
     case `${USDC_CONTRACT} ft_transfer_call`: {
       const msg = JSON.parse(a.msg ?? "{}");
       const e = eventOf(s, msg.event_id);
+      if (msg.action === "dispute") {
+        dispute(s, e, me, msg.target, msg.attended === true, a.amount);
+        break;
+      }
       if (a.receiver_id !== EVENTS_CONTRACT || msg.action !== "register" || a.amount !== e.deposit) throw new Error("Bad registration");
       if (e.status !== "Open" || Date.now() >= registrationEndsAt(e)) throw new Error("Registration is closed");
       if (statusOf(s, e.id, me)) throw new Error("You are already registered");
@@ -371,8 +414,7 @@ function view(s: State, contract: string, method: string, a: Record<string, any>
       case "can_create": return true;
       case "create_event_cost": return "0";
       case "get_config": return { owner: "owner.demo", rules: RULES, oracle_hour_ms: H };
-      // Demo events close at once (no dispute window), so there are never disputes.
-      case "get_disputes": return [];
+      case "get_disputes": return s.disputes?.[a.event_id] ?? [];
     }
   }
   if (contract === USDC_CONTRACT && method === "ft_balance_of") return s.usdc[a.account_id] ?? "0";
@@ -434,6 +476,10 @@ async function api(req: Request, url: URL): Promise<Response> {
     }
 
     case "/api/checkin": {
+      if (!post && q.has("log")) {
+        const marks = Object.entries(s.checkins[ids[0]] ?? {}).map(([account, x]) => ({ account, on: true, ...x }));
+        return reply({ log: s.logs?.[ids[0]] ?? marks });
+      }
       if (!post) return reply({ checkedIn: s.checkins[ids[0]] ?? {} });
       const e = eventOf(s, body.event);
       if (e.host !== me && !(s.cohosts[e.id] ?? []).includes(me)) return fail("Only the host or the door team can check guests in", 403);

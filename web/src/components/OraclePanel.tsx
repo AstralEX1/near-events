@@ -332,7 +332,7 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
           <p className="text-xs text-muted pb-3">
             Disputes go to the council at{" "}
             <a className="underline underline-offset-2" href={`${EXPLORER_URL}/address/${event.dao}`} target="_blank" rel="noopener">{shortAccount(event.dao ?? "")}</a>{" "}
-            (3 of 5 votes).
+            (3 votes decide).
           </p>
         )}
         <details id="checkins" className="gc-fold scroll-mt-24" open={linkedLog || disputes.length > 0 || !!myCheckIn}>
