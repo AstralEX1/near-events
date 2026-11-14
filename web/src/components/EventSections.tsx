@@ -6,7 +6,7 @@ import { LocationValue } from "./PublicText";
 import { goingLine, mapPlaceName, mapQuery } from "@/lib/eventLines";
 import { displayName, type Profile } from "@/lib/profilesShared";
 import { useReputations } from "@/lib/reputation";
-import { Rep, repLine } from "./ReputationBadges";
+import { Rep, repLine, repTip } from "./ReputationBadges";
 
 // Event page blocks, after Luma's event page: a small muted label over a hairline,
 // then the content. Shared by paid (/e/<id>) and free (/f/<id>) events.
@@ -42,12 +42,13 @@ export function GoingList({ accounts, names = {}, profiles = {}, total, verb = "
   const reps = useReputations(accounts);
   if (!total || !accounts.length) return null;
   const stats = Object.fromEntries(Object.entries(reps).map(([a, r]) => [a, repLine(r)]));
+  const tips = Object.fromEntries(Object.entries(reps).map(([a, r]) => [a, repTip(r)]));
   const all = Object.fromEntries(accounts.flatMap((a) => { const n = names[a] || displayName(profiles[a]); return n ? [[a, n]] : []; }));
   const shown = accounts.slice(0, 2).map((a) => all[a] || shortAccount(a));
   return (
     <Section label={`${total} ${verb}`}>
       {/* Remount when names, profiles or numbers arrive: the avatars widget keeps the first name it rendered. */}
-      <SlAvatars key={`${Object.values(all).join("|")}#${Object.keys(profiles).join()}#${Object.values(stats).join()}`} accounts={accounts} names={all} profiles={profiles} stats={stats} role={verb === "Going" ? "Going · view profile" : "Went · view profile"} />
+      <SlAvatars key={`${Object.values(all).join("|")}#${Object.keys(profiles).join()}#${Object.values(stats).join()}`} accounts={accounts} names={all} profiles={profiles} stats={stats} tips={tips} role={verb === "Going" ? "Going · view profile" : "Went · view profile"} />
       <p className="mt-2 text-sm text-muted break-words">{goingLine(shown, total)}</p>
     </Section>
   );

@@ -207,7 +207,7 @@ export function SlAmount({ value, onChange, label }: { value: string; onChange: 
 const TINTS = ["sage", "blue", "sand", "rose"];
 
 /** Who's going: three faces, the rest behind +N. Picking one shows the name and a profile link. */
-export function SlAvatars({ accounts, names = {}, profiles = {}, stats = {}, role }: { accounts: string[]; names?: Record<string, string>; profiles?: Record<string, Profile>; stats?: Record<string, string>; role: string }) {
+export function SlAvatars({ accounts, names = {}, profiles = {}, stats = {}, tips = {}, role }: { accounts: string[]; names?: Record<string, string>; profiles?: Record<string, Profile>; stats?: Record<string, string>; tips?: Record<string, string>; role: string }) {
   const nameOf = (a: string) => names[a] || shortAccount(a);
   // A person's numbers ("5 attended · 1 hosted") take the place of "Going" under their name.
   const roleOf = (a: string) => (stats[a] ? `${stats[a]} · view profile` : role);
@@ -235,7 +235,7 @@ export function SlAvatars({ accounts, names = {}, profiles = {}, stats = {}, rol
       <section className="dd-card dd-card--avatars" aria-label="Guests">
         <div className="dd-avatars" role="group" aria-label="Guests">
           {lead.map((a, i) => (
-            <button key={a} type="button" className={`dd-avatar dd-avatar--${TINTS[i % 4]}`} data-action="member" data-value={a} data-name={nameOf(a)} data-role={roleOf(a)} aria-label={`${nameOf(a)}, ${roleOf(a)}`} aria-pressed={a === selected}>
+            <button key={a} type="button" className={`dd-avatar dd-avatar--${TINTS[i % 4]}`} data-action="member" data-value={a} data-name={nameOf(a)} data-role={roleOf(a)} aria-label={`${nameOf(a)}, ${tips[a] || role}`} aria-pressed={a === selected}>
               <Avatar account={a} size={36} src={profiles[a]?.avatar_url} seed={profiles[a]?.avatar_seed} />
             </button>
           ))}
@@ -245,7 +245,7 @@ export function SlAvatars({ accounts, names = {}, profiles = {}, stats = {}, rol
         </div>
         <div className="dd-person">
           <strong data-member-name="">{first.name}</strong>
-          <a className="nv-avatars__profile" href={selected ? `/u/${encodeURIComponent(selected)}` : "#"} data-member-role="">{lead[0] ? roleOf(lead[0]) : role}</a>
+          <a className="nv-avatars__profile" href={selected ? `/u/${encodeURIComponent(selected)}` : "#"} data-member-role="" data-tooltip={(selected && tips[selected]) || undefined}>{lead[0] ? roleOf(lead[0]) : role}</a>
         </div>
         {rest.length > 0 && (
           <div className="dd-collapse" data-expanded="false" data-extra="" aria-hidden="true" inert>
@@ -254,7 +254,7 @@ export function SlAvatars({ accounts, names = {}, profiles = {}, stats = {}, rol
                 {rest.map((a, i) => (
                   <button key={a} type="button" data-action="member" data-value={a} data-name={nameOf(a)} data-role={roleOf(a)} aria-pressed="false">
                     <span className={`dd-mini-avatar dd-avatar--${TINTS[(i + 3) % 4]}`}>{profiles[a]?.avatar_url ? <img src={profiles[a].avatar_url!} alt="" className="w-full h-full rounded-full object-cover" /> : initials(a)}</span>
-                    <span>{nameOf(a)}<small>{roleOf(a)}</small></span>
+                    <span>{nameOf(a)}<small data-tooltip={tips[a] || undefined}>{roleOf(a)}</small></span>
                     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m8 5 7 7-7 7" /></svg>
                   </button>
                 ))}
