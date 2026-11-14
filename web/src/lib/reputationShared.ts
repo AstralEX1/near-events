@@ -1,5 +1,8 @@
 import { score, type ScoreInput, type ScoreParts } from "./score.ts";
 
+/** A NEAR account id (also 0x Intents accounts); imported guests like "balisquad:name" are not. */
+export const isAccountId = (a: string) => a.length >= 2 && a.length <= 64 && /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/.test(a);
+
 export interface Reputation {
   /** Closed events the account was checked in at (final status Attended). */
   attended: number;

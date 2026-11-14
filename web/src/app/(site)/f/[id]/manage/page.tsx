@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useFreeEvent } from "@/lib/freeEventsClient";
 import { Avatar, formatWhen, shortAccount } from "@/components/ui";
+import { Rep } from "@/components/ReputationBadges";
 import { SlCopy, SlReviewDecision } from "@/components/SlUi";
 
 type Tab = "overview" | "guests" | "registration";
@@ -127,7 +128,9 @@ export default function ManageFreeEventPage() {
                   <li key={a}>
                     <Link href={`/u/${encodeURIComponent(a)}`} className="flex items-center gap-3 px-3 sm:px-4 min-h-14 py-2 hover:text-accent">
                       <Avatar account={a} size={36} />
-                      <span className="min-w-0 flex-1 truncate font-medium" data-tooltip={a}>{shortAccount(a)}</span>
+                      <span className="min-w-0 truncate font-medium" data-tooltip={a}>{shortAccount(a)}</span>
+                      <Rep account={a} />
+                      <span className="flex-1" />
                       {a === event.host && <span className="text-xs text-muted">host</span>}
                     </Link>
                   </li>

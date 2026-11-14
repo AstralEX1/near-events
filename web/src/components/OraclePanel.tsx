@@ -6,6 +6,7 @@ import { EVENTS_CONTRACT, EXPLORER_URL, USDC_CONTRACT } from "@/lib/config";
 import { useWallet, type Call } from "@/lib/wallet";
 import { bondFromIntents, disputeFromIntents } from "@/lib/intents";
 import { Avatar, shortAccount } from "@/components/ui";
+import { Rep } from "@/components/ReputationBadges";
 import { ICONS, RegisterBox } from "@/components/EventSections";
 import { checkIns, type CheckInEntry } from "@/lib/checkinsClient";
 import { confirmAction } from "@/components/SlUi";
@@ -308,7 +309,10 @@ export function OraclePanel({ event, guests, hostTeam, onChange, manage = false 
                 <li key={g.account_id} className="flex items-center gap-3 py-1.5 min-h-12">
                   <Avatar account={g.account_id} size={28} />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium truncate" data-tooltip={g.account_id}>{g.account_id === accountId ? "You" : shortAccount(g.account_id)}</span>
+                    <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
+                      <span className="text-sm font-medium truncate min-w-0 max-w-full" data-tooltip={g.account_id}>{g.account_id === accountId ? "You" : shortAccount(g.account_id)}</span>
+                      <Rep account={g.account_id} />
+                    </span>
                     {d && (
                       <span className="block text-xs text-muted truncate">
                         {d.attended ? (g.account_id === accountId ? "you say you came" : "says they came") : `${d.challenger === accountId ? "you say" : `${shortAccount(d.challenger)} says`} absent`}

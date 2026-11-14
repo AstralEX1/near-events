@@ -1,6 +1,6 @@
 import { rateLimited } from "@/lib/ratelimit";
 import { events, type EventView } from "@/lib/near";
-import { emptyReputation, reputationIndex, type ChainFacts, type Reputation } from "@/lib/reputationShared";
+import { emptyReputation, isAccountId, reputationIndex, type ChainFacts, type Reputation } from "@/lib/reputationShared";
 import { TRUSTED_HOSTS } from "@/lib/trustedHosts";
 import { SCORE_VERSION } from "@/lib/score";
 
@@ -29,12 +29,10 @@ async function readFacts(): Promise<Index> {
   return { facts, index: reputationIndex(facts, TRUSTED_HOSTS) };
 }
 
-const ACCOUNT = /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
-
 export async function GET(req: Request) {
   if (rateLimited(req, 60)) return Response.json({ error: "Too many requests" }, { status: 429 });
   const accounts = [...new Set((new URL(req.url).searchParams.get("a") ?? "").split(",").filter(Boolean))];
-  if (!accounts.length || accounts.length > 100 || accounts.some((a) => a.length < 2 || a.length > 64 || !ACCOUNT.test(a))) {
+  if (!accounts.length || accounts.length > 100 || accounts.some((a) => !isAccountId(a))) {
     return Response.json({ error: "Pass ?a= with 1 to 100 account ids" }, { status: 400 });
   }
   if (!cache || Date.now() - cache.at > TTL_MS) {
