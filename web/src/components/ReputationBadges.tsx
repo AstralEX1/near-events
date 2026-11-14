@@ -20,13 +20,16 @@ export function ReputationBadges({ attended, hosted = 0, guestsCame = 0, noShows
   if (!attended && !hosted && !noShows) {
     return <Badge small={small} tone="bg-border/60 text-muted" label="New" tip="No events yet" sub="Nobody has checked them in at an event so far" />;
   }
-  const came = showUp && showUp.of > 0 ? `Came to ${showUp.came} of ${showUp.of}` : noShows > 0 ? `Missed ${plural(noShows)}` : undefined;
   return (
     <>
-      {attended !== null && (attended > 0 || noShows > 0) && (
+      {!!attended && (
         <Badge small={small} tone="bg-good/15 text-good" label={`${attended} attended`} tip={`Attended ${plural(attended)}`}
-          sub={came ? `${came} · checked in on NEAR` : "Checked in at the door, recorded on NEAR"}
+          sub={showUp && showUp.of > 0 ? `Came to ${showUp.came} of ${showUp.of} · checked in on NEAR` : "Checked in at the door, recorded on NEAR"}
           icon={<path d="M20 6 9 17l-5-5" />} />
+      )}
+      {noShows > 0 && (
+        <Badge small={small} tone="bg-warn/15 text-warn" label={`${noShows} missed`} tip={`Missed ${plural(noShows)}`}
+          sub="Put down a deposit and did not come" icon={<path d="M18 6 6 18M6 6l12 12" />} />
       )}
       {hosted > 0 && (
         <Badge small={small} tone="bg-accent-soft text-accent" label={`${hosted} hosted`} tip={`Held ${plural(hosted)}`}
@@ -45,7 +48,7 @@ export function Rep({ account, small = true }: { account: string; small?: boolea
 
 /** One line of the same numbers, for places that take only text (the avatars widget). */
 export const repLine = (r: Reputation | null | undefined) =>
-  !r ? "" : !r.attended && !r.hosted && !r.noShows ? "New" : [(r.attended || r.noShows) && `${r.attended} attended`, r.hosted && `${r.hosted} hosted`].filter(Boolean).join(" · ");
+  !r ? "" : !r.attended && !r.hosted && !r.noShows ? "New" : [r.attended && `${r.attended} attended`, r.noShows && `${r.noShows} missed`, r.hosted && `${r.hosted} hosted`].filter(Boolean).join(" · ");
 
 function Badge({ label, tip, sub, tone, icon, small }: { label: string; tip: string; sub?: string; tone: string; icon?: ReactNode; small: boolean }) {
   return (
