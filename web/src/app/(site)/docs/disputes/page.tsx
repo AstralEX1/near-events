@@ -37,10 +37,10 @@ export default async function DisputeDocs() {
           <Shot n={1} title="The host publishes who came" images={[{ src: "/docs/checkin.png", w: 1840, h: 156, alt: "Guest marked as checked in at the door" }]}>
             After the event, from the door check-ins. Nothing is paid yet.
           </Shot>
-          <Shot n={2} title="Not on the list? Dispute it" images={[{ src: "/docs/dispute.png", w: 1304, h: 800, alt: "You’re not on the host’s list: I Came, Open a Dispute" }]}>
+          <Shot n={2} title="Not on the list? Dispute it" images={[{ src: "/docs/dispute.png", w: 1256, h: 570, alt: "You’re not on the host’s list: I Came, Open a Dispute" }]}>
             For {win} any guest can dispute one record: “I came” or “they didn’t”. It locks one deposit.
           </Shot>
-          <Shot n={3} title="The council decides" images={[{ src: "/docs/council.png", w: 1304, h: 800, alt: "Dispute waiting for the council, with the door check-in log" }]}>
+          <Shot n={3} title="The council decides" images={[{ src: "/docs/council.png", w: 1256, h: 1454, alt: "Dispute waiting for the council, with the door check-in log" }]}>
             Our bot opens a vote in the DAO with a link to the door log. 3 council votes decide, within {resolve} after the window.
           </Shot>
           <Shot n={4} title="Anyone settles" images={[{ src: "/docs/payout.png", w: 1304, h: 1030, alt: "Payout ready to withdraw" }]}>
