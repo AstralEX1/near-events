@@ -85,7 +85,8 @@ if (ESCROW) {
     if (info.auto_update) throw new Error(`${r.dao} still lets ${info.factory_id} replace its code (FactoryInfoUpdate auto_update=false)`);
     const policy = await view(r.dao, "get_policy");
     const council = policy.roles.find((x) => x.name === "council")?.kind?.Group ?? [];
-    if (mainnet && council.length !== 5) throw new Error(`council has ${council.length} members, expected 5`);
+    // 3 votes decide: with 4 or 5 members one or two may be away; with 3 every one must vote.
+    if (mainnet && (council.length < 4 || council.length > 5)) throw new Error(`council has ${council.length} members, expected 4 or 5`);
     // 3 of the council must vote; nobody else may approve (the bot only proposes). Re-run this: the
     // council could change the policy or turn auto_update back on with 3 votes.
     const vote = policy.default_vote_policy ?? {};

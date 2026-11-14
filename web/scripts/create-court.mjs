@@ -1,11 +1,11 @@
-// Creates the escrow v3 court: a Sputnik DAO whose council of 5 settles disputes with 3 votes and
+// Creates the escrow v3 court: a Sputnik DAO whose council (3–5 members) settles disputes with 3 votes and
 // whose `dispute_bot` (the relayer) may only propose. Policy: docs/oracle-upgrade/evidence/
 // dao-init-args.example.json with the council swapped in (DEPLOY.md, Later: a court, step 3).
 // When the creator is on the council it also proposes turning off the factory's code auto-update;
 // 3 council votes approve it (sputnik-dao.trezu.org), then check-release.mjs passes the court.
 // The creator's key comes from ~/.near-credentials/<NETWORK>/<CREATOR>.json or a hidden prompt
 // (private key or seed phrase; never printed or saved). Mainnet asks for a typed "yes".
-// Env: CREATOR, COUNCIL (5 accounts, comma-separated), optional NETWORK (testnet | mainnet),
+// Env: CREATOR, COUNCIL (3–5 accounts, comma-separated; Alex picked 4 on 2026-11-14), optional NETWORK (testnet | mainnet),
 // NAME (default nearvent-court), DEPOSIT in NEAR (default 1 on mainnet, where the DAO code is a
 // global contract; 6 on testnet, where the 555 KB code is stored on the account).
 import assert from "node:assert/strict";
@@ -20,7 +20,8 @@ const BOT = mainnet ? "event_relayer.near" : "relayer-nearevents-11022103.testne
 const NAME = process.env.NAME ?? "nearvent-court";
 const CREATOR = process.env.CREATOR;
 const COUNCIL = (process.env.COUNCIL ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-if (!CREATOR || !/^[a-z0-9-]{2,40}$/.test(NAME) || COUNCIL.length !== 5 || new Set(COUNCIL).size !== 5) fail("Set CREATOR and COUNCIL (5 different accounts); NAME is a-z, 0-9, -");
+if (!CREATOR || !/^[a-z0-9-]{2,40}$/.test(NAME) || COUNCIL.length < 3 || COUNCIL.length > 5 || new Set(COUNCIL).size !== COUNCIL.length) fail("Set CREATOR and COUNCIL (3 to 5 different accounts; 3 votes decide); NAME is a-z, 0-9, -");
+if (COUNCIL.length === 3) console.warn("With 3 members every one must vote; add a 4th later (add_member_to_role, 3 votes).");
 if (COUNCIL.includes(BOT)) fail(`${BOT} is the dispute bot; it cannot sit on the council`);
 const DAO = `${NAME}.${FACTORY}`;
 const deposit = BigInt(parseNearAmount(process.env.DEPOSIT ?? (mainnet ? "1" : "6")) ?? fail("Bad DEPOSIT"));
@@ -37,7 +38,7 @@ role("dispute_bot").kind.Group = [BOT];
 init.config.name = NAME;
 
 const creator = new Account(CREATOR, provider, (await accountKey(provider, network, CREATOR)).toString());
-console.log(`${network}: create ${DAO} from ${CREATOR} with ${(Number(deposit) / 1e24).toFixed(2)} NEAR\n  council (3 of 5): ${COUNCIL.join(", ")}\n  dispute bot (proposes only): ${BOT}`);
+console.log(`${network}: create ${DAO} from ${CREATOR} with ${(Number(deposit) / 1e24).toFixed(2)} NEAR\n  council (3 of ${COUNCIL.length}): ${COUNCIL.join(", ")}\n  dispute bot (proposes only): ${BOT}`);
 if (mainnet && (await ask('Type "yes" to send: ')) !== "yes") fail("Cancelled; nothing was sent.");
 closePrompts();
 

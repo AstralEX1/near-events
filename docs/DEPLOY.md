@@ -475,10 +475,10 @@ Left now:
 
 Later, optional: a court
 
-3. **Court DAO (Alex signs and funds; a council of 5 NEAR accounts, 3 votes decide):**
-   - `create-court.mjs` takes the policy from `docs/oracle-upgrade/evidence/dao-init-args.example.json`, puts the 5 accounts on the council and `event_relayer.near` in `dispute_bot` (it can only propose). The key is asked at a hidden prompt; on mainnet you type "yes" first:
+3. **Court DAO (Alex signs and funds; a council of 4–5 existing NEAR accounts, 3 votes decide; Alex picked 4 on 2026-11-14):**
+   - `create-court.mjs` takes the policy from `docs/oracle-upgrade/evidence/dao-init-args.example.json`, puts the accounts on the council and `event_relayer.near` in `dispute_bot` (it can only propose). The key is asked at a hidden prompt; on mainnet you type "yes" first:
      ```bash
-     cd web && NETWORK=mainnet CREATOR=lold.near COUNCIL=a.near,b.near,c.near,d.near,e.near DEPOSIT=1.5 node scripts/create-court.mjs
+     cd web && NETWORK=mainnet CREATOR=lold.near COUNCIL=a.near,b.near,c.near,d.near DEPOSIT=1.5 node scripts/create-court.mjs
      ```
    - Cost: on mainnet `sputnik-dao.near` uses a global contract, so the DAO stores only ~2–4 KB and the whole deposit stays as its balance (on testnet the 555 KB code costs ~5.6 NEAR). Each dispute's proposal pair stores about 0.03 NEAR, and the keeper pauses below 0.3 NEAR available, so 1.5 NEAR covers about 40 disputes; top up later.
    - When the creator is on the council the script also proposes `FactoryInfoUpdate {auto_update: false}`; otherwise a council member proposes it. 3 members approve it at [sputnik-dao.trezu.org](https://sputnik-dao.trezu.org) (open `nearvent-court.sputnik-dao.near`). Rehearsed on testnet 2026-11-14: `nearvent-court-t1114.sputnikv2.testnet`, create `8KbqsK83…`, 3 votes → Approved, `auto_update: false`.
@@ -504,7 +504,7 @@ Later, optional: a court
     ```bash
     cd web && NETWORK=mainnet EVENTS_CONTRACT=escrow.lold.near RELAYER_ACCOUNT=event_relayer.near OWNER=lold.near node scripts/check-release.mjs
     ```
-    Without a court "escrow v3 rules" prints "no court yet …". With one it also checks the court: council of 5, `auto_update` off, the vote policy (3 of 5, only the council votes).
+    Without a court "escrow v3 rules" prints "no court yet …". With one it also checks the court: council of 4–5, `auto_update` off, the vote policy (3 votes, only the council votes).
 
 Testnet rehearsal (`evidence/v3-upgrade-rehearsal.log`):
 - `v3rh.yusak-nv1109.testnet` got the mainnet code `7nrLLgzc…` from `deploy-escrow.mjs` with 5.26 NEAR (spare 2.19, as on mainnet).
