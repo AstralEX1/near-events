@@ -56,6 +56,17 @@ const H = 3_600_000;
 const D = 24 * H;
 const PEOPLE = ["Maya", "Leo", "Nina", "Omar", "Sara", "Kai", "Ivan", "Zoe", "Ravi", "Lena", "Theo", "Ana", "Max", "Ida", "Noah", "Eva", "Sam", "Mia", "Tom", "Liv", "Ben", "Ava", "Jon"];
 const acct = (name: string) => `${name.toLowerCase()}.demo`;
+/**
+ * What the made-up people did before the demo's own events: [attended, missed, hosted, guests who came].
+ * Added to the reputation numbers only, so the pills look like a lived-in community; Theo and Ava stay new.
+ */
+const HISTORY: Record<string, [number, number, number, number]> = {
+  maya: [14, 0, 2, 31], leo: [9, 0, 0, 0], nina: [6, 1, 0, 0], omar: [3, 2, 0, 0], sara: [11, 0, 1, 17], kai: [2, 0, 0, 0],
+  ivan: [4, 1, 0, 0], zoe: [5, 0, 0, 0], ravi: [1, 0, 0, 0], lena: [7, 0, 0, 0], ana: [3, 0, 0, 0], max: [8, 1, 0, 0],
+  ida: [2, 0, 0, 0], noah: [12, 0, 3, 46], eva: [4, 0, 0, 0], sam: [1, 1, 0, 0], mia: [6, 0, 0, 0], tom: [2, 0, 0, 0],
+  liv: [9, 0, 1, 12], ben: [3, 0, 0, 0], jon: [1, 0, 0, 0],
+  bstc: [5, 0, 18, 262], spacexai: [2, 0, 6, 74], nebula: [3, 0, 9, 141], aialliance: [4, 0, 12, 188], balisquad: [6, 0, 40, 612],
+};
 /** The escrow's defaults with no court, as on mainnet at the v3 launch. */
 const RULES = { dao: null, treasury: "treasury.demo", bond_per_seat: 0, close_at_start: true, challenge_hours: 12, submit_hours: 72, resolve_hours: 168 };
 /** What `get_event` adds in v3: Deposit registration closes at the start, the list is due `submit_hours` after the end, no bond. */
@@ -556,7 +567,11 @@ async function api(req: Request, url: URL): Promise<Response> {
       const facts = { events: s.events, guests: s.guests, disputes: {} };
       const index = reputationIndex(facts, []);
       const accounts = (q.get("a") ?? "").split(",").filter(Boolean);
-      return reply({ version: 1, accounts: Object.fromEntries(accounts.map((a) => [a, index.get(a) ?? emptyReputation(facts, a)])) });
+      return reply({ version: 1, accounts: Object.fromEntries(accounts.map((a) => {
+        const r = index.get(a) ?? emptyReputation(facts, a);
+        const [attended, missed, hosted, came] = HISTORY[a.replace(/\.demo$/, "")] ?? [0, 0, 0, 0];
+        return [a, { ...r, attended: r.attended + attended, noShows: (r.noShows ?? 0) + missed, hosted: r.hosted + hosted, guestsCame: r.guestsCame + came }];
+      })) });
     }
   }
   return fail("This is not part of the demo", 404);

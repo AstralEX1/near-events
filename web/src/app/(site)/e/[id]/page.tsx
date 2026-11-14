@@ -21,7 +21,7 @@ import { useEventVisual } from "@/lib/event-visual-client";
 import { EventPageBackground } from "@/components/EventVisual";
 import { cohosts as cohostsApi } from "@/lib/cohostsClient";
 import { hostAccounts, isDaoAccount } from "@/lib/daoHost";
-import { hostedStats } from "@/lib/reputationShared";
+import { useReputation } from "@/lib/reputation";
 import { OraclePanel } from "@/components/OraclePanel";
 import { Moments } from "@/components/Moments";
 
@@ -41,11 +41,12 @@ export default function EventPage() {
   const [doorTeam, setDoorTeam] = useState<string[]>([]);
   // The host, or the council when a DAO hosts.
   const [hostTeam, setHostTeam] = useState<string[]>([]);
-  const [hostRecord, setHostRecord] = useState<{ hosted: number; guestsCame: number; abandoned: number } | null>(null);
   const [names, setNames] = useState<GuestNames>({});
   // Profiles of the host, door team and guests, for their names and photos.
   const [people, setPeople] = useState<Record<string, Profile>>({});
   const visual = useEventVisual(id, event?.metadata.title ?? "");
+  // The same numbers as the host's pills, so the line under them never disagrees.
+  const hostRecord = useReputation(event?.host ?? null);
 
   const load = useCallback(async () => {
     setLoadError(false);
@@ -69,9 +70,6 @@ export default function EventPage() {
     if (e) {
       setHostTeam([e.host]);
       void hostAccounts(e.host).then(setHostTeam).catch(() => {});
-      void events.all()
-        .then((all) => setHostRecord({ ...hostedStats(all, e.host), abandoned: all.filter((x) => x.host === e.host && x.abandoned).length }))
-        .catch(() => {});
       void team.then((t) => { setDoorTeam(t); return getProfiles([e.host, ...t]); }).then((p) => setPeople((old) => ({ ...old, ...p }))).catch(() => {});
       // shortcut: photos for the first 100 guests only (one /api/profiles batch); page through if events get bigger.
       void getProfiles(g.slice(0, 100).map((x) => x.account_id)).then((p) => setPeople((old) => ({ ...p, ...old }))).catch(() => {});
@@ -116,12 +114,12 @@ export default function EventPage() {
               ))}
               {hostRecord && (
                 <p className="text-xs text-muted">
-                  {hostRecord.hosted === 0 && hostRecord.abandoned === 0
+                  {hostRecord.hosted === 0 && !hostRecord.abandoned
                     ? "First event on Nearvent"
                     : [
                         hostRecord.hosted > 0 && `Held ${hostRecord.hosted} event${hostRecord.hosted === 1 ? "" : "s"} · ${hostRecord.guestsCame} guest${hostRecord.guestsCame === 1 ? "" : "s"} came`,
                         // An event without the host's list is not "held", but it is not a first event either.
-                        hostRecord.abandoned > 0 && `No list published for ${hostRecord.abandoned} event${hostRecord.abandoned === 1 ? "" : "s"}`,
+                        !!hostRecord.abandoned && `No list published for ${hostRecord.abandoned} event${hostRecord.abandoned === 1 ? "" : "s"}`,
                       ].filter(Boolean).join(" · ")}
                 </p>
               )}
