@@ -11,8 +11,9 @@
 ## For judges
 
 - **Track: Social Money.** Reputation-based access, a Sputnik DAO as the
-  event host and as the dispute council (votes in Trezu), named accounts as
-  identity; see [Social Money](#social-money-dao-reputation-named-accounts).
+  event host, an optional Sputnik DAO dispute council (votes in Trezu; rehearsed
+  on testnet, off on mainnet for now), named accounts as identity; see
+  [Social Money](#social-money-dao-reputation-named-accounts).
   Already got our first client, BaliSquad (90% of Bali's meetup market):
   [our first event with them](https://balisquad.com/event/bukitsocial-z3CmSN),
   [our landing](https://www.nearvent.site/about).
@@ -27,6 +28,11 @@
   the steps are in the [user docs](https://www.nearvent.site/docs).
 - **Live app:** [www.nearvent.site](https://www.nearvent.site) on NEAR mainnet,
   escrow [`escrow.lold.near`](https://nearblocks.io/address/escrow.lold.near).
+- **Already used on mainnet:** on 14 November 5 guests of the Grok Bot
+  Workshop Bali put down 1 USDC each through NEAR Intents, all 5 were checked
+  in at the door, the host closed the event and each got the 1 USDC back.
+  Guests and host used EVM wallets and paid no gas. Transactions are in
+  [Networks](#networks).
 - **Check without a browser:** `cargo test --locked -p near-events-sandbox`
   runs the full money cycle on a local NEAR sandbox ([Build and test](#build-and-test)).
 - **Built during the hackathon:** all of it, see [Hackathon work](#hackathon-work).
@@ -67,7 +73,9 @@ BaliSquad runs most of the meetups in Bali (90% market share). Together with
 its founder we ran our first event on Nearvent: the AI Coworking Meetup in
 Uluwatu on 9 November ([the event on BaliSquad](https://balisquad.com/event/bukitsocial-z3CmSN)).
 7 guests put down a deposit and all 7 checked in. That first run used NEAR
-testnet and test USDC. The founder liked it: he sees the same problem at his
+testnet and test USDC. On 14 November we ran a BaliSquad event on mainnet with
+real USDC, the Grok Bot Workshop Bali: 5 deposits, 5 check-ins
+([transactions](#networks)). The founder liked it: he sees the same problem at his
 own events, where free RSVPs often don't show up. Photos and clips from the
 evening are on [our landing](https://www.nearvent.site/about).
 
@@ -129,7 +137,8 @@ The escrow holds the deposits; the host only says who came.
   records are public, and with the whitelist mode on (off now) only verified
   hosts can create events.
 - **Optional dispute oracle.** For communities that want a check, the owner
-  turns on a Sputnik DAO court (`set_rules`). After the host publishes who
+  turns on a Sputnik DAO court (`set_rules`); on mainnet it is off for now
+  (`get_config` shows `rules.dao: null`), so the host's list is final there. After the host publishes who
   came, guests have 12 hours to dispute one record by locking one deposit. Our
   keeper bot opens a proposal; when 3 of the 5 council members approve, it calls
   `resolve_dispute`. Then anyone calls `settle`. If a published list is broken
@@ -160,6 +169,42 @@ The full rules are in the comments at the top of `contracts/events/src/lib.rs`.
   Native Circle USDC, `intents.near` and 1Click. Releases use the CI
   reproducible build; hashes and checks are in [docs/DEPLOY.md](docs/DEPLOY.md#mainnet-release),
   and `web/scripts/check-release.mjs` checks the setup read-only.
+  - **Code:** v3 since 2026-11-13, upgraded in place
+    ([tx](https://nearblocks.io/txns/22AN62wuxS1ngiEULEBbFMQw1qjziAK5BMWDgiYdndGx)),
+    code hash `GaYShHFfXF7LDLw4QCQFP4qcDVqogvDimimREQHu2qga`. It is the CI
+    build of this repo's commit
+    [`a890bd5`](https://github.com/AstralEX1/near-events/commit/a890bd5978bf946636a1944f0d33db9cdc41a823),
+    with one catch: CI ran in our private workspace repo, and cargo-near wrote
+    that repo's commit `a565ab9…` into the contract's NEP-330 metadata
+    (`contract_source_metadata`), so the source link there opens a 404. The
+    `contracts/` tree of the two commits is identical. To check, take the
+    `escrow-wasm` artifact of `a890bd5` from this repo's
+    [CI](https://github.com/AstralEX1/near-events/actions/workflows/verify.yml)
+    and swap the commit back:
+
+    ```bash
+    perl -pe 's/a890bd5978bf946636a1944f0d33db9cdc41a823/a565ab91ca75d4c11b2953efcba10f71ef73fa45/g' \
+      near_events.wasm | shasum -a 256
+    # e77705f825f2bd27bba04f3be947506f7d86b6ae81884de3a66dc94540de175f
+    # = SHA-256 of the code on escrow.lold.near (base58: GaYShHF…2qga)
+    ```
+  - **First mainnet event:** Grok Bot Workshop Bali, 14 November, 14:00–17:00
+    Bali time (event 2), 1 USDC deposit. The host, an EVM wallet, created it
+    with a signed `auth_call` intent
+    ([tx](https://nearblocks.io/txns/8k68iexsACxnbcSQ7sRmDhtn5ZpWR1BKoL2sxkX9pwa9)).
+    5 guests registered with 1 USDC each from their NEAR Intents balances
+    ([first](https://nearblocks.io/txns/74qpbSH6fVWcJSKo5UXBrgPd1qPpCBixsXPHFjXPZTHX),
+    [second](https://nearblocks.io/txns/5KxW7hQgZ7mHtypycVbeZ9oRfHAdCfKDM57iMFy2Q2Sy),
+    [third](https://nearblocks.io/txns/Bt8cm3HKKpjpFJDhSFCpojPBxRM27zRkvz9iTsGe1T19),
+    [fourth](https://nearblocks.io/txns/KYDN6YXnVwC8KLXGN9GcA8cjvHgr5GxZYQJ5NLN8QTp),
+    [fifth](https://nearblocks.io/txns/6qm71T7YKdWscVhbNF6cvRb7D9Ej9XrAYFsep4Qu9MtE)).
+    All 5 were checked in; the host published the list
+    ([tx](https://nearblocks.io/txns/7kUNMJgXgnRdGU5maPMnsUQGr4LxASiJ1fYishYmqjAc))
+    and each guest was credited 1 USDC; one has already moved it to their
+    Intents account
+    ([tx](https://nearblocks.io/txns/C4qNSiuz7b92rULbQUQCYKxVNypTtQQjnUfQLNe4dsar)).
+    `event_relayer.near` signed all of these, so the guests and the host paid
+    no gas.
 - **Testnet** is for development and preview builds. We ran one real event on
   it, the BaliSquad meetup above.
 
