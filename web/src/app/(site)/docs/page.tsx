@@ -97,7 +97,7 @@ export default async function DocsHome() {
               ? `${submit} after the end, anyone can start the refund. The list then counts as empty, and guests who came have ${disputeWindow} to prove it. If nobody does, everyone gets the deposit back. If someone does, the guests who proved it split the pool.`
               : `${submit} after the end, anyone can refund every guest.`],
             ["I came but was marked absent.", court
-              ? `Open a dispute on the event page within ${disputeWindow} after the host publishes the list. It locks one deposit, and a council of 5 decides. If it agrees, you get your share and your deposit back. If it disagrees, you lose the deposit.`
+              ? <>Open a dispute on the event page within {disputeWindow} after the host publishes the list. It locks one deposit, and the DAO council decides (3 votes). If it agrees, you get your share and your deposit back. If it disagrees, you lose the deposit. <Link href="/docs/disputes" className="text-accent underline">How disputes work</Link></>
               : "Tell the host before they publish the list: once published, it is final."],
             ...(court ? [["Can the council cancel an event?", "Yes, after the host publishes the list and before the council’s deadline. Every guest gets their deposit back, and so does everyone who opened a dispute. Nothing is paid out."] as [string, string]] : []),
             ["Fees?", "None from Nearvent."],

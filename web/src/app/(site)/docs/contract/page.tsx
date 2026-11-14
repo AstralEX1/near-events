@@ -68,7 +68,7 @@ export default async function ContractDocs() {
             { title: "Ticket", text: "The price goes to the host when a guest registers." },
             { title: "Publish", text: `Within ${submit} after the end, the host publishes who came. ${court ? "Nothing is paid yet." : "The list is final and pays out at once."}` },
             ...(court ? [
-              { title: "Disputes", text: `For ${disputeWindow} any guest can dispute one record by locking one deposit. A council of 5 decides through a Sputnik DAO vote (3 of 5) within ${resolve} after the window. A dispute it doesn’t decide in time expires: the list stands and the deposit goes back.` },
+              { title: "Disputes", text: `For ${disputeWindow} any guest can dispute one record by locking one deposit. The event’s Sputnik DAO council decides (3 votes) within ${resolve} after the window. A dispute it doesn’t decide in time expires: the list stands and the deposit goes back.` },
               { title: "Payout", text: "Then anyone can settle. A wrong dispute loses its deposit: half to the treasury, half to the guests who came." },
             ] : []),
             { title: "Cancel", text: "The host can cancel a deposit event until it publishes the list. Everyone is refunded. Cancelling a ticket event refunds nothing." },

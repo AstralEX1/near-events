@@ -23,7 +23,7 @@ export function DepositRulesTooltip({ ticket, amount, oracle, disputeWindow = "1
             <ol className="list-decimal pl-5 space-y-1 marker:text-muted">
               <li>Registration closes when the event starts.</li>
               <li>Within {submit} after the end, the host publishes who came.</li>
-              <li>For {disputeWindow}, any guest can dispute one record by locking one deposit. A council of 5 decides within {resolve} after that (3 of 5 votes).</li>
+              <li>For {disputeWindow}, any guest can dispute one record by locking one deposit. The DAO council decides within {resolve} after that (3 votes).</li>
               <li>Guests who came split the pool in their Nearvent balances.</li>
             </ol>
             <p>
