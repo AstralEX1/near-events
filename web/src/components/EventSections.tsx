@@ -5,6 +5,8 @@ import { SlAvatars } from "./SlUi";
 import { LocationValue } from "./PublicText";
 import { goingLine, mapPlaceName, mapQuery } from "@/lib/eventLines";
 import { displayName, type Profile } from "@/lib/profilesShared";
+import { useReputations } from "@/lib/reputation";
+import { Rep, repLine } from "./ReputationBadges";
 
 // Event page blocks, after Luma's event page: a small muted label over a hairline,
 // then the content. Shared by paid (/e/<id>) and free (/f/<id>) events.
@@ -18,7 +20,7 @@ export function Section({ label, id, children }: { label: ReactNode; id?: string
   );
 }
 
-/** A host or door-team member: profile photo, name and @username, linking to their page. */
+/** A host or door-team member: profile photo, name, @username and their numbers, linking to their page. */
 export function PersonLink({ account, profile, note }: { account: string; profile?: Profile; note?: ReactNode }) {
   const name = displayName(profile);
   return (
@@ -26,6 +28,7 @@ export function PersonLink({ account, profile, note }: { account: string; profil
       <Avatar account={account} src={profile?.avatar_url} seed={profile?.avatar_seed} size={24} />
       <span className="truncate font-medium">{name ?? shortAccount(account)}</span>
       {profile?.username && name !== `@${profile.username}` && <span className="truncate text-muted">@{profile.username}</span>}
+      <Rep account={account} />
       {note}
     </Link>
   );
@@ -33,13 +36,15 @@ export function PersonLink({ account, profile, note }: { account: string; profil
 
 /** Who's going: guest photos come from their profiles; the name given at registration wins over the profile name. */
 export function GoingList({ accounts, names = {}, profiles = {}, total, verb = "Going" }: { accounts: string[]; names?: Record<string, string>; profiles?: Record<string, Profile>; total: number; verb?: string }) {
+  const reps = useReputations(accounts);
   if (!total || !accounts.length) return null;
+  const stats = Object.fromEntries(Object.entries(reps).map(([a, r]) => [a, repLine(r)]));
   const all = Object.fromEntries(accounts.flatMap((a) => { const n = names[a] || displayName(profiles[a]); return n ? [[a, n]] : []; }));
   const shown = accounts.slice(0, 2).map((a) => all[a] || shortAccount(a));
   return (
     <Section label={`${total} ${verb}`}>
-      {/* Remount when names or profiles arrive: the avatars widget keeps the first name it rendered. */}
-      <SlAvatars key={`${Object.values(all).join("|")}#${Object.keys(profiles).join()}`} accounts={accounts} names={all} profiles={profiles} role={verb === "Going" ? "Going · view profile" : "Went · view profile"} />
+      {/* Remount when names, profiles or numbers arrive: the avatars widget keeps the first name it rendered. */}
+      <SlAvatars key={`${Object.values(all).join("|")}#${Object.keys(profiles).join()}#${Object.values(stats).join()}`} accounts={accounts} names={all} profiles={profiles} stats={stats} role={verb === "Going" ? "Going · view profile" : "Went · view profile"} />
       <p className="mt-2 text-sm text-muted break-words">{goingLine(shown, total)}</p>
     </Section>
   );

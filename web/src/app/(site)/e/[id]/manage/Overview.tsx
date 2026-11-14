@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatUsdc, hostBondFor, isTicket, priceLabel, registrationEndsAt, voidedByCouncil, windowText, type EventView, type GuestView } from "@/lib/near";
 import { Avatar, Cover, DateBadge, shortAccount } from "@/components/ui";
+import { Rep } from "@/components/ReputationBadges";
 import { cohostsProblem, splitCohosts } from "@/lib/cohostsShared";
 import type { GuestNames } from "@/lib/guestNamesClient";
 import { guestStatus } from "@/lib/eventLines";
@@ -353,8 +354,11 @@ function GuestsSection({ event, guests, guestNames, isHost, onGuests, onShare }:
                 <button type="button" onClick={onGuests} className="w-full flex items-center gap-3 px-3 sm:px-4 py-2.5 text-left hover:bg-bg transition-colors">
                   <Avatar account={g.account_id} size={36} />
                   <span className="flex-1 min-w-0">
-                    <span className="block font-medium truncate" data-tooltip={g.account_id}>
-                      {name || shortAccount(g.account_id)}
+                    <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
+                      <span className="font-medium truncate min-w-0 max-w-full" data-tooltip={g.account_id}>
+                        {name || shortAccount(g.account_id)}
+                      </span>
+                      <Rep account={g.account_id} />
                     </span>
                     {name && (
                       <span className="block text-xs text-muted truncate">{shortAccount(g.account_id)}</span>
@@ -646,6 +650,7 @@ function HostRow({ account, badge }: { account: string; badge: string }) {
       <span className="font-medium truncate min-w-0" data-tooltip={account}>
         {shortAccount(account)}
       </span>
+      <Rep account={account} />
       <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-accent-soft text-accent shrink-0">{badge}</span>
     </li>
   );

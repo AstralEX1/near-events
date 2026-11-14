@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatUsdc, isTicket, voidedByCouncil, type EventView, type GuestView } from "@/lib/near";
 import { Avatar, shortAccount } from "./ui";
+import { Rep } from "./ReputationBadges";
 import { AccountQr } from "./Qr";
 
 /** "12 going · 8 spots left", or "Full". */
@@ -66,6 +67,7 @@ export function GuestGrid({ event, guests, me }: { event: EventView; guests: Gue
                 {g.account_id === me ? "You" : shortAccount(g.account_id)}
               </span>
               {n && <span className={`text-xs ${n.dim ? "text-muted" : "text-good"}`}>{n.text}</span>}
+              <span className="flex flex-wrap justify-center gap-1"><Rep account={g.account_id} /></span>
             </Link>
           );
         })}

@@ -16,6 +16,7 @@ import "./sl-ui/avatars/buttons.css";
 import "./SlUi.css";
 import ConfirmComponent from "./sl-ui/confirm/Component.jsx";
 import { Avatar, shortAccount } from "./ui";
+import { Rep } from "./ReputationBadges";
 import type { Profile } from "@/lib/profilesShared";
 
 type Destroyable = { destroy(): void };
@@ -159,7 +160,7 @@ export function SlReviewDecision({ account, onDecide, approveBlocked }: { accoun
   return (
     <section ref={ref as RefObject<HTMLElement>} className="sl-component nv-review" data-kind="buttons-review-decision" data-phase="idle" aria-label={`Join request from ${shortAccount(account)}`} aria-busy="false">
       <p className="ab-eyebrow">Request</p>
-      <h2 className="nv-review__who"><Avatar account={account} size={32} /><span data-tooltip={account}>{shortAccount(account)}</span></h2>
+      <h2 className="nv-review__who"><Avatar account={account} size={32} /><span data-tooltip={account}>{shortAccount(account)}</span><Rep account={account} /></h2>
       <p className="ab-description">Wants to join this event.</p>
       <div className="ab-decision-mark" data-mark=""><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path data-approval="" d="m5 12 4 4L19 6" /><path data-rejection="" d="m6 6 12 12M6 18 18 6" style={{ opacity: 0 }} /></svg><span data-decision="">Awaiting review</span></div>
       <div className="ab-actions ab-decisions">
@@ -206,8 +207,10 @@ export function SlAmount({ value, onChange, label }: { value: string; onChange: 
 const TINTS = ["sage", "blue", "sand", "rose"];
 
 /** Who's going: three faces, the rest behind +N. Picking one shows the name and a profile link. */
-export function SlAvatars({ accounts, names = {}, profiles = {}, role }: { accounts: string[]; names?: Record<string, string>; profiles?: Record<string, Profile>; role: string }) {
+export function SlAvatars({ accounts, names = {}, profiles = {}, stats = {}, role }: { accounts: string[]; names?: Record<string, string>; profiles?: Record<string, Profile>; stats?: Record<string, string>; role: string }) {
   const nameOf = (a: string) => names[a] || shortAccount(a);
+  // A person's numbers ("5 attended · 1 hosted") take the place of "Going" under their name.
+  const roleOf = (a: string) => (stats[a] ? `${stats[a]} · view profile` : role);
   const lead = accounts.slice(0, 3);
   const rest = accounts.slice(3);
   const [selected, setSelected] = useState(lead[0]);
@@ -232,7 +235,7 @@ export function SlAvatars({ accounts, names = {}, profiles = {}, role }: { accou
       <section className="dd-card dd-card--avatars" aria-label="Guests">
         <div className="dd-avatars" role="group" aria-label="Guests">
           {lead.map((a, i) => (
-            <button key={a} type="button" className={`dd-avatar dd-avatar--${TINTS[i % 4]}`} data-action="member" data-value={a} data-name={nameOf(a)} data-role={role} aria-label={`${nameOf(a)}, ${role}`} aria-pressed={a === selected}>
+            <button key={a} type="button" className={`dd-avatar dd-avatar--${TINTS[i % 4]}`} data-action="member" data-value={a} data-name={nameOf(a)} data-role={roleOf(a)} aria-label={`${nameOf(a)}, ${roleOf(a)}`} aria-pressed={a === selected}>
               <Avatar account={a} size={36} src={profiles[a]?.avatar_url} seed={profiles[a]?.avatar_seed} />
             </button>
           ))}
@@ -242,16 +245,16 @@ export function SlAvatars({ accounts, names = {}, profiles = {}, role }: { accou
         </div>
         <div className="dd-person">
           <strong data-member-name="">{first.name}</strong>
-          <a className="nv-avatars__profile" href={selected ? `/u/${encodeURIComponent(selected)}` : "#"} data-member-role="">{role}</a>
+          <a className="nv-avatars__profile" href={selected ? `/u/${encodeURIComponent(selected)}` : "#"} data-member-role="">{lead[0] ? roleOf(lead[0]) : role}</a>
         </div>
         {rest.length > 0 && (
           <div className="dd-collapse" data-expanded="false" data-extra="" aria-hidden="true" inert>
             <div>
               <div className="dd-member-list">
                 {rest.map((a, i) => (
-                  <button key={a} type="button" data-action="member" data-value={a} data-name={nameOf(a)} data-role={role} aria-pressed="false">
+                  <button key={a} type="button" data-action="member" data-value={a} data-name={nameOf(a)} data-role={roleOf(a)} aria-pressed="false">
                     <span className={`dd-mini-avatar dd-avatar--${TINTS[(i + 3) % 4]}`}>{profiles[a]?.avatar_url ? <img src={profiles[a].avatar_url!} alt="" className="w-full h-full rounded-full object-cover" /> : initials(a)}</span>
-                    <span>{nameOf(a)}<small>{role}</small></span>
+                    <span>{nameOf(a)}<small>{roleOf(a)}</small></span>
                     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m8 5 7 7-7 7" /></svg>
                   </button>
                 ))}
