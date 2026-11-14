@@ -6,7 +6,7 @@
 
 **▶ [Watch the 30-second product video with sound (MP4, 1080p)](showcase/nearvent-showcase.mp4)**
 
-**👆 [Try the demo yourself: www.nearvent.site/demo](https://www.nearvent.site/demo)** (no wallet, real BaliSquad AI events with made-up guests, a Regulars-first edition, linked wallets and 50 demo USDC in your browser)
+**👆 [Try the demo yourself: www.nearvent.site/demo](https://www.nearvent.site/demo)** (no wallet, real BaliSquad AI events with made-up guests, a Regulars-first edition, an event with an open dispute, linked wallets and 50 demo USDC in your browser)
 
 ## For judges
 
@@ -15,7 +15,9 @@
   [`nearvent-court.sputnik-dao.near`](https://nearblocks.io/address/nearvent-court.sputnik-dao.near),
   [proposals and votes in Trezu](https://sputnik-dao.trezu.org/nearvent-court.sputnik-dao.near)),
   named accounts as identity; see
-  [Social Money](#social-money-dao-reputation-named-accounts).
+  [Social Money](#social-money-dao-reputation-named-accounts). In plain words, with
+  screenshots: [Disputes & DAO](https://www.nearvent.site/docs/disputes) and
+  [Reputation](https://www.nearvent.site/docs/reputation) in the user docs.
   Already got our first client, BaliSquad (90% of Bali's meetup market):
   [our first event with them](https://balisquad.com/event/bukitsocial-z3CmSN),
   [our landing](https://www.nearvent.site/about).
@@ -91,12 +93,14 @@ including payments relayed by NEAR Intents (`AccessRule`, `check_access` in
 `contracts/events/src/lib.rs`), so going around the website does not help. The
 record is the escrow's own: who was checked in at the host's closed events.
 
-**Reputation on profiles.** Next to a name: ✓ Attended (closed events where the
-person was checked in) and ⚑ Held (events the person hosted and closed, and how
-many guests came). Events a host abandoned do not count. Everything comes from
-public escrow records (`web/src/lib/reputationShared.ts`, `/api/reputation`)
-and shows on `/u/<account>`, `/profile` and in Manage → Guests ("First event"
-for newcomers).
+**Reputation next to every name.** Small pills: ✓ N attended (closed events
+where the person was checked in), ✕ N missed (deposit events they paid for and
+did not come to), ⚑ N hosted (events they hosted and closed, and how many guests
+came), or New for first-timers. Events a host abandoned and events where nobody
+was checked in do not count. Everything comes from public escrow records
+(`web/src/lib/reputationShared.ts`, `/api/reputation`) and shows in guest lists,
+Going, the host's published list and on profiles. User guide:
+[Reputation](https://www.nearvent.site/docs/reputation).
 
 **A community DAO as the host.** Any `*.sputnik-dao.near` account can host
 events:
@@ -134,8 +138,9 @@ The escrow holds the deposits; the host only says who came.
   at registration. Each account withdraws only its own balance. No method lets
   the owner (`lold.near`) touch balances, though it can replace the code until
   the one-way `freeze`.
-- **Optimistic by default.** We count on hosts being honest, as at any meetup,
-  so the host's list is final and pays out at once, as in Kickback. Hosts'
+- **Optimistic by default.** We count on hosts being honest, as at any meetup:
+  the host's list stands unless a guest disputes it, and without a court it
+  pays out at once, as in Kickback. Hosts'
   records are public, and with the whitelist mode on (off now) only verified
   hosts can create events.
 - **Dispute oracle.** The owner turns on a Sputnik DAO court with `set_rules`.
@@ -143,8 +148,7 @@ The escrow holds the deposits; the host only says who came.
   - court [`nearvent-court.sputnik-dao.near`](https://nearblocks.io/address/nearvent-court.sputnik-dao.near),
     created in [`4F5SXh7m…`](https://nearblocks.io/txns/4F5SXh7m6Do7ivYqYoLnNugrESndF9RL1D24ymtLjsED)
     and set in the escrow in [`Hc6nm3tY…`](https://nearblocks.io/txns/Hc6nm3tY4WokTzjkCqbz5i7dcuehbLuQGTjxhBATBfuw);
-  - council `astralex.near`, `aterex.near`, `lold.near`, `sachin_bs.near`;
-    3 votes decide; our keeper (`event_relayer.near`) may only propose;
+  - a council of 4; 3 votes decide; our keeper (`event_relayer.near`) may only propose;
   - proposals and votes: [Trezu](https://sputnik-dao.trezu.org/nearvent-court.sputnik-dao.near);
     the Sputnik factory's code auto-update is still on;
   - events 0–3 were created before, so their host's list is final.
@@ -156,7 +160,8 @@ The escrow holds the deposits; the host only says who came.
   as a whole, the council can instead call the event off (`void_event`):
   everyone gets their deposit back. Nobody votes unless someone disputes, and a
   host bond can be required too (0 by default). We expect most events never to
-  need it.
+  need it. The guest's side with screenshots:
+  [Disputes & DAO](https://www.nearvent.site/docs/disputes).
 - **Deadlines.** Registration for deposit events closes at the start. The host
   publishes who came within 72 hours after the end; if not, anyone can call
   `refund`, and everyone gets the deposit back (with a court, guests who came
