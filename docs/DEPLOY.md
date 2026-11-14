@@ -475,14 +475,13 @@ Left now:
 
 Later, optional: a court
 
-3. **Court DAO (Alex signs and funds; 5 council members who are not Alex):**
-   - Put the 5 accounts into `docs/oracle-upgrade/evidence/dao-init-args.example.json` (bot `event_relayer.near` stays), then:
+3. **Court DAO (Alex signs and funds; a council of 5 NEAR accounts, 3 votes decide):**
+   - `create-court.mjs` takes the policy from `docs/oracle-upgrade/evidence/dao-init-args.example.json`, puts the 5 accounts on the council and `event_relayer.near` in `dispute_bot` (it can only propose). The key is asked at a hidden prompt; on mainnet you type "yes" first:
      ```bash
-     ARGS=$(node -e 'console.log(Buffer.from(JSON.stringify(require("./docs/oracle-upgrade/evidence/dao-init-args.example.json"))).toString("base64"))')
-     near contract call-function as-transaction sputnik-dao.near create json-args "{\"name\":\"nearvent-court\",\"args\":\"$ARGS\"}" prepaid-gas '300 Tgas' attached-deposit '1 NEAR' sign-as <payer>.near network-config mainnet sign-with-keychain send
+     cd web && NETWORK=mainnet CREATOR=lold.near COUNCIL=a.near,b.near,c.near,d.near,e.near DEPOSIT=1.5 node scripts/create-court.mjs
      ```
-   - Then one council member proposes `{"FactoryInfoUpdate":{"factory_info":{"factory_id":"sputnik-dao.near","auto_update":false}}}`, and 3 members approve it with `act_proposal` (as `smoke-v3-testnet.mjs dao` does).
-   - Top up the DAO to about 5 NEAR: each dispute's proposal pair stores about 0.03 NEAR, and the keeper pauses below 0.3 NEAR available.
+   - Cost: on mainnet `sputnik-dao.near` uses a global contract, so the DAO stores only ~2–4 KB and the whole deposit stays as its balance (on testnet the 555 KB code costs ~5.6 NEAR). Each dispute's proposal pair stores about 0.03 NEAR, and the keeper pauses below 0.3 NEAR available, so 1.5 NEAR covers about 40 disputes; top up later.
+   - When the creator is on the council the script also proposes `FactoryInfoUpdate {auto_update: false}`; otherwise a council member proposes it. 3 members approve it at [sputnik-dao.trezu.org](https://sputnik-dao.trezu.org) (open `nearvent-court.sputnik-dao.near`). Rehearsed on testnet 2026-11-14: `nearvent-court-t1114.sputnikv2.testnet`, create `8KbqsK83…`, 3 votes → Approved, `auto_update: false`.
 4. **Rules (Alex signs):**
     ```bash
     OWNER=lold.near EVENTS_CONTRACT=escrow.lold.near NETWORK=mainnet node web/scripts/escrow-owner.mjs rules '{"dao":"nearvent-court.sputnik-dao.near","treasury":"<wallet>","bond_per_seat":0,"close_at_start":true,"challenge_hours":12,"submit_hours":72,"resolve_hours":168}'
