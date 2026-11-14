@@ -26,10 +26,13 @@ export function PersonLink({ account, profile, note }: { account: string; profil
   return (
     <Link href={`/u/${encodeURIComponent(account)}`} className="flex items-center gap-2 text-sm hover:text-accent">
       <Avatar account={account} src={profile?.avatar_url} seed={profile?.avatar_seed} size={24} />
-      <span className="truncate font-medium">{name ?? shortAccount(account)}</span>
-      {profile?.username && name !== `@${profile.username}` && <span className="truncate text-muted">@{profile.username}</span>}
-      <Rep account={account} />
-      {note}
+      {/* The pills drop to a second line rather than cut the name short. */}
+      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="truncate font-medium max-w-full">{name ?? shortAccount(account)}</span>
+        {profile?.username && name !== `@${profile.username}` && <span className="truncate text-muted max-w-full">@{profile.username}</span>}
+        <Rep account={account} />
+        {note}
+      </span>
     </Link>
   );
 }
